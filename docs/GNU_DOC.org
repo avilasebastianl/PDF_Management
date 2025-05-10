@@ -1,0 +1,6 @@
+usage: [-opt]
+
+Script para correr la validacion de archivos de presupuesto
+
+positional arguments (opt):
+  -l  | --list-users :....:. Lista usuarios registrados para la app
