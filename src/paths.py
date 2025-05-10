@@ -21,18 +21,5 @@ path_to_lib:Path = project_directory / "lib"
 path_to_export:Path = project_directory / "export"
 path_to_share:Path = project_directory / "share"
 
-def join_func(prefix:Path,sufix:str) -> Path:
-    """
-    Funcion para unir strings y retornar una ruta en especifico
-
-    Args:
-        prefix (Path): Ruta definida a una carpeta.
-        sufix (str): Nombre del archivo a unir.
-
-    Returns:
-        Path: Ruta final del archivo
-    """
-    return Path(os.path.join(prefix,sufix))
-
 if __name__ == '__main__':
     pass # ! No borre esta linea de codigo, realice pruebas abajo
