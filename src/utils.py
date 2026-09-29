@@ -11,10 +11,11 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
+import comtypes
 import comtypes.client
-import fitz
+import pymupdf as fitz
 import yaml
-from PyPDF2 import PdfMerger, PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from paths import *
 
@@ -55,6 +56,11 @@ class TheManipulation:
         return output_path
 
     @staticmethod
+    def _validate_different_output(input_path: Path, output_path: Path) -> None:
+        if input_path == output_path:
+            raise ValueError("El archivo de salida debe ser distinto al archivo de origen.")
+
+    @staticmethod
     def _valid_pdf_files(pdf_files: Iterable[str | Path]) -> list[Path]:
         valid_pdfs: list[Path] = []
         invalid_files: list[str] = []
@@ -87,15 +93,17 @@ class TheManipulation:
         """
         valid_pdfs = TheManipulation._valid_pdf_files(pdf_files)
         output_path = TheManipulation._ensure_output_path(pdf_output)
+        if output_path in valid_pdfs:
+            raise ValueError("El archivo de salida no puede ser uno de los PDFs de origen.")
 
-        merger = PdfMerger()
+        writer = PdfWriter()
         try:
             for pdf_file in valid_pdfs:
-                merger.append(str(pdf_file))
+                writer.append(str(pdf_file))
             with output_path.open("wb") as output:
-                merger.write(output)
+                writer.write(output)
         finally:
-            merger.close()
+            writer.close()
 
         logger_user.info(f"PDF concatenado guardado en: {output_path}")
         return output_path
@@ -106,6 +114,109 @@ class TheManipulation:
         Alias compatible con el nombre anterior de la funcion.
         """
         return TheManipulation.concatenate_pdf_files(pdf_files, pdf_output)
+
+    @staticmethod
+    def _parse_page_selection(page_selection: str, total_pages: int) -> list[int]:
+        """
+        Convierte una seleccion flexible de paginas a indices base cero.
+        """
+        if not page_selection.strip():
+            raise ValueError("Debe indicar al menos una pagina.")
+
+        normalized_selection = page_selection.strip().lower().replace(" ", "")
+        if normalized_selection in ("all", "todo", "todos"):
+            return list(range(total_pages))
+        if normalized_selection in ("odd", "impar", "impares"):
+            return [index for index in range(total_pages) if (index + 1) % 2 != 0]
+        if normalized_selection in ("even", "par", "pares"):
+            return [index for index in range(total_pages) if (index + 1) % 2 == 0]
+
+        page_indexes: list[int] = []
+        for block in normalized_selection.split(","):
+            if not block:
+                continue
+
+            if "-" in block:
+                start_text, end_text = block.split("-", maxsplit=1)
+                if not start_text.isdigit() or not end_text.isdigit():
+                    raise ValueError(f"Rango de paginas invalido: {block}")
+
+                start_page = int(start_text)
+                end_page = int(end_text)
+                if start_page > end_page:
+                    raise ValueError(f"El rango '{block}' esta invertido.")
+
+                page_indexes.extend(range(start_page - 1, end_page))
+                continue
+
+            if not block.isdigit():
+                raise ValueError(f"Pagina invalida: {block}")
+            page_indexes.append(int(block) - 1)
+
+        unique_page_indexes = list(dict.fromkeys(page_indexes))
+        invalid_pages = [
+            page_index + 1
+            for page_index in unique_page_indexes
+            if page_index < 0 or page_index >= total_pages
+        ]
+        if invalid_pages:
+            raise ValueError(
+                f"Paginas fuera de rango: {invalid_pages}. El PDF tiene {total_pages} paginas."
+            )
+
+        if not unique_page_indexes:
+            raise ValueError("No se encontraron paginas validas para extraer.")
+
+        return unique_page_indexes
+
+    @staticmethod
+    def extract_pdf_pages(
+        input_pdf: str | Path,
+        output_pdf: str | Path,
+        page_selection: str,
+        password: str | None = None,
+        output_password: str | None = None,
+    ) -> Path:
+        """
+        Extrae paginas especificas de un PDF y las guarda en un nuevo archivo.
+
+        Args:
+            input_pdf: Ruta del PDF original.
+            output_pdf: Ruta donde se guardara el nuevo PDF.
+            page_selection: Paginas a extraer. Acepta valores como ``2,4,7,9``,
+                rangos como ``2-5`` y combinaciones como ``1,3-6,10``. Tambien
+                acepta ``all``, ``odd`` o ``even``.
+            password: Contrasena del PDF, si esta protegido.
+            output_password: Contrasena opcional para proteger el PDF generado.
+
+        Returns:
+            Path: Ruta del PDF generado.
+        """
+        input_path = TheManipulation._validate_existing_file(input_pdf, (".pdf",))
+        output_path = TheManipulation._ensure_output_path(output_pdf)
+        TheManipulation._validate_different_output(input_path, output_path)
+        reader = PdfReader(str(input_path))
+
+        if reader.is_encrypted:
+            if not password or reader.decrypt(password) == 0:
+                raise ValueError("El PDF esta protegido o la contrasena no es correcta.")
+
+        page_indexes = TheManipulation._parse_page_selection(
+            page_selection=page_selection,
+            total_pages=len(reader.pages),
+        )
+        writer = PdfWriter()
+        for page_index in page_indexes:
+            writer.add_page(reader.pages[page_index])
+
+        if output_password:
+            writer.encrypt(output_password, output_password)
+
+        with output_path.open("wb") as output:
+            writer.write(output)
+
+        logger_user.info(f"PDF desunido guardado en: {output_path}")
+        return output_path
 
     @staticmethod
     def lock_pdf(input_pdf: str | Path, output_pdf: str | Path, password: str) -> Path:
@@ -125,6 +236,7 @@ class TheManipulation:
 
         input_path = TheManipulation._validate_existing_file(input_pdf, (".pdf",))
         output_path = TheManipulation._ensure_output_path(output_pdf)
+        TheManipulation._validate_different_output(input_path, output_path)
         reader = PdfReader(str(input_path))
         writer = PdfWriter()
 
@@ -159,6 +271,7 @@ class TheManipulation:
 
         input_path = TheManipulation._validate_existing_file(input_pdf, (".pdf",))
         output_path = TheManipulation._ensure_output_path(output_pdf)
+        TheManipulation._validate_different_output(input_path, output_path)
         reader = PdfReader(str(input_path))
 
         if reader.is_encrypted and reader.decrypt(password) == 0:
@@ -196,6 +309,7 @@ class TheManipulation:
 
         input_path = TheManipulation._validate_existing_file(input_pdf, (".pdf",))
         output_path = TheManipulation._ensure_output_path(output_pdf)
+        TheManipulation._validate_different_output(input_path, output_path)
 
         with fitz.open(input_path) as document:
             page = document[page_number]
@@ -223,6 +337,7 @@ class TheManipulation:
         y: float = 72,
         width: float = 180,
         height: float = 80,
+        sign_all_pages: bool = False,
     ) -> Path:
         """
         Agrega una firma visual desde una imagen a un PDF.
@@ -232,11 +347,13 @@ class TheManipulation:
         input_path = TheManipulation._validate_existing_file(input_pdf, (".pdf",))
         image_path = TheManipulation._validate_existing_file(signature_image, (".png", ".jpg", ".jpeg"))
         output_path = TheManipulation._ensure_output_path(output_pdf)
+        TheManipulation._validate_different_output(input_path, output_path)
 
         with fitz.open(input_path) as document:
-            page = document[page_number]
             box = fitz.Rect(x, y, x + width, y + height)
-            page.insert_image(box, filename=str(image_path))
+            pages = document if sign_all_pages else [document[page_number]]
+            for page in pages:
+                page.insert_image(box, filename=str(image_path))
             document.save(output_path)
 
         logger_user.info(f"PDF firmado guardado en: {output_path}")
@@ -250,6 +367,7 @@ class TheManipulation:
         signature_image: str | Path | None = None,
         signature_location: tuple[float, float] = (72, 72),
         page_number: int = -1,
+        sign_all_pages: bool = False,
     ) -> Path:
         """
         Agrega una firma visual a un PDF usando texto o imagen.
@@ -264,6 +382,7 @@ class TheManipulation:
                 aproximadamente a una pulgada.
             page_number: Numero de pagina donde se ubicara la firma. Por defecto
                 usa ``-1`` para firmar la ultima pagina.
+            sign_all_pages: Si es ``True``, ubica la firma en todas las paginas.
 
         Returns:
             Path: Ruta del PDF firmado.
@@ -281,6 +400,7 @@ class TheManipulation:
                 page_number=page_number,
                 x=x_coordinate,
                 y=y_coordinate,
+                sign_all_pages=sign_all_pages,
             )
         if signature_text:
             return TheManipulation.sign_pdf_with_text(
@@ -300,10 +420,14 @@ class TheManipulation:
         """
         origin_path = TheManipulation._validate_existing_file(origin_docx, (".docx",))
         output_path = TheManipulation._ensure_output_path(output_file)
+        TheManipulation._validate_different_output(origin_path, output_path)
         word = None
         doc = None
+        com_initialized = False
 
         try:
+            comtypes.CoInitialize()
+            com_initialized = True
             word = comtypes.client.CreateObject("Word.Application")
             word.Visible = False
             doc = word.Documents.Open(str(origin_path), ReadOnly=True)
@@ -313,6 +437,8 @@ class TheManipulation:
                 doc.Close(False)
             if word is not None:
                 word.Quit()
+            if com_initialized:
+                comtypes.CoUninitialize()
 
         logger_user.info(f"PDF generado desde Word: {output_path}")
         return output_path
@@ -324,10 +450,14 @@ class TheManipulation:
         """
         origin_path = TheManipulation._validate_existing_file(origin_xlsx, (".xlsx",))
         output_path = TheManipulation._ensure_output_path(output_file)
+        TheManipulation._validate_different_output(origin_path, output_path)
         excel = None
         workbook = None
+        com_initialized = False
 
         try:
+            comtypes.CoInitialize()
+            com_initialized = True
             excel = comtypes.client.CreateObject("Excel.Application")
             excel.Visible = False
             workbook = excel.Workbooks.Open(str(origin_path), ReadOnly=True)
@@ -337,6 +467,8 @@ class TheManipulation:
                 workbook.Close(False)
             if excel is not None:
                 excel.Quit()
+            if com_initialized:
+                comtypes.CoUninitialize()
 
         logger_user.info(f"PDF generado desde Excel: {output_path}")
         return output_path

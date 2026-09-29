@@ -20,6 +20,8 @@ path_to_sql:Path = project_directory / "sql"
 path_to_lib:Path = project_directory / "lib"
 path_to_export:Path = project_directory / "export"
 path_to_share:Path = project_directory / "share"
+path_to_origin:Path = project_directory / "pdf"
+path_to_signs:Path = project_directory / "signs"
 
 if __name__ == '__main__':
     pass # ! No borre esta linea de codigo, realice pruebas abajo

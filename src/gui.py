@@ -7,13 +7,14 @@ import os
 import shutil
 import sys
 import tkinter as tk
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
+from typing import Callable
 
 import customtkinter as ctk
-import fitz
-from CTkMenuBar import CTkMenuBar, CustomDropdownMenu
+import pymupdf as fitz
 from PIL import Image, ImageDraw, ImageTk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
@@ -24,6 +25,17 @@ from utils import TheConfigurations, TheManipulation
 APP_DEFAULT_SETTINGS_FILE = paths.path_to_config / "default.ini"
 MAIN_ICON = paths.path_to_assets / "icons" / "icon_wnd.ico"
 DELETE_IMAGE = paths.path_to_assets / "images" / "delete.png"
+UP_IMAGE = paths.path_to_assets / "images" / "up.png"
+DOWN_IMAGE = paths.path_to_assets / "images" / "down.png"
+NEXT_IMAGE = paths.path_to_assets / "images" / "next.png"
+PREVIOUS_IMAGE = paths.path_to_assets / "images" / "previous.png"
+PLUS_IMAGE = paths.path_to_assets / "images" / "plus.png"
+MINUS_IMAGE = paths.path_to_assets / "images" / "minus.png"
+RESET_IMAGE = paths.path_to_assets / "images" / "reset.png"
+QR_IMAGE = paths.path_to_assets / "images" / "qr_v2.png"
+HELP_ICON = paths.path_to_assets / "icons" / "help.ico"
+PENCIL_ICON = paths.path_to_assets / "icons" / "pencil.ico"
+USER_GUIDE_FILE = paths.path_to_docs / "user_guide.md"
 
 WINDOW_HEIGHT = int(
     TheConfigurations.obtain_config_ini(
@@ -61,6 +73,41 @@ INITIAL_WINDOW = TheConfigurations.obtain_config_ini(
 )
 APP_VERSION = (paths.path_to_locale / "Version").read_text(encoding="utf-8")
 
+
+def _get_config_float(section: str, option: str, default: float) -> float:
+    value = TheConfigurations.obtain_config_ini(
+        config_file_ini=str(APP_DEFAULT_SETTINGS_FILE),
+        section=section,
+        option=option,
+    )
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_config_bool(section: str, option: str, default: bool) -> bool:
+    value = TheConfigurations.obtain_config_ini(
+        config_file_ini=str(APP_DEFAULT_SETTINGS_FILE),
+        section=section,
+        option=option,
+    )
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "yes", "true", "si", "sí")
+    return default
+
+UI_SCALING = _get_config_float("Display", "ui_scaling", 1.0)
+OPEN_AFTER_SAVE = _get_config_bool("Display", "open_after_save", True)
+
+TAB_ALIASES = {
+    "Unificar PDFs": "Unir",
+    "Desunir PDF": "Extraer",
+    "Transformar a PDF": "Convertir",
+    "Firmar PDF": "Firmar",
+    "Seguridad PDF": "Proteger",
+    "Configuraciones": "Ajustes",
+}
+
 logger_user = logging.getLogger("user")
 logger_dev = logging.getLogger("dev")
 
@@ -71,36 +118,68 @@ class PdfManagementGui:
     """
 
     tabs = [
-        "Unificar PDFs",
-        "Transformar a PDF",
-        "Firmar PDF",
-        "Seguridad PDF",
-        "Configuraciones",
+        "Unir",
+        "Extraer",
+        "Convertir",
+        "Firmar",
+        "Proteger",
+        "Ajustes",
     ]
 
     def __init__(self) -> None:
         self.root = TkinterDnD.Tk()
-        self.delete_icon = self._load_delete_icon()
+        self.task_executor = ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="pdf-management",
+        )
+        self.pending_task_count = 0
+        self.status_message = tk.StringVar(value="Listo para procesar archivos")
+        self.delete_icon = self._load_image(image_path=DELETE_IMAGE)
+        self.up_icon = self._load_image(image_path=UP_IMAGE)
+        self.down_icon = self._load_image(image_path=DOWN_IMAGE)
         self.pdf_files: list[Path] = []
         self.file_widgets: dict[Path, ctk.CTkFrame] = {}
+
+        self.split_pdf_file = tk.StringVar(value="")
+        self.split_output_file = tk.StringVar(value="")
+        self.split_pages = tk.StringVar(value="")
+        self.split_password = tk.StringVar(value="")
+        self.split_output_password = tk.StringVar(value="")
+        self.split_page_count = tk.StringVar(value="Seleccione un PDF")
 
         self.office_file = tk.StringVar(value="")
         self.office_output = tk.StringVar(value="")
 
+        self.minus_icon = self._load_image(image_path=MINUS_IMAGE)
+        self.plus_icon = self._load_image(image_path=PLUS_IMAGE)
+        self.current_theme = tk.StringVar(value=str(APP_THEME))
+        self.current_scaling = tk.DoubleVar(value=UI_SCALING)
+        self.scaling_label = tk.StringVar(value=f"{int(UI_SCALING * 100)}%")
+        self.open_after_save = tk.StringVar(
+            value="Si" if OPEN_AFTER_SAVE else "No"
+        )
+
         self.sign_pdf_file = tk.StringVar(value="")
         self.sign_output_file = tk.StringVar(value="")
-        self.signature_text = tk.StringVar(value="")
         self.signature_image = tk.StringVar(value="")
         self.signature_image_label = tk.StringVar(value="Sin imagen")
         self.signature_image_paths: dict[str, Path] = {}
+        self.previous_icon = self._load_image(image_path=PREVIOUS_IMAGE)
+        self.next_icon = self._load_image(image_path=NEXT_IMAGE)
+        self.reset_icon = self._load_image(image_path=RESET_IMAGE)
+        self.signature_preview_image = None
+        self.signature_source_image: Image.Image | None = None
+        self.sign_overlay_image = None
         self.signature_x = tk.StringVar(value="72")
         self.signature_y = tk.StringVar(value="720")
         self.signature_page = tk.StringVar(value="0")
+        self.sign_all_pages = tk.BooleanVar(value=False)
         self.sign_preview_image = None
         self.sign_preview_scale = 1.0
+        self.sign_preview_page_origin = (0.0, 0.0)
+        self.sign_preview_zoom = 1.0
         self.sign_preview_page_index = 0
         self.sign_preview_page_count = 0
-        self.signature_text.trace_add("write", self._on_signature_text_changed)
         self.signature_image.trace_add("write", self._on_signature_image_changed)
 
         self.security_mode = tk.StringVar(value="Bloquear")
@@ -125,25 +204,6 @@ class PdfManagementGui:
         self._build_tabs()
         self.root.mainloop()
 
-        footer = ctk.CTkFrame(
-            root,
-            height=35,
-            fg_color="#032B3B"
-        )
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
-
-
-        center_frame = ctk.CTkFrame(footer, fg_color="transparent")
-        center_frame.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            center_frame,
-            text=f"{APP_VERSION}\n© 2026",
-            text_color="white",
-            font=ctk.CTkFont(size=10)
-        ).pack(pady=0)
-
     def _configure_root(self) -> None:
         self.root.title("PDF Management")
         self._center_window(self.root, WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -153,6 +213,7 @@ class PdfManagementGui:
         self.root.protocol("WM_DELETE_WINDOW", self._exit_program)
 
         ctk.set_appearance_mode(APP_THEME)
+        ctk.set_widget_scaling(UI_SCALING)
         ctk.set_default_color_theme(
             str(paths.path_to_assets / "json" / f"{COLOR_THEME}.json")
         )
@@ -161,12 +222,71 @@ class PdfManagementGui:
             self.root.iconbitmap(str(MAIN_ICON))
 
     def _build_menu(self) -> None:
-        menu = CTkMenuBar(master=self.root)
-        options_button = menu.add_cascade("Opciones")
-        dropdown = CustomDropdownMenu(widget=options_button)
-        dropdown.add_option(option="Reiniciar aplicativo", command=self._restart_app)
-        dropdown.add_option(option="Salir", command=self._exit_program)
-        self.root.config(menu=dropdown)
+        header = ctk.CTkFrame(self.root, corner_radius=0)
+        header.pack(fill="x")
+        header.grid_columnconfigure(1, weight=1)
+
+        left_header = ctk.CTkFrame(header, fg_color="transparent")
+        left_header.grid(row=0, column=0, sticky="w", padx=10, pady=6)
+
+        right_header = ctk.CTkFrame(header, fg_color="transparent")
+        right_header.grid(row=0, column=2, sticky="e", padx=10, pady=6)
+
+        brand_label = ctk.CTkLabel(
+            left_header,
+            text="PDF Management",
+            font=("Segoe UI", 18, "bold"),
+        )
+        brand_label.pack(side="left", padx=(4, 18))
+
+        help_button = ctk.CTkButton(
+            left_header,
+            text="Ayuda",
+            width=86,
+            fg_color="transparent",
+            border_width=1,
+            command=self._open_help_window,
+        )
+        help_button.pack(side="left")
+        ToolTip(help_button, "Abrir guia de uso")
+
+        self.theme_switch = ctk.CTkSwitch(
+            right_header,
+            text="Light",
+            command=self._toggle_theme,
+        )
+        self.theme_switch.pack(side="left", padx=(0, 12))
+        if str(APP_THEME).lower() == "light":
+            self.theme_switch.select()
+        else:
+            self.theme_switch.configure(text="Dark")
+
+        scale_down_button = ctk.CTkButton(
+            right_header,
+            text="",
+            image=self.minus_icon,
+            width=34,
+            command=lambda: self._change_ui_scaling(-0.05),
+        )
+        scale_down_button.pack(side="left")
+        ToolTip(scale_down_button, "Reducir escala de interfaz")
+
+        scale_label = ctk.CTkLabel(
+            right_header,
+            textvariable=self.scaling_label,
+            width=54,
+        )
+        scale_label.pack(side="left", padx=4)
+
+        scale_up_button = ctk.CTkButton(
+            right_header,
+            text="",
+            image=self.plus_icon,
+            width=34,
+            command=lambda: self._change_ui_scaling(0.05),
+        )
+        scale_up_button.pack(side="left")
+        ToolTip(scale_up_button, "Aumentar escala de interfaz")
 
     def _build_tabs(self) -> None:
         tabview = ctk.CTkTabview(master=self.root)
@@ -175,18 +295,45 @@ class PdfManagementGui:
         for tab_name in self.tabs:
             tabview.add(tab_name)
 
-        if INITIAL_WINDOW in self.tabs:
-            tabview.set(INITIAL_WINDOW)
+        initial_tab = TAB_ALIASES.get(str(INITIAL_WINDOW), str(INITIAL_WINDOW))
+        if initial_tab in self.tabs:
+            tabview.set(initial_tab)
 
-        self._build_merge_tab(tabview.tab("Unificar PDFs"))
-        self._build_convert_tab(tabview.tab("Transformar a PDF"))
-        self._build_sign_tab(tabview.tab("Firmar PDF"))
-        self._build_security_tab(tabview.tab("Seguridad PDF"))
-        self._build_settings_tab(tabview.tab("Configuraciones"))
+        self._build_merge_tab(tabview.tab("Unir"))
+        self._build_split_tab(tabview.tab("Extraer"))
+        self._build_convert_tab(tabview.tab("Convertir"))
+        self._build_sign_tab(tabview.tab("Firmar"))
+        self._build_security_tab(tabview.tab("Proteger"))
+        self._build_settings_tab(tabview.tab("Ajustes"))
+
+        footer = ctk.CTkFrame(self.root, corner_radius=0, fg_color="transparent")
+        footer.pack(fill="x", pady=(0, 6))
+        footer.grid_columnconfigure(0, weight=1)
+        footer.grid_columnconfigure(2, weight=1)
+
+        status_frame = ctk.CTkFrame(footer, fg_color="transparent")
+        status_frame.grid(row=0, column=0, sticky="w", padx=16)
+        self.activity_progress = ctk.CTkProgressBar(
+            status_frame,
+            width=84,
+            height=6,
+            mode="indeterminate",
+        )
+        self.activity_progress.pack(side="left", padx=(0, 8))
+        self.activity_progress.set(0)
+        status_label = ctk.CTkLabel(
+            status_frame,
+            textvariable=self.status_message,
+            font=("Segoe UI", 11),
+        )
+        status_label.pack(side="left")
+
+        version_label = ctk.CTkLabel(footer, text=APP_VERSION.strip(), anchor="center")
+        version_label.grid(row=0, column=1)
 
     def _build_merge_tab(self, parent: ctk.CTkFrame) -> None:
         frame = self._content_frame(parent)
-        self._title(frame, "Unificar archivos PDF")
+        self._title(frame, "Unir PDFs")
 
         actions = ctk.CTkFrame(frame, corner_radius=8)
         actions.pack(fill="x", padx=16, pady=(8, 12))
@@ -216,19 +363,90 @@ class PdfManagementGui:
 
         self.merge_files_frame = ctk.CTkScrollableFrame(frame, border_width=1)
         self.merge_files_frame.pack(fill="both", expand=True, padx=16, pady=8)
-        self.merge_files_frame.drop_target_register(DND_FILES)
-        self.merge_files_frame.dnd_bind("<<Drop>>", self._drop_merge_files)
+        self._register_merge_drop_target(frame)
+        self._register_merge_drop_target(actions)
+        self._register_merge_drop_target(self.merge_files_frame)
+        if hasattr(self.merge_files_frame, "_parent_canvas"):
+            self._register_merge_drop_target(self.merge_files_frame._parent_canvas)
 
         run_button = ctk.CTkButton(
             frame,
-            text="Unificar PDFs",
+            text="Unir PDFs",
             command=self._merge_pdf_files,
+        )
+        run_button.pack(anchor="e", padx=16, pady=12)
+
+    def _register_merge_drop_target(self, widget) -> None:
+        widget.drop_target_register(DND_FILES)
+        widget.dnd_bind("<<Drop>>", self._drop_merge_files)
+
+    def _build_split_tab(self, parent: ctk.CTkFrame) -> None:
+        frame = self._content_frame(parent)
+        self._title(frame, "Extraer paginas")
+
+        form = self._form_frame(frame)
+        self._file_row(
+            form,
+            row=0,
+            label="PDF origen",
+            variable=self.split_pdf_file,
+            command=self._select_split_pdf,
+        )
+        self._file_row(
+            form,
+            row=1,
+            label="PDF de salida",
+            variable=self.split_output_file,
+            command=self._select_split_output,
+        )
+        self._entry_row(
+            form,
+            row=2,
+            label="Paginas",
+            variable=self.split_pages,
+        )
+        self._entry_row(
+            form,
+            row=3,
+            label="Clave PDF origen",
+            variable=self.split_password,
+            show="*",
+        )
+        self._entry_row(
+            form,
+            row=4,
+            label="Clave PDF final",
+            variable=self.split_output_password,
+            show="*",
+        )
+
+        info_frame = ctk.CTkFrame(frame, corner_radius=8)
+        info_frame.pack(fill="x", padx=16, pady=(0, 12))
+
+        page_count_label = ctk.CTkLabel(
+            info_frame,
+            textvariable=self.split_page_count,
+            anchor="w",
+        )
+        page_count_label.pack(fill="x", padx=12, pady=(10, 4))
+
+        example_label = ctk.CTkLabel(
+            info_frame,
+            text="Ejemplos: 2,4,7,9   |   1-3,8,10   |   all/todo   |   impar/odd   |   par/even",
+            anchor="w",
+        )
+        example_label.pack(fill="x", padx=12, pady=(0, 10))
+
+        run_button = ctk.CTkButton(
+            frame,
+            text="Crear PDF",
+            command=self._split_pdf_file,
         )
         run_button.pack(anchor="e", padx=16, pady=12)
 
     def _build_convert_tab(self, parent: ctk.CTkFrame) -> None:
         frame = self._content_frame(parent)
-        self._title(frame, "Transformar Office a PDF")
+        self._title(frame, "Convertir a PDF")
 
         form = self._form_frame(frame)
         self._file_row(
@@ -248,14 +466,14 @@ class PdfManagementGui:
 
         run_button = ctk.CTkButton(
             frame,
-            text="Transformar a PDF",
+            text="Convertir",
             command=self._convert_office_file,
         )
         run_button.pack(anchor="e", padx=16, pady=12)
 
     def _build_sign_tab(self, parent: ctk.CTkFrame) -> None:
         frame = self._content_frame(parent)
-        self._title(frame, "Firmar PDF")
+        self._title(frame, "Firmar")
 
         workspace = ctk.CTkFrame(frame, fg_color="transparent")
         workspace.pack(fill="both", expand=True, padx=16, pady=12)
@@ -287,8 +505,25 @@ class PdfManagementGui:
             command=self._select_sign_output,
         )
 
-        self._entry_row(form, 2, "Texto de firma", self.signature_text)
-        self._signature_image_row(form, row=3)
+        self._signature_image_row(form, row=2)
+
+        self.signature_preview_label = ctk.CTkLabel(
+            form,
+            text="Vista previa",
+            width=260,
+            height=110,
+            fg_color="white",
+            text_color="black",
+            corner_radius=8,
+        )
+        self.signature_preview_label.grid(
+            row=3,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            padx=10,
+            pady=(0, 10),
+        )
 
         signature_button = ctk.CTkButton(
             form,
@@ -308,46 +543,130 @@ class PdfManagementGui:
         location_label = ctk.CTkLabel(form, text="Ubicacion")
         location_label.grid(row=5, column=0, sticky="w", padx=10, pady=8)
 
+        all_pages_checkbox = ctk.CTkCheckBox(
+            form,
+            text="Firmar todas las hojas",
+            variable=self.sign_all_pages,
+        )
+        all_pages_checkbox.grid(row=6, column=1, sticky="w", padx=10, pady=(0, 8))
+
         run_button = ctk.CTkButton(
             form,
-            text="Firmar PDF",
+            text="Firmar",
             command=self._sign_pdf,
         )
-        run_button.grid(row=6, column=1, sticky="e", padx=10, pady=12)
+        run_button.grid(row=7, column=1, sticky="e", padx=10, pady=12)
 
         viewer_toolbar = ctk.CTkFrame(viewer, fg_color="transparent")
         viewer_toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        viewer_toolbar.grid_columnconfigure(1, weight=1)
+        viewer_toolbar.grid_columnconfigure(2, weight=1)
+
+        first_button = ctk.CTkButton(
+            viewer_toolbar,
+            text="|<",
+            width=42,
+            command=lambda: self._go_to_sign_preview_page(0),
+        )
+        first_button.grid(row=0, column=0, padx=(0, 6))
+        ToolTip(first_button, "Primera pagina")
 
         previous_button = ctk.CTkButton(
             viewer_toolbar,
-            text="<",
+            text="",
+            image=self.previous_icon,
             width=42,
             command=lambda: self._change_sign_preview_page(-1),
         )
-        previous_button.grid(row=0, column=0, padx=(0, 6))
+        previous_button.grid(row=0, column=1, padx=(0, 6))
+        ToolTip(previous_button, "Pagina anterior")
 
         self.sign_page_label = ctk.CTkLabel(
             viewer_toolbar,
             text="Seleccione un PDF",
             anchor="center",
         )
-        self.sign_page_label.grid(row=0, column=1, sticky="ew")
+        self.sign_page_label.grid(row=0, column=2, sticky="ew")
 
         next_button = ctk.CTkButton(
             viewer_toolbar,
-            text=">",
+            text="",
+            image=self.next_icon,
             width=42,
             command=lambda: self._change_sign_preview_page(1),
         )
-        next_button.grid(row=0, column=2, padx=(6, 0))
+        next_button.grid(row=0, column=3, padx=(6, 0))
+        ToolTip(next_button, "Siguiente pagina")
+
+        last_button = ctk.CTkButton(
+            viewer_toolbar,
+            text=">|",
+            width=42,
+            command=self._go_to_last_sign_preview_page,
+        )
+        last_button.grid(row=0, column=4, padx=(6, 0))
+        ToolTip(last_button, "Ultima pagina")
+
+        zoom_out_button = ctk.CTkButton(
+            viewer_toolbar,
+            text="",
+            image=self.minus_icon,
+            width=42,
+            command=lambda: self._change_sign_preview_zoom(-0.25),
+        )
+        zoom_out_button.grid(row=0, column=5, padx=(12, 4))
+        ToolTip(zoom_out_button, "Disminuir zoom")
+
+        self.sign_zoom_label = ctk.CTkLabel(
+            viewer_toolbar,
+            text="100%",
+            width=58,
+            anchor="center",
+        )
+        self.sign_zoom_label.grid(row=0, column=6)
+
+        zoom_in_button = ctk.CTkButton(
+            viewer_toolbar,
+            text="",
+            image=self.plus_icon,
+            width=42,
+            command=lambda: self._change_sign_preview_zoom(0.25),
+        )
+        zoom_in_button.grid(row=0, column=7, padx=4)
+        ToolTip(zoom_in_button, "Aumentar zoom")
+
+        reset_zoom_button = ctk.CTkButton(
+            viewer_toolbar,
+            text="Reiniciar vista",
+            image=self.reset_icon,
+            width=54,
+            command=self._reset_sign_preview_zoom,
+        )
+        reset_zoom_button.grid(row=0, column=8, padx=(4, 0))
+        ToolTip(reset_zoom_button, "Restablecer zoom")
 
         self.sign_preview_canvas = tk.Canvas(
             viewer,
             background="#1f1f1f",
             highlightthickness=0,
         )
-        self.sign_preview_canvas.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.sign_preview_canvas.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(0, 0))
+        sign_vertical_scroll = tk.Scrollbar(
+            viewer,
+            orient="vertical",
+            command=self.sign_preview_canvas.yview,
+        )
+        sign_vertical_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(0, 0))
+
+        sign_horizontal_scroll = tk.Scrollbar(
+            viewer,
+            orient="horizontal",
+            command=self.sign_preview_canvas.xview,
+        )
+        sign_horizontal_scroll.grid(row=2, column=0, sticky="ew", padx=(10, 0), pady=(0, 10))
+        self.sign_preview_canvas.configure(
+            xscrollcommand=sign_horizontal_scroll.set,
+            yscrollcommand=sign_vertical_scroll.set,
+        )
         self.sign_preview_canvas.bind("<Button-1>", self._set_signature_location_from_preview)
 
     def _build_security_tab(self, parent: ctk.CTkFrame) -> None:
@@ -397,17 +716,48 @@ class PdfManagementGui:
 
     def _build_settings_tab(self, parent: ctk.CTkFrame) -> None:
         frame = self._content_frame(parent)
-        self._title(frame, "Configuraciones")
+        self._title(frame, "Ajustes")
 
-        version_label = ctk.CTkLabel(frame, text=APP_VERSION.strip())
-        version_label.pack(anchor="w", padx=16, pady=10)
+        workspace = ctk.CTkFrame(frame, fg_color="transparent")
+        workspace.pack(fill="both", expand=True, padx=16, pady=12)
 
-        form = self._form_frame(frame)
+        form = ctk.CTkFrame(workspace, corner_radius=8)
+        form.place(relx=0.5, rely=0, anchor="n", y=8)
+        form.grid_columnconfigure(1, weight=0)
+
+        donation_frame = ctk.CTkFrame(workspace, corner_radius=8)
+        donation_frame.place(relx=1, rely=0, anchor="ne", x=-8, y=8)
+
+        donation_title = ctk.CTkLabel(
+            donation_frame,
+            text="Dona al desarrollador",
+            font=("Segoe UI", 16, "bold"),
+        )
+        donation_title.pack(padx=18, pady=(16, 8))
+
+        if QR_IMAGE.exists():
+            qr_image = Image.open(QR_IMAGE)
+            qr_image.thumbnail((190, 190))
+            self.qr_image = ctk.CTkImage(
+                light_image=qr_image,
+                dark_image=qr_image,
+                size=qr_image.size,
+            )
+            qr_label = ctk.CTkLabel(donation_frame, text="", image=self.qr_image)
+            qr_label.pack(padx=18, pady=(0, 18))
+        else:
+            qr_label = ctk.CTkLabel(donation_frame, text="QR no encontrado")
+            qr_label.pack(padx=18, pady=(0, 18))
+
         width_var = tk.StringVar(value=str(WINDOW_WIDTH))
         height_var = tk.StringVar(value=str(WINDOW_HEIGHT))
         theme_var = tk.StringVar(value=str(APP_THEME))
         color_var = tk.StringVar(value=str(COLOR_THEME))
-        initial_tab_var = tk.StringVar(value=str(INITIAL_WINDOW))
+        scaling_var = tk.StringVar(value=self._scaling_to_label(UI_SCALING))
+        initial_tab_var = tk.StringVar(
+            value=TAB_ALIASES.get(str(INITIAL_WINDOW), str(INITIAL_WINDOW))
+        )
+        open_after_save_var = tk.StringVar(value=self.open_after_save.get())
 
         self._combo_row(form, 0, "Ancho", width_var, ["800", "1000", "1200", "1400"])
         self._combo_row(form, 1, "Alto", height_var, ["600", "700", "800", "900"])
@@ -417,12 +767,26 @@ class PdfManagementGui:
             3,
             "Color",
             color_var,
-            ["red", "green", "lavender", "orange", "dark-blue"],
+            ["Rojo", "Verde", "Lavanda", "Naranja", "AzulOscuro"],
         )
         self._combo_row(form, 4, "Ventana inicial", initial_tab_var, self.tabs)
+        self._combo_row(
+            form,
+            5,
+            "Escala UI",
+            scaling_var,
+            ["75%", "85%", "95%", "100%", "110%", "125%", "150%"],
+        )
+        self._combo_row(
+            form,
+            6,
+            "Abrir al guardar",
+            open_after_save_var,
+            ["Si", "No"],
+        )
 
         apply_button = ctk.CTkButton(
-            frame,
+            form,
             text="Aplicar cambios",
             command=lambda: self._save_settings(
                 width_var.get(),
@@ -430,9 +794,11 @@ class PdfManagementGui:
                 theme_var.get(),
                 color_var.get(),
                 initial_tab_var.get(),
+                scaling_var.get(),
+                open_after_save_var.get(),
             ),
         )
-        apply_button.pack(anchor="e", padx=16, pady=12)
+        apply_button.grid(row=7, column=1, sticky="e", padx=10, pady=14)
 
     def _select_pdf_files_to_merge(self) -> None:
         files = filedialog.askopenfilenames(
@@ -453,6 +819,7 @@ class PdfManagementGui:
                 continue
             self.pdf_files.append(pdf_path)
             files_added = True
+            self._show_debug(f"Archivo: {pdf_path} añadido a la lista de pdfs por unificar")
 
         if files_added:
             self._refresh_merge_file_widgets()
@@ -483,7 +850,8 @@ class PdfManagementGui:
         down_button = ctk.CTkButton(
             row,
             width=34,
-            text="v",
+            text="",
+            image=self.down_icon,
             state="disabled" if index == len(self.pdf_files) - 1 else "normal",
             command=lambda: self._move_merge_file(pdf_path, 1),
         )
@@ -492,7 +860,8 @@ class PdfManagementGui:
         up_button = ctk.CTkButton(
             row,
             width=34,
-            text="^",
+            text="",
+            image=self.up_icon,
             state="disabled" if index == 0 else "normal",
             command=lambda: self._move_merge_file(pdf_path, -1),
         )
@@ -520,6 +889,7 @@ class PdfManagementGui:
             self.pdf_files[new_index],
             self.pdf_files[current_index],
         )
+        self._show_debug(f"Archivo: {pdf_path} movido a la posicion con index {new_index}")
         self._refresh_merge_file_widgets()
 
     def _remove_merge_file(self, pdf_path: Path) -> None:
@@ -527,12 +897,14 @@ class PdfManagementGui:
             return
         self.pdf_files.remove(pdf_path)
         self._refresh_merge_file_widgets()
+        self._show_debug(f"Archivo: {pdf_path} eliminado de la lista de pdfs por unificar")
 
     def _clear_merge_files(self) -> None:
         for widget in self.file_widgets.values():
             widget.destroy()
         self.pdf_files.clear()
         self.file_widgets.clear()
+        self._show_debug(f"Lista de archivos pdfs por unir reiniciada")
 
     def _select_merge_output(self) -> None:
         output_file = self._ask_pdf_save_path("Guardar PDF unificado")
@@ -545,13 +917,78 @@ class PdfManagementGui:
             if not self.pdf_files:
                 raise ValueError("Debe agregar al menos un archivo PDF.")
             output_file = self.merge_output_entry.get().strip()
-            result = TheManipulation.concatenate_pdf_files(
-                self.pdf_files,
-                output_file,
+            pdf_files = tuple(self.pdf_files)
+            self._run_background_task(
+                "Uniendo PDFs",
+                "PDF unificado",
+                lambda: TheManipulation.concatenate_pdf_files(
+                    pdf_files,
+                    output_file,
+                ),
             )
-            self._show_success("PDF unificado", result)
         except Exception as error:
             self._show_error(error)
+
+    def _select_split_pdf(self) -> None:
+        file_name = self._ask_pdf_open_path("Seleccionar PDF a desunir")
+        if not file_name:
+            return
+
+        self.split_pdf_file.set(str(file_name))
+        self.split_output_file.set(
+            str(paths.path_to_export / f"{file_name.stem}_paginas.pdf")
+        )
+        self._update_split_page_count(file_name)
+
+    def _select_split_output(self) -> None:
+        output_file = self._ask_pdf_save_path("Guardar PDF extraido")
+        if output_file:
+            self.split_output_file.set(str(output_file))
+
+    def _update_split_page_count(self, pdf_file: Path) -> None:
+        try:
+            with fitz.open(pdf_file) as document:
+                self.split_page_count.set(f"El PDF tiene {document.page_count} paginas.")
+        except Exception:
+            self.split_page_count.set("No se pudo leer el numero de paginas.")
+
+    def _split_pdf_file(self) -> None:
+        password = self.split_password.get().strip() or None
+        self._start_split_task(password)
+
+    def _start_split_task(self, password: str | None) -> None:
+        input_pdf = self.split_pdf_file.get().strip()
+        output_pdf = self.split_output_file.get().strip()
+        page_selection = self.split_pages.get().strip()
+        output_password = self.split_output_password.get().strip() or None
+
+        self._run_background_task(
+            "Extrayendo paginas",
+            "PDF dividido",
+            lambda: TheManipulation.extract_pdf_pages(
+                input_pdf=input_pdf,
+                output_pdf=output_pdf,
+                page_selection=page_selection,
+                password=password,
+                output_password=output_password,
+            ),
+            on_error=lambda error: self._handle_split_error(error, password),
+        )
+
+    def _handle_split_error(self, error: Exception, password: str | None) -> None:
+        if "protegido" not in str(error).lower() or password:
+            self._show_error(error)
+            return
+
+        password = simpledialog.askstring(
+            "Contraseña requerida",
+            "El PDF origen esta protegido. Ingrese la contraseña:",
+            show="*",
+            parent=self.root,
+        )
+        if password:
+            self.split_password.set(password)
+            self._start_split_task(password)
 
     def _select_office_file(self) -> None:
         file_name = filedialog.askopenfilename(
@@ -575,11 +1012,16 @@ class PdfManagementGui:
 
     def _convert_office_file(self) -> None:
         try:
-            result = TheManipulation.transform_office_2_pdf(
-                self.office_file.get().strip(),
-                self.office_output.get().strip(),
+            origin_file = self.office_file.get().strip()
+            output_file = self.office_output.get().strip()
+            self._run_background_task(
+                "Convirtiendo archivo",
+                "Archivo transformado a PDF",
+                lambda: TheManipulation.transform_office_2_pdf(
+                    origin_file,
+                    output_file,
+                ),
             )
-            self._show_success("PDF generado", result)
         except Exception as error:
             self._show_error(error)
 
@@ -662,21 +1104,67 @@ class PdfManagementGui:
 
     def _select_saved_signature(self, signature_name: str) -> None:
         if signature_name == "Sin imagen":
+            self.signature_image_label.set("Sin imagen")
             self.signature_image.set("")
             return
 
         signature_path = self.signature_image_paths.get(signature_name)
         if signature_path:
             self.signature_image.set(str(signature_path))
+            self.signature_image_label.set(signature_name)
 
-    def _on_signature_text_changed(self, *_args) -> None:
-        if self.signature_text.get().strip() and self.signature_image.get().strip():
-            self.signature_image.set("")
-            self.signature_image_label.set("Sin imagen")
+    def _delete_selected_signature(self) -> None:
+        signature_name = self.signature_image_label.get()
+        signature_path = self.signature_image_paths.get(signature_name)
+        if not signature_path:
+            messagebox.showinfo("Firma", "Seleccione una firma guardada para borrar.")
+            return
+
+        delete_signature = messagebox.askyesno(
+            "Borrar firma",
+            f"Desea borrar la firma '{signature_name}'?",
+        )
+        if not delete_signature:
+            return
+
+        signature_path.unlink()
+        self.signature_image.set("")
+        self.signature_image_label.set("Sin imagen")
+        self._refresh_signature_list()
 
     def _on_signature_image_changed(self, *_args) -> None:
-        if self.signature_image.get().strip() and self.signature_text.get().strip():
-            self.signature_text.set("")
+        self._update_signature_preview()
+        if hasattr(self, "sign_preview_canvas"):
+            self._draw_signature_marker()
+
+    def _update_signature_preview(self) -> None:
+        if not hasattr(self, "signature_preview_label"):
+            return
+
+        signature_file = self.signature_image.get().strip()
+        if not signature_file:
+            self.signature_source_image = None
+            self.signature_preview_image = None
+            self.signature_preview_label.configure(image=None, text="Vista previa")
+            return
+
+        try:
+            image = Image.open(signature_file).convert("RGBA")
+            image.thumbnail((250, 95))
+            self.signature_source_image = image.copy()
+            self.signature_preview_image = ctk.CTkImage(
+                light_image=image,
+                dark_image=image,
+                size=image.size,
+            )
+            self.signature_preview_label.configure(
+                image=self.signature_preview_image,
+                text="",
+            )
+        except Exception:
+            self.signature_source_image = None
+            self.signature_preview_image = None
+            self.signature_preview_label.configure(image=None, text="No se pudo cargar")
 
     @staticmethod
     def _clean_file_name(file_name: str) -> str:
@@ -700,6 +1188,33 @@ class PdfManagementGui:
         self.signature_page.set(str(new_page_index))
         self._render_sign_preview()
 
+    def _go_to_sign_preview_page(self, page_index: int) -> None:
+        if not self.sign_pdf_file.get().strip():
+            return
+        if page_index < 0 or page_index >= self.sign_preview_page_count:
+            return
+
+        self.sign_preview_page_index = page_index
+        self.signature_page.set(str(page_index))
+        self._render_sign_preview()
+
+    def _go_to_last_sign_preview_page(self) -> None:
+        self._go_to_sign_preview_page(self.sign_preview_page_count - 1)
+
+    def _change_sign_preview_zoom(self, zoom_delta: float) -> None:
+        if not self.sign_pdf_file.get().strip():
+            return
+
+        self.sign_preview_zoom = max(
+            0.5,
+            min(self.sign_preview_zoom + zoom_delta, 4.0),
+        )
+        self._render_sign_preview()
+
+    def _reset_sign_preview_zoom(self) -> None:
+        self.sign_preview_zoom = 1.0
+        self._render_sign_preview()
+
     def _render_sign_preview(self) -> None:
         pdf_file = self.sign_pdf_file.get().strip()
         if not pdf_file:
@@ -714,11 +1229,13 @@ class PdfManagementGui:
                 self.sign_preview_page_count = document.page_count
                 page = document[self.sign_preview_page_index]
                 page_rect = page.rect
+                self.sign_preview_page_origin = (page_rect.x0, page_rect.y0)
                 self.sign_preview_scale = min(
                     canvas_width / page_rect.width,
                     canvas_height / page_rect.height,
                 )
-                self.sign_preview_scale = max(min(self.sign_preview_scale, 2.0), 0.1)
+                self.sign_preview_scale = max(self.sign_preview_scale, 0.1)
+                self.sign_preview_scale *= self.sign_preview_zoom
 
                 matrix = fitz.Matrix(self.sign_preview_scale, self.sign_preview_scale)
                 pixmap = page.get_pixmap(matrix=matrix, alpha=False)
@@ -731,8 +1248,6 @@ class PdfManagementGui:
             self.sign_preview_image = ImageTk.PhotoImage(image)
             self.sign_preview_canvas.delete("all")
             self.sign_preview_canvas.config(
-                width=image.width,
-                height=image.height,
                 scrollregion=(0, 0, image.width, image.height),
             )
             self.sign_preview_canvas.create_image(
@@ -744,6 +1259,7 @@ class PdfManagementGui:
             self.sign_page_label.configure(
                 text=f"Pagina {self.sign_preview_page_index + 1} de {self.sign_preview_page_count}"
             )
+            self.sign_zoom_label.configure(text=f"{self.sign_preview_zoom:.0%}")
             self._draw_signature_marker()
         except Exception as error:
             self._show_error(error)
@@ -752,13 +1268,16 @@ class PdfManagementGui:
         if not self.sign_pdf_file.get().strip():
             return
 
-        x_coordinate = event.x / self.sign_preview_scale
-        y_coordinate = event.y / self.sign_preview_scale
+        canvas_x = self.sign_preview_canvas.canvasx(event.x)
+        canvas_y = self.sign_preview_canvas.canvasy(event.y)
+        origin_x, origin_y = self.sign_preview_page_origin
+        x_coordinate = (canvas_x / self.sign_preview_scale) + origin_x
+        y_coordinate = (canvas_y / self.sign_preview_scale) + origin_y
 
         self.signature_x.set(f"{x_coordinate:.2f}")
         self.signature_y.set(f"{y_coordinate:.2f}")
         self.signature_page.set(str(self.sign_preview_page_index))
-        self._draw_signature_marker(event.x, event.y)
+        self._draw_signature_marker(canvas_x, canvas_y)
 
     def _draw_signature_marker(
         self,
@@ -769,12 +1288,38 @@ class PdfManagementGui:
 
         if x_coordinate is None or y_coordinate is None:
             try:
-                x_coordinate = float(self.signature_x.get()) * self.sign_preview_scale
-                y_coordinate = float(self.signature_y.get()) * self.sign_preview_scale
+                origin_x, origin_y = self.sign_preview_page_origin
+                x_coordinate = (
+                    float(self.signature_x.get()) - origin_x
+                ) * self.sign_preview_scale
+                y_coordinate = (
+                    float(self.signature_y.get()) - origin_y
+                ) * self.sign_preview_scale
             except ValueError:
                 return
 
         marker_size = 8
+        signature_file = self.signature_image.get().strip()
+        if signature_file:
+            try:
+                preview_width = max(1, int(180 * self.sign_preview_scale))
+                preview_height = max(1, int(80 * self.sign_preview_scale))
+                source_image = self.signature_source_image
+                if source_image is None:
+                    source_image = Image.open(signature_file).convert("RGBA")
+                preview_image = source_image.resize((preview_width, preview_height))
+                self.sign_overlay_image = ImageTk.PhotoImage(preview_image)
+                self.sign_preview_canvas.create_image(
+                    x_coordinate,
+                    y_coordinate,
+                    anchor="nw",
+                    image=self.sign_overlay_image,
+                    tags="signature_marker",
+                )
+                return
+            except Exception:
+                self.sign_overlay_image = None
+
         self.sign_preview_canvas.create_line(
             x_coordinate - marker_size,
             y_coordinate,
@@ -798,6 +1343,8 @@ class PdfManagementGui:
         paths.path_to_signs.mkdir(parents=True, exist_ok=True)
 
         signature_window = ctk.CTkToplevel(self.root)
+        if PENCIL_ICON.exists():
+            signature_window.iconbitmap(str(PENCIL_ICON))
         signature_window.title("Crear firma")
         signature_window.geometry("640x420")
         signature_window.resizable(False, False)
@@ -931,10 +1478,9 @@ class PdfManagementGui:
 
     def _sign_pdf(self) -> None:
         try:
-            signature_text = self.signature_text.get().strip() or None
             signature_image = self.signature_image.get().strip() or None
-            if signature_text and signature_image:
-                raise ValueError("Use texto de firma o imagen de firma, no ambos.")
+            if not signature_image:
+                raise ValueError("Debe seleccionar una imagen de firma.")
 
             page_number = int(self.signature_page.get().strip())
             signature_location = (
@@ -942,15 +1488,21 @@ class PdfManagementGui:
                 float(self.signature_y.get().strip()),
             )
 
-            result = TheManipulation.sign_pdf(
-                input_pdf=self.sign_pdf_file.get().strip(),
-                output_pdf=self.sign_output_file.get().strip(),
-                signature_text=signature_text,
-                signature_image=signature_image,
-                signature_location=signature_location,
-                page_number=page_number,
+            input_pdf = self.sign_pdf_file.get().strip()
+            output_pdf = self.sign_output_file.get().strip()
+            sign_all_pages = self.sign_all_pages.get()
+            self._run_background_task(
+                "Firmando PDF",
+                "PDF firmado",
+                lambda: TheManipulation.sign_pdf(
+                    input_pdf=input_pdf,
+                    output_pdf=output_pdf,
+                    signature_image=signature_image,
+                    signature_location=signature_location,
+                    page_number=page_number,
+                    sign_all_pages=sign_all_pages,
+                ),
             )
-            self._show_success("PDF firmado", result)
         except Exception as error:
             self._show_error(error)
 
@@ -982,11 +1534,11 @@ class PdfManagementGui:
             password = self.security_password.get()
 
             if self.security_mode.get() == "Bloquear":
-                result = TheManipulation.lock_pdf(input_file, output_file, password)
+                task = lambda: TheManipulation.lock_pdf(input_file, output_file, password)
             else:
-                result = TheManipulation.unlock_pdf(input_file, output_file, password)
+                task = lambda: TheManipulation.unlock_pdf(input_file, output_file, password)
 
-            self._show_success("PDF procesado", result)
+            self._run_background_task("Procesando seguridad", "PDF procesado", task)
         except Exception as error:
             self._show_error(error)
 
@@ -997,33 +1549,198 @@ class PdfManagementGui:
         theme: str,
         color_theme: str,
         initial_tab: str,
+        ui_scaling: str,
+        open_after_save: str,
     ) -> None:
         try:
             int(width)
             int(height)
+            scaling_value = self._scaling_label_to_value(ui_scaling)
+            if scaling_value < 0.5 or scaling_value > 2.0:
+                raise ValueError("La escala UI debe estar entre 0.5 y 2.0.")
+
             config = utils.configparser.ConfigParser()
             config.read(APP_DEFAULT_SETTINGS_FILE, encoding="utf-8")
             config["Size"]["width"] = width
             config["Size"]["height"] = height
             config["Theme"]["theme"] = theme
             config["Theme"]["color_theme"] = color_theme
+            if "Display" not in config:
+                config["Display"] = {}
+            config["Display"]["ui_scaling"] = str(scaling_value)
+            config["Display"]["open_after_save"] = (
+                "yes" if open_after_save.strip().lower() in ("si", "sí", "yes") else "no"
+            )
+            self.open_after_save.set(
+                "Si" if open_after_save.strip().lower() in ("si", "sí", "yes") else "No"
+            )
             config["App"]["initial_window"] = initial_tab
 
             with APP_DEFAULT_SETTINGS_FILE.open("w", encoding="utf-8") as config_file:
                 config.write(config_file)
 
-            messagebox.showinfo(
+            restart_now = messagebox.askyesno(
                 "Configuracion guardada",
-                "Reinicia la aplicacion para aplicar los cambios.",
+                "Para tomar los cambios se necesita reiniciar la aplicacion.\n\n"
+                "Desea reiniciar ahora?",
             )
+            if restart_now:
+                self._restart_app()
         except Exception as error:
             self._show_error(error)
 
+    @staticmethod
+    def _scaling_to_label(scaling_value: float) -> str:
+        return f"{int(round(scaling_value * 100))}%"
+
+    @staticmethod
+    def _scaling_label_to_value(scaling_label: str) -> float:
+        clean_label = scaling_label.strip().replace("%", "")
+        return float(clean_label) / 100
+
+    def _open_help_window(self) -> None:
+        help_window = ctk.CTkToplevel(self.root)
+        if HELP_ICON.exists():
+            help_window.iconbitmap(str(HELP_ICON))
+        help_window.title("Ayuda de uso")
+        help_window.geometry("860x620")
+        help_window.minsize(720, 480)
+
+        text_box = ctk.CTkTextbox(help_window, wrap="word")
+        text_box.pack(fill="both", expand=True, padx=14, pady=14)
+
+        if USER_GUIDE_FILE.exists():
+            help_text = USER_GUIDE_FILE.read_text(encoding="utf-8")
+        else:
+            help_text = "No se encontro la documentacion de uso."
+
+        self._insert_markdown_help(text_box, help_text)
+        text_box.configure(state="disabled")
+
+    def _insert_markdown_help(self, text_box: ctk.CTkTextbox, markdown_text: str) -> None:
+        native_text_box = text_box._textbox
+        native_text_box.tag_configure("h1", font=("Segoe UI", 22, "bold"), spacing3=12)
+        native_text_box.tag_configure(
+            "h2",
+            font=("Segoe UI", 17, "bold"),
+            spacing1=10,
+            spacing3=6,
+        )
+        native_text_box.tag_configure("body", font=("Segoe UI", 11), spacing3=4)
+        native_text_box.tag_configure(
+            "list",
+            font=("Segoe UI", 11),
+            lmargin1=22,
+            lmargin2=38,
+            spacing3=3,
+        )
+        native_text_box.tag_configure(
+            "code",
+            font=("Consolas", 10),
+            background="#eeeeee",
+        )
+
+        for line in markdown_text.splitlines():
+            clean_line = line.strip()
+            clean_line = clean_line.replace("**", "").replace("`", "")
+            if clean_line.startswith("# "):
+                native_text_box.insert("end", f"{clean_line[2:]}\n", "h1")
+            elif clean_line.startswith("## "):
+                native_text_box.insert("end", f"\n{clean_line[3:]}\n", "h2")
+            elif clean_line.startswith("- "):
+                native_text_box.insert("end", f"  • {clean_line[2:]}\n", "list")
+            elif clean_line and clean_line[0].isdigit() and ". " in clean_line[:4]:
+                native_text_box.insert("end", f"{clean_line}\n", "list")
+            elif clean_line.startswith("```"):
+                continue
+            elif clean_line:
+                native_text_box.insert("end", f"{clean_line}\n", "body")
+            else:
+                native_text_box.insert("end", "\n", "body")
+
+    def _toggle_theme(self) -> None:
+        next_theme = "Light" if str(self.current_theme.get()).lower() == "dark" else "Dark"
+        self.current_theme.set(next_theme)
+        ctk.set_appearance_mode(next_theme)
+        self.theme_switch.configure(text=next_theme)
+
+    def _change_ui_scaling(self, scaling_delta: float) -> None:
+        next_scaling = max(
+            0.75,
+            min(self.current_scaling.get() + scaling_delta, 1.5),
+        )
+        next_scaling = round(next_scaling, 2)
+        self.current_scaling.set(next_scaling)
+        self.scaling_label.set(f"{int(next_scaling * 100)}%")
+        ctk.set_widget_scaling(next_scaling)
+
+    def _run_background_task(
+        self,
+        description: str,
+        success_title: str,
+        task: Callable[[], Path],
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> None:
+        """Ejecuta una operacion de archivo sin bloquear la interfaz."""
+        self.pending_task_count += 1
+        self.status_message.set(f"{description}...")
+        self.activity_progress.start()
+        future = self.task_executor.submit(task)
+        future.add_done_callback(
+            lambda completed: self._schedule_task_completion(
+                completed,
+                success_title,
+                on_error,
+            )
+        )
+
+    def _schedule_task_completion(
+        self,
+        future: Future[Path],
+        success_title: str,
+        on_error: Callable[[Exception], None] | None,
+    ) -> None:
+        try:
+            self.root.after(
+                0,
+                self._complete_background_task,
+                future,
+                success_title,
+                on_error,
+            )
+        except tk.TclError:
+            return
+
+    def _complete_background_task(
+        self,
+        future: Future[Path],
+        success_title: str,
+        on_error: Callable[[Exception], None] | None,
+    ) -> None:
+        self.pending_task_count = max(0, self.pending_task_count - 1)
+        if not self.pending_task_count:
+            self.activity_progress.stop()
+            self.activity_progress.set(0)
+            self.status_message.set("Listo para procesar archivos")
+
+        try:
+            result = future.result()
+        except Exception as error:
+            if on_error:
+                on_error(error)
+            else:
+                self._show_error(error)
+            return
+
+        self._show_success(success_title, result)
+
     def _restart_app(self) -> None:
+        self.task_executor.shutdown(wait=False, cancel_futures=True)
         self.root.destroy()
         os.execl(sys.executable, sys.executable, *sys.argv)
 
     def _exit_program(self) -> None:
+        self.task_executor.shutdown(wait=False, cancel_futures=True)
         self.root.destroy()
         sys.exit(0)
 
@@ -1075,10 +1792,20 @@ class PdfManagementGui:
         attach_button = ctk.CTkButton(
             parent,
             text="Adjuntar",
-            width=110,
+            width=82,
             command=self._select_signature_image,
         )
         attach_button.grid(row=row, column=2, padx=10, pady=8)
+
+        delete_button = ctk.CTkButton(
+            parent,
+            text="Borrar",
+            width=74,
+            fg_color="transparent",
+            border_width=1,
+            command=self._delete_selected_signature,
+        )
+        delete_button.grid(row=row, column=3, padx=(0, 10), pady=8)
         self._refresh_signature_list()
 
     def _entry_row(
@@ -1101,13 +1828,13 @@ class PdfManagementGui:
         row: int,
         label: str,
         variable: tk.StringVar,
-        values: list[str],
+        values: list[str]
     ) -> None:
         row_label = ctk.CTkLabel(parent, text=label)
         row_label.grid(row=row, column=0, sticky="w", padx=10, pady=8)
 
-        combo = ctk.CTkComboBox(parent, values=values, variable=variable)
-        combo.grid(row=row, column=1, sticky="ew", padx=10, pady=8)
+        combo = ctk.CTkComboBox(parent, values=values, variable=variable, width=170)
+        combo.grid(row=row, column=1, sticky="w", padx=10, pady=8)
 
     def _small_entry(
         self,
@@ -1164,15 +1891,29 @@ class PdfManagementGui:
     def _show_success(self, title: str, file_path: Path) -> None:
         logger_user.info(f"{title}: {file_path}")
         messagebox.showinfo(title, f"Archivo generado:\n{file_path}")
+        if self.open_after_save.get() == "Si":
+            self._open_output_file(file_path)
+
+    def _open_output_file(self, file_path: Path | str) -> None:
+        output_path = Path(file_path)
+        if not output_path.exists():
+            return
+        try:
+            os.startfile(output_path)
+        except OSError as error:
+            logger_dev.error(f"No se pudo abrir el archivo generado: {error}")
+
+    def _show_debug(self, title: str) -> None:
+        logger_user.debug(f"{title}")
 
     def _show_error(self, error: Exception) -> None:
         logger_dev.error(error)
         messagebox.showerror("Error", str(error))
 
-    def _load_delete_icon(self) -> ctk.CTkImage | None:
-        if not DELETE_IMAGE.exists():
+    def _load_image(self, image_path: Path) -> ctk.CTkImage | None:
+        if not image_path.exists():
             return None
-        image = Image.open(DELETE_IMAGE)
+        image = Image.open(image_path)
         return ctk.CTkImage(image, size=(18, 18))
 
     @staticmethod
