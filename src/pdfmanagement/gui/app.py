@@ -87,7 +87,7 @@ class MainWindow:
         self.root.minsize(980, 640)
         if settings.window_maximized:
             self.root.after(0, lambda: self.root.state("zoomed"))
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
         self.root.report_callback_exception = self._on_callback_exception
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
@@ -426,6 +426,15 @@ class MainWindow:
         log_event("Sesion", "Reinicio solicitado para aplicar cambios")
         self.close(exit_process=False)
         os.execl(sys.executable, sys.executable, *sys.argv)
+
+    def request_close(self) -> None:
+        """Boton cerrar de la ventana: cada seccion puede impedirlo (cambios sin guardar)."""
+        for name, page in self.pages.items():
+            if not page.can_close():
+                log_event("Sesion", "Cierre cancelado", seccion=name)
+                self.show_page(name, source="cierre cancelado")
+                return
+        self.close()
 
     def close(self, exit_process: bool = True) -> None:
         self._closing = True

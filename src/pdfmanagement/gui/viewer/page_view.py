@@ -165,8 +165,14 @@ class PageView(ctk.CTkFrame):
         self._relayout(keep_page=self.current_page)
         self._notify_page()
 
-    def refresh(self, pages: set[int] | None = None) -> None:
-        """Vuelve a dibujar paginas editadas (o todas) y recalcula tamanos."""
+    def refresh(self, pages: set[int] | None = None, page: int | None = None) -> None:
+        """
+        Vuelve a dibujar paginas editadas (o todas) y recalcula tamanos.
+        ``pages=None`` indica un cambio de estructura (paginas giradas,
+        movidas, insertadas o eliminadas): los resaltados y la seleccion de
+        texto se descartan porque sus indices ya no valen. ``page`` es la
+        pagina a mostrar despues (por defecto, la actual).
+        """
         if self.document is None:
             return
         self.sizes = [(p.rect.width, p.rect.height) for p in self.document]
@@ -174,7 +180,14 @@ class PageView(ctk.CTkFrame):
         for key in list(self._displayed):
             if pages is None or key[0] in pages:
                 self._forget_image(key)
-        self._relayout(keep_page=min(self.current_page, self.page_count - 1))
+        if pages is None:
+            self.search_hits.clear()
+            self.current_hit = None
+            self.selection.clear()
+        target = self.current_page if page is None else page
+        self.current_page = max(0, min(target, self.page_count - 1))
+        self._relayout(keep_page=self.current_page)
+        self._notify_page()
 
     # * Navegacion ----------------------------------------------------------
 

@@ -8,7 +8,7 @@ como"); el original nunca se modifica.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +18,9 @@ import pymupdf
 from ..documents import open_document
 from ..errors import InvalidInputError
 from ..files import PDF_EXTENSIONS, atomic_output, prepare_output, require_file
+from . import pages as page_ops
 from .history import History
+from .text import page_words
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,9 @@ class DocumentSession:
         self.document = document
         self.path = path
         self.password = password
-        self.encrypted = bool(document.needs_pass) or bool(document.is_encrypted) or password is not None
+        # No usar ``needs_pass`` aqui: MuPDF vuelve a autenticar con contrasena
+        # vacia y reemplaza la clave buena; el documento se leeria en blanco.
+        self.encrypted = password is not None or bool((document.metadata or {}).get("encryption"))
         self.history = History(document, on_change=on_change)
         self._words: dict[int, list[tuple]] = {}
 
@@ -99,8 +103,7 @@ class DocumentSession:
         bloque, linea, palabra)``. Se guardan en cache por pagina.
         """
         if index not in self._words:
-            words = self.document[index].get_text("words", sort=True)
-            self._words[index] = words
+            self._words[index] = page_words(self.document[index], sort=True)
         return self._words[index]
 
     def invalidate(self, pages: list[int] | None = None) -> None:
@@ -140,6 +143,93 @@ class DocumentSession:
             modified=_pdf_date(meta.get("modDate", "")),
         )
 
+    # * Edicion de paginas ---------------------------------------------------
+
+    def rotate(self, pages: Iterable[int], angle: int) -> str:
+        """Gira paginas (indices desde 0) ``angle`` grados; positivo = horario."""
+        pages = self._valid_pages(pages)
+        side = "derecha" if angle > 0 else "izquierda"
+        return self._edit(f"Rotar {_describe(pages)} a la {side}", page_ops.rotate_pages, pages, angle)
+
+    def delete(self, pages: Iterable[int]) -> str:
+        pages = self._valid_pages(pages)
+        if len(pages) >= self.page_count:
+            raise InvalidInputError("No se pueden eliminar todas las paginas: el documento debe conservar al menos una.")
+        return self._edit(f"Eliminar {_describe(pages)}", page_ops.delete_pages, pages)
+
+    def move(self, pages: Iterable[int], target: int) -> list[int]:
+        """
+        Mueve ``pages`` delante de la pagina que hoy esta en ``target``
+        (``page_count`` = al final). Devuelve los nuevos indices de las
+        paginas movidas; si el orden no cambia no registra nada.
+        """
+        pages = self._valid_pages(pages)
+        target = max(0, min(target, self.page_count))
+        rest = [index for index in range(self.page_count) if index not in pages]
+        position = sum(1 for index in rest if index < target)
+        if pages == list(range(position, position + len(pages))):
+            return pages  # ya estan ahi
+        result: list[int] = []
+        self._edit(f"Mover {_describe(pages)}",
+                   lambda document: result.extend(page_ops.move_pages(document, pages, target)))
+        return result
+
+    def insert_pdf(self, source_file: str | Path, at: int, password: str | None = None) -> int:
+        """
+        Inserta todas las paginas de otro PDF antes de ``at``. Lanza
+        ``PasswordRequiredError`` / ``WrongPasswordError`` si esta protegido.
+        Devuelve la cantidad de paginas insertadas.
+        """
+        path = require_file(source_file, PDF_EXTENSIONS)
+        source = open_document(path, password)
+        try:
+            if source.page_count == 0:
+                raise InvalidInputError(f"'{path.name}' no tiene paginas.")
+            # Copia en memoria sin cifrado: se modifica al copiar las anotaciones.
+            copy = pymupdf.open("pdf", source.tobytes())
+        finally:
+            source.close()
+        at = max(0, min(at, self.page_count))
+        try:
+            count = copy.page_count
+            self._edit(f"Insertar {_plural(count, 'pagina')} de {path.name}", page_ops.insert_document, copy, at)
+        finally:
+            copy.close()
+        return count
+
+    def insert_blank(self, at: int, size: tuple[float, float] | None = None) -> str:
+        """Inserta una pagina en blanco antes de ``at`` (por defecto, del tamano de la vecina)."""
+        at = max(0, min(at, self.page_count))
+        if size is None:
+            neighbor = self.document[min(at, self.page_count - 1)]
+            size = (neighbor.mediabox.width, neighbor.mediabox.height)
+        return self._edit("Insertar pagina en blanco", page_ops.insert_blank_page, at, *size)
+
+    def undo(self) -> str | None:
+        label = self.history.undo()
+        self.invalidate()
+        return label
+
+    def redo(self) -> str | None:
+        label = self.history.redo()
+        self.invalidate()
+        return label
+
+    def _edit(self, label: str, operation: Callable, *args) -> str:
+        with self.history.operation(label):
+            operation(self.document, *args)
+        self.invalidate()
+        logger.info("Edicion: %s (%s)", label, self.name)
+        return label
+
+    def _valid_pages(self, pages: Iterable[int]) -> list[int]:
+        selected = sorted(set(pages))
+        if not selected:
+            raise InvalidInputError("Seleccione al menos una pagina.")
+        if selected[0] < 0 or selected[-1] >= self.page_count:
+            raise InvalidInputError("La seleccion incluye paginas que no existen.")
+        return selected
+
     # * Guardado ------------------------------------------------------------
 
     def save_as(self, output_file: str | Path, *, keep_encryption: bool = True) -> Path:
@@ -169,6 +259,15 @@ class DocumentSession:
 
     def close(self) -> None:
         self.document.close()
+
+
+def _plural(count: int, word: str) -> str:
+    return f"1 {word}" if count == 1 else f"{count} {word}s"
+
+
+def _describe(pages: list[int]) -> str:
+    """``[2]`` -> "pagina 3"; ``[0, 1]`` -> "2 paginas"."""
+    return f"pagina {pages[0] + 1}" if len(pages) == 1 else _plural(len(pages), "pagina")
 
 
 def _pdf_date(value: str) -> str:

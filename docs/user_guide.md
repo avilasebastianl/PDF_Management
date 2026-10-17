@@ -17,14 +17,31 @@ Lea cualquier PDF sin salir de la aplicacion. Es la primera seccion y la que se 
   - **Miniaturas**: haga clic en una para ir a esa pagina.
   - **Marcadores**: el indice del documento, si lo tiene.
   - **Buscar** (**Ctrl+F**): escriba y pulse Enter. Puede distinguir mayusculas o buscar solo palabras completas. **F3** / **Mayus+F3** van al resultado siguiente / anterior; cada resultado muestra su contexto y se resalta en la pagina.
-- **Herramientas**: **Seleccionar texto** (arrastre sobre el texto; **Ctrl+C** copia y **Ctrl+A** selecciona la pagina) o **Mano** para mover la pagina. El boton central del raton tambien desplaza.
+- **Herramientas**: **Texto** (arrastre sobre el texto; **Ctrl+C** copia y **Ctrl+A** selecciona la pagina) o **Mano** para mover la pagina. El boton central del raton tambien desplaza.
 - **Zoom**: **Ctrl + rueda** (centrado en el cursor), **Ctrl++** / **Ctrl+-**, **Ctrl+0** para ajustar al ancho, o la lista de zoom (ajustar ancho, ajustar pagina, 50-400 %).
 - **Navegar**: rueda, **Re Pag** / **Av Pag**, **Inicio** / **Fin**, o escriba el numero de pagina.
-- **Propiedades**: titulo, autor, fechas, tamano de pagina, cifrado y firmas del documento.
+- **Propiedades** (boton con la letra i, junto a deshacer y rehacer): titulo, autor, fechas, tamano de pagina, cifrado y firmas del documento.
 - **Enviar a...**: abre el documento en Unir, Extraer, Firmar o Proteger sin buscarlo de nuevo.
 - **Esc** borra la seleccion y los resaltados de la busqueda.
 
-El visor solo dibuja las paginas que se ven, asi que los documentos de cientos de paginas abren y se desplazan con la misma fluidez. Cuando haya edicion, los cambios siempre se guardaran con **Guardar como**: el archivo original nunca se modifica.
+El visor solo dibuja las paginas que se ven, asi que los documentos de cientos de paginas abren y se desplazan con la misma fluidez.
+
+### Organizar paginas
+
+En el panel **Miniaturas**:
+
+- **Seleccionar**: clic en una miniatura. **Ctrl+clic** agrega o quita paginas y **Mayus+clic** selecciona un rango.
+- **Reordenar**: arrastre las miniaturas seleccionadas; una linea azul indica donde quedaran. Cerca del borde el panel se desplaza solo.
+- **Botones** sobre las miniaturas: rotar a la izquierda o a la derecha, eliminar, insertar otro PDF y agregar una pagina en blanco (despues de la seleccion).
+- **Clic derecho** en una miniatura o en la pagina abre el mismo menu, con la opcion de insertar antes o despues.
+
+Atajos: **Ctrl+R** / **Ctrl+Mayus+R** rotar, **Supr** eliminar, **Ctrl+Z** deshacer, **Ctrl+Y** rehacer, **Ctrl+S** guardar como.
+
+Todo se puede deshacer sin limite; pase el cursor por los botones de deshacer/rehacer para ver que accion revierten. Mientras haya cambios sin guardar, el nombre del archivo muestra un punto (•).
+
+Los cambios se guardan siempre con **Guardar como** en un archivo nuevo: el original nunca se modifica. Si el PDF estaba protegido, la copia conserva la misma contrasena. Si intenta abrir otro archivo, enviarlo a otra seccion o cerrar la aplicacion con cambios sin guardar, se le pregunta si desea guardarlos.
+
+Si el documento tiene **firmas digitales**, se le avisa antes del primer cambio: cualquier modificacion hace que las firmas dejen de ser validas en la copia.
 
 ## Unir
 

@@ -1,7 +1,7 @@
 """
 Seccion Visor y componente PageView: apertura, navegacion virtualizada,
-miniaturas, marcadores, busqueda, seleccion y copia, zoom por mosaicos y envio
-a otras secciones.
+miniaturas, marcadores, busqueda, seleccion y copia, zoom por mosaicos, envio
+a otras secciones y organizacion de paginas (fase 2).
 
 Requiere una pantalla (se omite si Tk no puede crear ventanas).
 """
@@ -9,7 +9,7 @@ Requiere una pantalla (se omite si Tk no puede crear ventanas).
 import pymupdf
 import pytest
 
-from conftest import pump
+from conftest import CERTIFICATE_PASSWORD, make_pdf, pump
 from pdfmanagement import core
 
 
@@ -39,6 +39,7 @@ def viewer(gui_app, manual_pdf):
     pump(gui_app, timeout=0.6)
     yield page
     page.clear_marks()
+    page._close_session()  # sin preguntar por cambios sin guardar en la siguiente prueba
 
 
 def test_open_shows_document_thumbnails_and_outline(viewer):
@@ -122,6 +123,8 @@ def test_protected_pdf_asks_for_password(gui_app, manual_pdf, tmp_path, monkeypa
     page = gui_app.pages["Visor"]
     assert page.open_file(locked)
     assert page.session.encrypted and page.session.page_count == 40
+    # Antes leer needs_pass tras autenticar dejaba el documento en blanco.
+    assert page.session.words(0)[0][4] == "Capitulo"
 
 
 def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
@@ -134,3 +137,147 @@ def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
     gui_app.show_page("Visor")
     assert viewer._shortcut(event, viewer.open_search) == "break"
     assert viewer.side_tabs.get() == "Buscar"
+
+
+# * Organizar paginas (fase 2) ------------------------------------------------
+
+def page_titles(viewer, count=None):
+    """Primera linea de cada pagina: ``"Capitulo 1 - Seccion 3"``."""
+    pages = range(viewer.session.page_count if count is None else count)
+    return [" ".join(word[4] for word in viewer.session.words(index)[:5]) for index in pages]
+
+
+def test_rotate_and_undo_update_the_whole_viewer(viewer, gui_app):
+    assert viewer.rotate_pages(90)
+    pump(gui_app, timeout=0.3)
+    width, height = viewer.view.sizes[0]
+    assert width > height, "la pagina girada se ve apaisada"
+    assert viewer.session.modified and viewer.file_label.cget("text").endswith("•")
+    assert viewer.undo_button.cget("state") == "normal"
+    assert "Rotar pagina 1 a la derecha" in viewer._history_tip("Deshacer", "Ctrl+Z")
+    viewer.undo()
+    assert not viewer.session.modified and viewer.view.sizes[0][0] < viewer.view.sizes[0][1]
+    assert viewer.redo_button.cget("state") == "normal"
+    viewer.redo()
+    assert viewer.session.document[0].rotation == 90
+
+
+def test_drag_thumbnails_to_reorder(viewer, gui_app):
+    strip = viewer.thumbnails
+    strip.canvas.yview_moveto(0)
+    pump(gui_app, timeout=0.2)
+
+    def event(page, offset):
+        y = strip._slots[page][1] - strip.canvas.canvasy(0) + offset
+        return type("E", (), {"x": 60, "y": int(y), "state": 0})()
+
+    strip._on_press(event(0, 10))
+    strip._on_drag(event(0, 20))
+    strip._on_drag(event(1, 150))  # mitad inferior de la miniatura 2: cae delante de la 3
+    assert strip.dragging and strip._drop_target == 2
+    strip._on_release(event(1, 150))
+    pump(gui_app, timeout=0.2)
+    assert page_titles(viewer, 3) == ["Capitulo 1 - Seccion 2", "Capitulo 1 - Seccion 1", "Capitulo 1 - Seccion 3"]
+    assert strip.selection() == [1] and viewer.view.current_page == 1
+    assert viewer.session.history.undo_label == "Mover pagina 1"
+    viewer.undo()
+    assert page_titles(viewer, 2) == ["Capitulo 1 - Seccion 1", "Capitulo 1 - Seccion 2"]
+
+
+def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
+    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    strip = viewer.thumbnails
+    strip._select_click(2, 0)
+    strip._select_click(4, 0x0001)  # Mayus: 3 a 5
+    strip._select_click(7, 0x0004)  # Ctrl: agrega la 8
+    assert strip.selection() == [2, 3, 4, 7]
+    assert viewer.pages_hint.cget("text") == "4 paginas seleccionadas"
+    asked = []
+    monkeypatch.setattr(viewer_module.messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
+    viewer.delete_pages()
+    assert asked, "eliminar varias paginas pide confirmacion"
+    assert viewer.session.page_count == 36
+    assert page_titles(viewer, 4)[2:] == ["Capitulo 1 - Seccion 6", "Capitulo 1 - Seccion 7"]
+    assert len(strip._slots) == 36 and strip.selection() == [2]
+
+
+def test_insert_pdf_and_blank_page(viewer, gui_app, tmp_path, monkeypatch):
+    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    other = core.lock_pdf(make_pdf(tmp_path / "anexo.pdf", 2), tmp_path / "anexo_protegido.pdf", "clave")
+    monkeypatch.setattr(viewer_module, "ask_password", lambda *a, **k: "clave")
+    viewer.thumbnails._select_click(0, 0)
+    assert viewer.insert_pdf_file(other)  # despues de la seleccion
+    assert page_titles(viewer, 4)[1:3] == ["Pagina 1", "Pagina 2"]
+    assert viewer.thumbnails.selection() == [1, 2] and viewer.session.page_count == 42
+    assert viewer.insert_blank()
+    assert viewer.session.words(3) == [] and viewer.session.page_count == 43
+    # Los marcadores siguen apuntando a sus paginas (Capitulo 2 era la 11; ahora hay 3 antes).
+    assert [page for _level, _title, page in viewer.outline.entries] == [1, 14, 24, 34]
+
+
+def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_pdf, monkeypatch):
+    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    viewer.rotate_pages(90)
+    output = tmp_path / "manual_editado.pdf"
+    assert viewer.save_to(output)
+    assert not viewer.session.modified and viewer.saved_path == output
+    assert viewer.file_label.cget("text") == "manual_editado.pdf"
+    assert gui_app.status_bar.state == "success"
+    with core.open_document(output) as saved:
+        assert saved[0].rotation == 90
+    errors = []
+    monkeypatch.setattr(gui_app, "show_error", errors.append)  # sin dialogo modal
+    assert not viewer.save_to(manual_pdf), "nunca sobre el original"
+    assert isinstance(errors[0], core.InvalidInputError)
+
+    viewer.rotate_pages(90)
+    answers = iter([None, False])
+    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: next(answers))
+    assert not viewer.open_file(manual_pdf), "Cancelar mantiene el documento editado"
+    assert viewer.session.modified
+    closed = []
+    monkeypatch.setattr(gui_app, "close", lambda *a, **k: closed.append(1))
+    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: None)
+    gui_app.request_close()
+    assert not closed and gui_app.current_page == "Visor", "cerrar con cambios sin guardar se puede cancelar"
+    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: False)
+    assert viewer.open_file(manual_pdf), "No descarta los cambios y abre el otro archivo"
+    assert not viewer.session.modified
+
+
+def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificate, monkeypatch):
+    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    signed = core.sign_pdf_with_certificate(make_pdf(tmp_path / "contrato.pdf", 2), tmp_path / "firmado.pdf",
+                                            certificate[0], CERTIFICATE_PASSWORD)
+    gui_app.show_page("Visor")
+    page = gui_app.pages["Visor"]
+    assert page.open_file(signed)
+    answers = []
+    monkeypatch.setattr(viewer_module.messagebox, "askyesno", lambda *a, **k: answers.append(1) or len(answers) > 1)
+    assert not page.rotate_pages(90), "si no confirma, no se edita"
+    assert not page.session.modified
+    assert page.rotate_pages(90) and page.rotate_pages(90)
+    assert len(answers) == 2, "se avisa hasta que confirma; despues no vuelve a preguntar"
+    page._close_session()
+
+
+def test_page_menu_and_editing_shortcuts(viewer, gui_app):
+    viewer.thumbnails._select_click(1, 0)
+    viewer.thumbnails._select_click(2, 0x0001)
+    menu = viewer._page_menu()
+    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
+    assert labels[:3] == ["Rotar 2 paginas a la derecha", "Rotar 2 paginas a la izquierda", "Eliminar 2 paginas"]
+    menu.destroy()
+    undo = type("E", (), {"keysym": "z"})()
+    viewer.rotate_pages(-90)
+    viewer.open_search()  # el foco pasa al campo de busqueda
+    pump(gui_app, timeout=0.1)
+    assert viewer._shortcut(undo, viewer.undo) is None, "Ctrl+Z dentro del campo de busqueda deshace el texto"
+    viewer.view.canvas.focus_set()
+    pump(gui_app, timeout=0.1)
+    assert viewer._shortcut(undo, viewer.undo) == "break"
+    assert not viewer.session.modified

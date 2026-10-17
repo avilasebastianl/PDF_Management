@@ -187,6 +187,16 @@ class SearchPanel(ctk.CTkFrame):
         self.view.set_search_hits({})
         self._update_buttons()
 
+    def invalidate(self) -> None:
+        """El documento cambio: los resultados ya no valen (se conserva el texto buscado)."""
+        had_results = bool(self.hits) or self._iterator is not None
+        self.cancel()
+        self.hits, self.current = [], -1
+        self.results.set_items([])
+        self.view.set_search_hits({})
+        self.status.configure(text="El documento cambio: pulse Enter para buscar de nuevo" if had_results else "")
+        self._update_buttons()
+
     def next(self) -> None:
         if self.hits:
             self._select((self.current + 1) % len(self.hits))

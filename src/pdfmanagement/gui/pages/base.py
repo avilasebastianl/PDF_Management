@@ -60,6 +60,10 @@ class BasePage(ctk.CTkFrame):
     def on_show(self) -> None:
         """Se invoca cada vez que la pagina se vuelve visible."""
 
+    def can_close(self) -> bool:
+        """Antes de cerrar la ventana: ``False`` la mantiene abierta (p. ej. cambios sin guardar)."""
+        return True
+
     def on_close(self) -> None:
         """Se invoca al cerrar la aplicacion (liberar recursos)."""
 

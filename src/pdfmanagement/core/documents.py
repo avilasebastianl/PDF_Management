@@ -49,7 +49,13 @@ def open_reader(pdf_path: Path, password: str | None = None) -> PdfReader:
 
 
 def open_document(pdf_path: Path, password: str | None = None) -> pymupdf.Document:
-    """Equivalente a ``open_reader`` para PyMuPDF (render y edicion grafica)."""
+    """
+    Equivalente a ``open_reader`` para PyMuPDF (render y edicion grafica).
+
+    Tras autenticar no se debe volver a leer ``document.needs_pass``: MuPDF
+    reintenta con contrasena vacia y el documento pasa a leerse en blanco.
+    Para saber si estaba cifrado: ``document.metadata["encryption"]``.
+    """
     try:
         document = pymupdf.open(pdf_path)
     except (pymupdf.FileDataError, RuntimeError) as error:

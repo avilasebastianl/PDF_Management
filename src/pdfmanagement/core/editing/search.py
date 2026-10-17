@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import pymupdf
 
+from .text import page_search, page_words
+
 
 @dataclass(frozen=True)
 class SearchHit:
@@ -47,16 +49,16 @@ def search_page(page: pymupdf.Page, index: int, query: str, options: SearchOptio
     """Coincidencias de ``query`` en una pagina."""
     if not options.match_case and not options.whole_words:
         # Busqueda nativa de MuPDF: rapida, admite frases y no distingue mayusculas.
-        rects = page.search_for(query)
+        rects = page_search(page, query)
         # Orden nativo de MuPDF: para el contexto basta y ordenar costaba ~20 ms por pagina.
-        words = page.get_text("words") if rects else []
+        words = page_words(page) if rects else []
         return [SearchHit(index, (rect,), _context_for(words, rect)) for rect in rects]
     return _search_words(page, index, query, options)
 
 
 def _search_words(page: pymupdf.Page, index: int, query: str, options: SearchOptions) -> list[SearchHit]:
     """Busqueda por palabras (distinguir mayusculas y/o palabra completa, admite frases)."""
-    words = page.get_text("words", sort=True)
+    words = page_words(page, sort=True)
     terms = query.split()
     if not terms:
         return []

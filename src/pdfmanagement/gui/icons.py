@@ -56,7 +56,17 @@ GLYPHS = {
     "heart": "\ueb51",
     "refresh": "\ue72c",
     "list": "\ue8fd",
+    "save_as": "\ue792",
+    "undo": "\ue7a7",
+    "redo": "\ue7a6",
+    "rotate_right": "\ue8b4",
+    "rotate_left": "\ue8b4",  # reflejado (ver MIRRORED)
+    "insert_pdf": "\ued0e",
+    "blank_page": "\ue7c3",
 }
+
+# La fuente no trae algunas variantes; se obtienen reflejando horizontalmente.
+MIRRORED = {"rotate_left"}
 
 _FONT_CANDIDATES = ("SegoeIcons.ttf", "segmdl2.ttf")
 
@@ -83,14 +93,14 @@ def _to_rgb(color: str) -> tuple[int, int, int]:
 
 
 @cache
-def _render(glyph: str, size: int, color: str) -> Image.Image:
+def _render(glyph: str, size: int, color: str, mirrored: bool = False) -> Image.Image:
     font_path = _font_path()
     scale = 3  # renderizado a mayor resolucion para que se vea nitido al escalar
     pixels = size * scale
     image = Image.new("RGBA", (pixels, pixels), (0, 0, 0, 0))
     font = ImageFont.truetype(str(font_path), int(pixels * 0.82))
     ImageDraw.Draw(image).text((pixels / 2, pixels / 2), glyph, font=font, fill=_to_rgb(color), anchor="mm")
-    return image
+    return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if mirrored else image
 
 
 def render_glyph(glyph: str, size: int, color: str) -> Image.Image | None:
@@ -116,9 +126,10 @@ def icon(name: str, size: int = 18, color: tuple[str, str] = style.TEXT) -> ctk.
     if _font_path() is None:
         return None
     glyph = GLYPHS[name]
+    mirrored = name in MIRRORED
     light, dark = color
     return ctk.CTkImage(
-        light_image=_render(glyph, size, light),
-        dark_image=_render(glyph, size, dark),
+        light_image=_render(glyph, size, light, mirrored),
+        dark_image=_render(glyph, size, dark, mirrored),
         size=(size, size),
     )
