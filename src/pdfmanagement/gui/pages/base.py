@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import customtkinter as ctk
 
 from ... import core
+from ...i18n import tr
 from .. import style
 from ..dialogs import ask_password
 from ..events import debug_event, log_event
@@ -133,7 +134,7 @@ class BasePage(ctk.CTkFrame):
         """
         output = field.path
         if output is None:
-            raise core.InvalidInputError("Debe indicar el archivo de salida.")
+            raise core.InvalidInputError(tr("Debe indicar el archivo de salida."))
         if output.suffix.lower() != ".pdf":
             output = output.with_name(output.name + ".pdf")
         if not output.exists():
@@ -147,8 +148,8 @@ class BasePage(ctk.CTkFrame):
             self.log_debug("Se reemplazara el archivo confirmado en 'Guardar como'", archivo=output.name)
             return output
         replace = messagebox.askyesno(
-            "Archivo existente",
-            f"'{output.name}' ya existe.\n\nDesea reemplazarlo?",
+            tr("Archivo existente"),
+            tr("«{nombre}» ya existe.\n\n¿Desea reemplazarlo?", nombre=output.name),
             parent=self,
         )
         self.log(

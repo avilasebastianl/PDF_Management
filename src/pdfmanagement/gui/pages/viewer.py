@@ -24,43 +24,60 @@ como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
 rotar a la derecha / izquierda, Supr eliminar paginas, Ctrl+F buscar, F3 /
 Mayus+F3 resultado siguiente / anterior, Ctrl+C copiar seleccion, Ctrl+A
 seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
-terminar la herramienta de anotacion y limpiar la seleccion.
+terminar la herramienta de anotacion y limpiar la seleccion, Ctrl+P imprimir.
+
+Opciones de lectura (boton "Ver", ver viewer_display.py): modo nocturno, dos
+paginas, comparar con otra pestana (vista dividida) e imprimir. Panel
+"Firmas": verifica las firmas digitales y permite firmar.
 """
 
+import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 
 import customtkinter as ctk
 
 from ... import recent
+from ...i18n import tr, trn
 from .. import style
 from ..dropdown import dropdown_menu
 from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
 from ..viewer.annotation_tools import SelectTool
+from ..viewer.compare import ComparePanel
 from ..viewer.find_bar import FindBar
+from ..viewer.icon_tabs import IconTabs
 from ..viewer.panels import OutlinePanel, SearchPanel
+from ..viewer.signatures_panel import SignaturesPanel
 from ..viewer.tab_strip import TabStrip
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
 from .viewer_annotations import ViewerAnnotations
+from .viewer_display import DisplayMixin
 from .viewer_files import RECENT_PLACEHOLDER, SEND_PLACEHOLDER, SEND_TARGETS, FilesMixin
 from .viewer_modes import NORMAL, WINDOW, ModesMixin
 from .viewer_organize import OrganizeMixin
 from .viewer_tabs import DocumentTab, TabsMixin
 
-SIDE_TABS = ("Paginas", "Marcadores", "Buscar", "Notas")
-TOOLS = ("Texto", "Mano")
+# Textos mostrados en los selectores (ya traducidos: el idioma se fija antes de importar
+# la interfaz). El codigo los usa por posicion: SIDE_TABS[2] es "Buscar", TOOLS[0] "Texto".
+SIDE_TABS = (tr("Páginas"), tr("Marcadores"), tr("Buscar"), tr("Notas"), tr("Firmas"))
+PAGES_TAB, OUTLINE_TAB, SEARCH_TAB, NOTES_TAB, SIGNATURES_TAB = SIDE_TABS
+SIDE_ICONS = ("pages_tab", "outline", "search", "note", "signature")
+SIDE_WIDTH = 272
+TOOLS = (tr("Texto"), tr("Mano"))
 PLACEHOLDER = (
-    "Haga clic aqui o arrastre un PDF para abrirlo",
-    'Tambien puede usar el boton "Abrir" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las paginas.',
+    tr("Haga clic aquí o arrastre un PDF para abrirlo"),
+    tr('También puede usar el botón "Abrir" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las páginas.'),
 )
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
+TEXT_BUTTON_WIDTH = 92  # Buscar y Editar con texto; con poco ancho quedan solo con icono (30)
 
 
-class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
-    name = "Visor"
-    title = "Visor de PDF"
-    subtitle = "Lea, busque, anote y organice las paginas de cualquier PDF."
+class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin, BasePage):
+    name = "Visor"  # identificador de la seccion (no se traduce)
+    title = tr("Visor de PDF")
+    subtitle = tr("Lea, busque, anote y organice las páginas de cualquier PDF.")
     icon_name = "pdf"
     scrollable = False
     show_header = False  # el visor aprovecha todo el alto; el titulo ya lo indica el menu lateral
@@ -70,12 +87,20 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
     active: int
     view_mode: str
     edit_mode: bool
+    compare: ComparePanel | None
+    compare_tab: DocumentTab | None
+    night_mode: tk.BooleanVar
+    two_pages: tk.BooleanVar
 
     def build(self) -> None:
         self.tabs: list[DocumentTab] = []
         self.active = -1  # indice de la pestana visible (-1: ninguna)
         self.view_mode = NORMAL  # NORMAL, WINDOW (toda la ventana) o FULLSCREEN
         self._recent: list[Path] = recent.load_recent()
+        self.compare = None  # vista dividida (se crea la primera vez que se compara)
+        self.compare_tab = None
+        self._compare_unsubscribe: Callable[[], None] | None = None
+        self._verified_path: Path | None = None  # archivo cuyas firmas muestra el panel
         # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
@@ -84,6 +109,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         self._build_tab_bar()
         self._build_side_panel()
         self._build_viewer()
+        self.apply_display_settings()
         self._bind_shortcuts()
         self._refresh_file_state()
 
@@ -93,7 +119,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         bar = self.file_bar = ctk.CTkFrame(self.body, fg_color="transparent")
         bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
         bar.grid_columnconfigure(2, weight=1)
-        primary_button(bar, "Abrir", self.browse, "folder", width=110).grid(row=0, column=0)
+        primary_button(bar, tr("Abrir"), self.browse, "folder", width=110).grid(row=0, column=0)
         self.recent_menu = dropdown_menu(bar, self._recent_labels(), self._open_recent, width=160, height=34)
         self.recent_menu.set(RECENT_PLACEHOLDER)
         self.recent_menu.grid(row=0, column=1, padx=(8, 12))
@@ -114,10 +140,14 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         )
         self.redo_button.pack(side="left", padx=(2, 0))
         self.properties_button = icon_button(
-            history, "info", self.show_properties, "Propiedades del documento", size=34, state="disabled"
+            history, "info", self.show_properties, tr("Propiedades del documento"), size=34, state="disabled"
         )
         self.properties_button.pack(side="left", padx=(2, 0))
-        self.save_button = secondary_button(bar, "Guardar como", self.save_as, "save_as", width=140)
+        self.print_button = icon_button(
+            history, "print", self.print_document, tr("Imprimir (Ctrl+P)"), size=34, state="disabled"
+        )
+        self.print_button.pack(side="left", padx=(2, 0))
+        self.save_button = secondary_button(bar, tr("Guardar como"), self.save_as, "save_as", width=140)
         self.save_button.grid(row=0, column=4, padx=(4, 8))
         self.send_menu = dropdown_menu(bar, list(SEND_TARGETS), self._send_to, width=140, height=34)
         self.send_menu.set(SEND_PLACEHOLDER)
@@ -138,15 +168,12 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
             fg_color=style.CARD_BG,
             border_width=1,
             border_color=style.CARD_BORDER,
-            width=272,
+            width=SIDE_WIDTH,
         )
         self.side.grid(row=2, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.COMPACT_PAD))
         self.side.grid_propagate(False)
         self.side.pack_propagate(False)
-        self.side_tabs = ctk.CTkSegmentedButton(
-            self.side, values=list(SIDE_TABS), command=self._show_side, font=style.fonts().small
-        )
-        self.side_tabs.set(SIDE_TABS[0])
+        self.side_tabs = IconTabs(self.side, list(zip(SIDE_TABS, SIDE_ICONS, strict=True)), self._show_side)
         self.side_tabs.pack(fill="x", padx=8, pady=8)
         self.side_stack = ctk.CTkFrame(self.side, fg_color="transparent")
         self.side_stack.pack(fill="both", expand=True, padx=2, pady=(0, 8))
@@ -157,12 +184,14 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         panel = ctk.CTkFrame(self.side_stack, fg_color="transparent")
         tools = self.page_tools = ctk.CTkFrame(panel, fg_color="transparent")  # visible en modo edicion
         self.page_buttons = [
-            icon_button(tools, "rotate_left", lambda: self.rotate_pages(-90), "Rotar a la izquierda (Ctrl+Mayus+R)"),
-            icon_button(tools, "rotate_right", lambda: self.rotate_pages(90), "Rotar a la derecha (Ctrl+R)"),
-            icon_button(tools, "delete", self.delete_pages, "Eliminar las paginas seleccionadas (Supr)"),
-            icon_button(tools, "insert_pdf", self.insert_pdf, "Insertar otro PDF despues de la seleccion"),
             icon_button(
-                tools, "blank_page", self.insert_blank, "Insertar una pagina en blanco despues de la seleccion"
+                tools, "rotate_left", lambda: self.rotate_pages(-90), tr("Rotar a la izquierda (Ctrl+Mayús+R)")
+            ),
+            icon_button(tools, "rotate_right", lambda: self.rotate_pages(90), tr("Rotar a la derecha (Ctrl+R)")),
+            icon_button(tools, "delete", self.delete_pages, tr("Eliminar las páginas seleccionadas (Supr)")),
+            icon_button(tools, "insert_pdf", self.insert_pdf, tr("Insertar otro PDF después de la selección")),
+            icon_button(
+                tools, "blank_page", self.insert_blank, tr("Insertar una página en blanco después de la selección")
             ),
         ]
         for button in self.page_buttons:
@@ -190,13 +219,22 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         card.grid(row=2, column=1, sticky="nsew", pady=(0, style.COMPACT_PAD))
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(3, weight=1)
+        self.viewer_card = card
 
+        # Visor principal y, al comparar, el segundo visor a su derecha.
+        self.view_area = ctk.CTkFrame(card, fg_color="transparent", corner_radius=0)
+        self.view_area.grid_columnconfigure(0, weight=1)
+        self.view_area.grid_rowconfigure(0, weight=1)
         self.view = PageView(
-            card, continuous=True, placeholder=PLACEHOLDER, on_empty_click=self.browse, on_drop=self._on_drop
+            self.view_area, continuous=True, placeholder=PLACEHOLDER, on_empty_click=self.browse, on_drop=self._on_drop
         )
-        top = ctk.CTkFrame(card, fg_color="transparent")
+        self.view.grid(row=0, column=0, sticky="nsew")
+        self.view.on_page_changed(self.sync_compare)
+        top = self.top_bar = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 6))
-        icon_button(top, "list", self.toggle_side_panel, "Mostrar u ocultar el panel lateral").pack(
+        self._top_compact = False  # botones Buscar y Editar solo con icono (poco ancho)
+        self._top_full_width = 0
+        icon_button(top, "list", self.toggle_side_panel, tr("Mostrar u ocultar el panel lateral")).pack(
             side="left", padx=(0, 6)
         )
         self.toolbar = ViewerToolbar(top, self.view)
@@ -206,37 +244,46 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         )
         self.tool_selector.set(TOOLS[0])
         self.tool_selector.pack(side="left", padx=(10, 6))
-        tips = {TOOLS[0]: "Seleccionar y copiar texto (Ctrl+C)", TOOLS[1]: "Arrastrar para mover la pagina"}
+        tips = {TOOLS[0]: tr("Seleccionar y copiar texto (Ctrl+C)"), TOOLS[1]: tr("Arrastrar para mover la página")}
         for value, button in self.tool_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
             ToolTip(button, tips[value])
-        self.search_button = secondary_button(top, "Buscar", self.toggle_find, "search", width=92, height=30)
+        self.search_button = secondary_button(
+            top, tr("Buscar"), self.toggle_find, "search", width=TEXT_BUTTON_WIDTH, height=30
+        )
         self.search_button.pack(side="left")
-        ToolTip(self.search_button, "Buscar palabras en el documento (Ctrl+F)")
-        self.edit_button = secondary_button(top, "Editar", self.toggle_edit_mode, "edit", width=92, height=30)
+        ToolTip(self.search_button, tr("Buscar palabras en el documento (Ctrl+F)"))
+        self.edit_button = secondary_button(
+            top, tr("Editar"), self.toggle_edit_mode, "edit", width=TEXT_BUTTON_WIDTH, height=30
+        )
         self.edit_button.pack(side="left", padx=(6, 0))
-        ToolTip(self.edit_button, "Mostrar u ocultar las herramientas para anotar y organizar paginas (Ctrl+E)")
+        ToolTip(self.edit_button, tr("Mostrar u ocultar las herramientas para anotar y organizar páginas (Ctrl+E)"))
         self.window_button = icon_button(
             top,
             "window_mode",
             self.toggle_window_mode,
             lambda: (
-                "Volver a la vista normal (Ctrl+Mayus+F o Esc)"
+                tr("Volver a la vista normal (Ctrl+Mayús+F o Esc)")
                 if self.view_mode == WINDOW
-                else "Visor en toda la ventana para leer (Ctrl+Mayus+F)"
+                else tr("Visor en toda la ventana para leer (Ctrl+Mayús+F)")
             ),
         )
-        self.window_button.pack(side="left", padx=(6, 0))
+        self.view_button = icon_button(
+            top, "view_options", self.show_view_menu, tr("Ver: modo nocturno, dos páginas, comparar e imprimir")
+        )
+        self.view_button.pack(side="left", padx=(6, 0))
+        self.window_button.pack(side="left", padx=(2, 0))
         self.fullscreen_button = icon_button(
             top,
             "fullscreen",
             self.toggle_fullscreen,
-            lambda: "Salir de pantalla completa (F11 o Esc)" if self.fullscreen else "Pantalla completa (F11)",
+            lambda: tr("Salir de pantalla completa (F11 o Esc)") if self.fullscreen else tr("Pantalla completa (F11)"),
         )
         self.fullscreen_button.pack(side="left", padx=(2, 0))
         ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(
             row=2, column=0, sticky="ew", padx=1
         )
-        self.view.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
+        self.view_area.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
+        card.bind("<Configure>", self.fit_bars, add="+")
         self.view.canvas.bind("<ButtonPress-3>", self._on_view_right_click, add="+")
         self.selection_label = muted_label(card, "")
         self.selection_label.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 6))
@@ -256,11 +303,14 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         self.outline = OutlinePanel(self.side_stack, self.view)
         self.search = SearchPanel(self.side_stack, self.view)
         self.annotations = ViewerAnnotations(self, card, self.side_stack)
+        self.signatures = SignaturesPanel(
+            self.side_stack, on_verify=lambda: self.refresh_signatures(force=True), on_sign=self.sign_from_viewer
+        )
         self.find_bar = FindBar(self.view, self.search, on_show_list=self._show_search_list, on_close=self.close_find)
         self.annotations.bar.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
         self.annotations.bar.grid_remove()  # aparece con el boton Editar
         self.edit_mode = False
-        panels = (self.pages_panel, self.outline, self.search, self.annotations.panel)
+        panels = (self.pages_panel, self.outline, self.search, self.annotations.panel, self.signatures)
         self._side_panels = dict(zip(SIDE_TABS, panels, strict=True))
         self._show_side(SIDE_TABS[0], log=False)
 
@@ -268,6 +318,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         root = self.app.root
         bindings = {
             "<Control-o>": self.browse,
+            "<Control-p>": self.print_document,
             "<Control-w>": self.close_current_tab,
             "<Control-Tab>": lambda: self.cycle_tab(1),
             "<Control-Shift-Tab>": lambda: self.cycle_tab(-1),
@@ -310,6 +361,33 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         action()
         return "break"
 
+    # * Barras adaptables --------------------------------------------------------
+
+    def fit_bars(self, _event=None) -> None:
+        """
+        Con poco ancho (textos largos en otro idioma, comparar documentos,
+        ventana chica) Buscar y Editar quedan solo con icono y la barra de
+        anotacion pasa a dos filas, en vez de cortarse por la derecha.
+        """
+        width = self.viewer_card.winfo_width() - 20
+        if width <= 50:
+            return
+        if not self._top_compact:
+            self._top_full_width = self.top_bar.winfo_reqwidth()
+        compact = self._top_full_width > width
+        if compact != self._top_compact:
+            self._top_compact = compact
+            button_width = 30 if compact else TEXT_BUTTON_WIDTH
+            self.search_button.configure(text="" if compact else tr("Buscar"), width=button_width)
+            self.edit_button.configure(text=self.edit_button_text(), width=button_width)
+            self.log_debug("Barra del visor %s", "compacta" if compact else "completa", ancho=width)
+        self.annotations.fit_width(width)
+
+    def edit_button_text(self) -> str:
+        if self._top_compact:
+            return ""
+        return tr("Listo") if self.edit_mode else tr("Editar")
+
     # * Acciones --------------------------------------------------------------
 
     def open_search(self) -> None:
@@ -334,8 +412,8 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         """Todos los resultados, con su contexto, en el panel lateral."""
         if not self.side_visible:
             self.toggle_side_panel()
-        self.side_tabs.set("Buscar")
-        self._show_side("Buscar")
+        self.side_tabs.set(SEARCH_TAB)
+        self._show_side(SEARCH_TAB)
 
     def copy_selection(self) -> None:
         text = self.text_tool.selected_text()
@@ -343,7 +421,11 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
             return
         self.clipboard_clear()
         self.clipboard_append(text)
-        self.selection_label.configure(text=f"Copiado al portapapeles: {len(text)} caracteres")
+        self.selection_label.configure(
+            text=trn(
+                "Copiado al portapapeles: {count} carácter", "Copiado al portapapeles: {count} caracteres", len(text)
+            )
+        )
         self.log("Texto copiado", caracteres=len(text), pagina=self.view.current_page + 1)
 
     def select_page(self) -> None:
@@ -379,8 +461,10 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
                 panel.pack(fill="both", expand=True)
             else:
                 panel.pack_forget()
-        if name == "Notas":
+        if name == NOTES_TAB:
             self.annotations.on_panel_shown()
+        elif name == SIGNATURES_TAB:
+            self.refresh_signatures()
         if log:
             self.log_debug("Panel lateral: %s", name)
 
@@ -398,42 +482,54 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         return self.session.words(page) if self.session is not None else []
 
     def _on_selection_changed(self, words: int) -> None:
-        self.selection_label.configure(text=f"{words} palabras seleccionadas · Ctrl+C para copiar" if words else "")
+        text = ""
+        if words:
+            text = trn(
+                "{count} palabra seleccionada · Ctrl+C para copiar",
+                "{count} palabras seleccionadas · Ctrl+C para copiar",
+                words,
+            )
+        self.selection_label.configure(text=text)
 
     def _on_pages_selected(self, pages: list[int]) -> None:
         if self.session is None:
             text = ""
         elif len(pages) > 1:
-            text = f"{len(pages)} paginas seleccionadas"
+            text = trn("{count} página seleccionada", "{count} páginas seleccionadas", len(pages))
         elif self.edit_mode:
-            text = "Arrastre para reordenar"
+            text = tr("Arrastre para reordenar")
         else:
-            text = "Pulse Editar para organizar las paginas"
+            text = tr("Pulse Editar para organizar las páginas")
         if self.pages_hint.cget("text") != text:
             self.pages_hint.configure(text=text)
 
     def _history_tip(self, action: str, keys: str) -> str:
+        """``action``: "Deshacer" o "Rehacer" (identificador; se muestra traducido)."""
+        redo = action == "Rehacer"
+        shown = tr("Rehacer") if redo else tr("Deshacer")
         history = self.session.history if self.session is not None else None
-        label = (history.redo_label if action == "Rehacer" else history.undo_label) if history else None
-        return f"{action}: {label} ({keys})" if label else f"{action} ({keys})"
+        label = (history.redo_label if redo else history.undo_label) if history else None
+        if label:
+            return tr("{accion}: {cambio} ({teclas})", accion=shown, cambio=label, teclas=keys)
+        return f"{shown} ({keys})"
 
     def _refresh_file_state(self) -> None:
         session = self.session
         self._update_tab_title()
         if session is None:
-            self.file_label.configure(text="Ningun documento abierto")
-            self.file_info.configure(text="Abra un PDF con el boton, con Ctrl+O o arrastrandolo al visor.")
+            self.file_label.configure(text=tr("Ningún documento abierto"))
+            self.file_info.configure(text=tr("Abra un PDF con el botón, con Ctrl+O o arrastrándolo al visor."))
         else:
             shown = self.saved_path or session.path
-            details = [f"{session.page_count} paginas"]
+            details = [trn("{count} página", "{count} páginas", session.page_count)]
             if shown.exists():
                 details.append(format_size(shown.stat().st_size))
             if session.encrypted:
-                details.append("protegido")
+                details.append(tr("protegido"))
             if session.has_signatures():
-                details.append("con firmas digitales")
+                details.append(tr("con firmas digitales"))
             if session.modified:
-                details.insert(0, "cambios sin guardar")
+                details.insert(0, tr("cambios sin guardar"))
             name = shown.name + ("  •" if session.modified else "")
             if self.file_label.cget("text") != name:
                 self.file_label.configure(text=name)
@@ -447,6 +543,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
         if self.edit_button.cget("state") != state:
             self.edit_button.configure(state=state)
         set_enabled(self.properties_button, session is not None)
+        set_enabled(self.print_button, session is not None)
         set_enabled(self.undo_button, session is not None and session.history.can_undo)
         set_enabled(self.redo_button, session is not None and session.history.can_redo)
         for button in (*self.page_buttons, *self.annotations.tool_buttons.values()):

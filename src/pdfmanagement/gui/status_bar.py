@@ -19,16 +19,17 @@ from pathlib import Path
 import customtkinter as ctk
 
 from .. import paths
+from ..i18n import tr, trn
 from . import style
 from .events import log_event
 from .system import open_path, reveal_in_folder
 from .widgets import ToolTip, hide, secondary_button, show
 
-IDLE_HELP = (
+IDLE_HELP = tr(
     "Barra de estado\n"
     "Muestra el progreso de las operaciones (unir, extraer, convertir, firmar, proteger) "
-    "y el resultado de la ultima. Al terminar podra abrir el archivo generado o mostrarlo "
-    "en su carpeta. Puede seguir usando la aplicacion mientras una operacion esta en curso."
+    "y el resultado de la última. Al terminar podrá abrir el archivo generado o mostrarlo "
+    "en su carpeta. Puede seguir usando la aplicación mientras una operación está en curso."
 )
 
 _DOT_COLORS = {
@@ -64,7 +65,7 @@ class StatusBar(ctk.CTkFrame):
 
         self.reveal_button = secondary_button(
             self,
-            "Mostrar en carpeta",
+            tr("Mostrar en carpeta"),
             lambda: self._use_result("Mostrar en carpeta", reveal_in_folder),
             "folder",
             width=150,
@@ -72,23 +73,23 @@ class StatusBar(ctk.CTkFrame):
         self.on_view = on_view
         self.view_button = secondary_button(
             self,
-            "Ver en el visor",
+            tr("Ver en el visor"),
             lambda: self._use_result("Ver en el visor", self.on_view),
             "eye",
             width=150,
         )
-        ToolTip(self.view_button, "Abre el archivo generado en la seccion Visor", above=True)
+        ToolTip(self.view_button, tr("Abre el archivo generado en la sección Visor"), above=True)
         self.open_button = ctk.CTkButton(
             self,
-            text="Abrir",
+            text=tr("Abrir"),
             width=80,
             height=34,
             corner_radius=8,
             font=style.fonts().body,
             command=lambda: self._use_result("Abrir", open_path),
         )
-        ToolTip(self.reveal_button, "Abre el explorador con el archivo seleccionado", above=True)
-        ToolTip(self.open_button, "Abre el archivo con el programa predeterminado", above=True)
+        ToolTip(self.reveal_button, tr("Abre el explorador con el archivo seleccionado"), above=True)
+        ToolTip(self.open_button, tr("Abre el archivo con el programa predeterminado"), above=True)
 
         for widget in (self.pill, self.dot, self.message):
             ToolTip(widget, lambda: self._help_text, above=True)
@@ -97,15 +98,18 @@ class StatusBar(ctk.CTkFrame):
     # * Estados -------------------------------------------------------------
 
     def set_idle(self) -> None:
-        self._apply("idle", "Listo · sin operaciones en curso", IDLE_HELP)
+        self._apply("idle", tr("Listo · sin operaciones en curso"), IDLE_HELP)
         self._hide_actions()
 
     def set_busy(self, description: str, pending: int) -> None:
-        queued = f"  (+{pending - 1} en cola)" if pending > 1 else ""
+        queued = "  " + trn("(+{count} en cola)", "(+{count} en cola)", pending - 1) if pending > 1 else ""
         self._apply(
             "busy",
             f"{description}...{queued}",
-            f"Operacion en curso: {description}.\nPuede seguir trabajando; el resultado aparecera aqui al terminar.",
+            tr(
+                "Operación en curso: {task}.\nPuede seguir trabajando; el resultado aparecerá aquí al terminar.",
+                task=description,
+            ),
         )
         self._hide_actions()
 
@@ -115,8 +119,13 @@ class StatusBar(ctk.CTkFrame):
         self._apply(
             "success",
             f"{title}: {result.name}  ·  {finished}",
-            f"Ultima operacion: {title} (termino a las {finished}).\nArchivo: {result}\n"
-            "Use 'Abrir' o 'Mostrar en carpeta' para acceder al resultado.",
+            tr(
+                "Última operación: {title} (terminó a las {time}).\nArchivo: {file}\n"
+                "Use «Abrir» o «Mostrar en carpeta» para acceder al resultado.",
+                title=title,
+                time=finished,
+                file=result,
+            ),
         )
         if show_actions:
             if self.on_view is not None:
@@ -125,14 +134,17 @@ class StatusBar(ctk.CTkFrame):
             self.open_button.grid(row=1, column=4, padx=(0, style.PAD))
 
     def set_error(self, summary: str) -> None:
-        short = summary.splitlines()[0] if summary else "La operacion no se completo"
+        short = summary.splitlines()[0] if summary else tr("La operación no se completó")
         if len(short) > 90:
             short = short[:87] + "..."
         self._apply(
             "error",
-            f"No se completo: {short}",
-            f"La ultima operacion no se completo.\n{summary}\n\n"
-            f"Si el problema persiste, revise {paths.LOG_DIR / 'error.log'}",
+            tr("No se completó: {reason}", reason=short),
+            tr(
+                "La última operación no se completó.\n{details}\n\nSi el problema persiste, revise {log}",
+                details=summary,
+                log=paths.LOG_DIR / "error.log",
+            ),
         )
         self._hide_actions()
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
+from ..i18n import tr, trn
 from .errors import InvalidInputError, WrongPasswordError
 from .files import PDF_EXTENSIONS, atomic_output, prepare_output, require_file
 
@@ -36,12 +37,18 @@ def lock_pdf(
         owner_password: Contrasena de propietario; por defecto la misma.
     """
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise InvalidInputError(f"La contrasena debe tener al menos {MIN_PASSWORD_LENGTH} caracteres.")
+        raise InvalidInputError(
+            trn(
+                "La contraseña debe tener al menos {count} carácter.",
+                "La contraseña debe tener al menos {count} caracteres.",
+                MIN_PASSWORD_LENGTH,
+            )
+        )
 
     source = require_file(input_file, PDF_EXTENSIONS)
     output_path = prepare_output(output_file, source)
     if PdfReader(source).is_encrypted:
-        raise InvalidInputError("El PDF ya esta protegido. Desbloqueelo antes de volver a protegerlo.")
+        raise InvalidInputError(tr("El PDF ya está protegido. Desbloquéelo antes de volver a protegerlo."))
 
     writer = PdfWriter(clone_from=source)
     try:
@@ -67,7 +74,7 @@ def unlock_pdf(input_file: str | Path, output_file: str | Path, password: str) -
     output_path = prepare_output(output_file, source)
     reader = PdfReader(source)
     if not reader.is_encrypted:
-        raise InvalidInputError("El PDF no esta protegido.")
+        raise InvalidInputError(tr("El PDF no está protegido."))
     if not password or not reader.decrypt(password):
         raise WrongPasswordError(source)
 

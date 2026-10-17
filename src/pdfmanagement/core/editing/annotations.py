@@ -24,29 +24,40 @@ from dataclasses import dataclass
 
 import pymupdf
 
+from ...i18n import tr
 from ..errors import InvalidInputError
 
 Color = tuple[float, float, float]
 Point = tuple[float, float]
 
-LABELS = {
-    "Highlight": "Resaltado",
-    "Underline": "Subrayado",
-    "StrikeOut": "Tachado",
-    "Squiggly": "Ondulado",
-    "Text": "Nota",
-    "FreeText": "Texto",
-    "Square": "Rectangulo",
-    "Circle": "Elipse",
-    "Line": "Linea",
-    "Ink": "Dibujo",
-    "Polygon": "Poligono",
-    "PolyLine": "Polilinea",
-    "Stamp": "Sello",
-    "FileAttachment": "Archivo adjunto",
-    "Caret": "Insercion",
-    "Redact": "Tapado",
-}
+
+def kind_label(kind: str, default: str | None = None) -> str:
+    """
+    Nombre visible (traducido) del tipo PDF ``kind``; si no se conoce,
+    ``default`` o el propio tipo. Se traduce al llamar (no al importar) porque
+    el nucleo puede cargarse antes de fijar el idioma.
+    """
+    labels = {
+        "Highlight": tr("Resaltado"),
+        "Underline": tr("Subrayado"),
+        "StrikeOut": tr("Tachado"),
+        "Squiggly": tr("Ondulado"),
+        "Text": tr("Nota"),
+        "FreeText": tr("Texto"),
+        "Square": tr("Rectángulo"),
+        "Circle": tr("Elipse"),
+        "Line": tr("Línea"),
+        "Ink": tr("Dibujo"),
+        "Polygon": tr("Polígono"),
+        "PolyLine": tr("Polilínea"),
+        "Stamp": tr("Sello"),
+        "FileAttachment": tr("Archivo adjunto"),
+        "Caret": tr("Inserción"),
+        "Redact": tr("Tapado"),
+    }
+    return labels.get(kind, kind if default is None else default)
+
+
 MARKUP_KINDS = {"Highlight", "Underline", "StrikeOut", "Squiggly"}
 TEXT_KINDS = {"Text", "FreeText"}  # su contenido se ve o se edita como texto
 RECT_KINDS = {"Square", "Circle", "FreeText", "Stamp"}  # se mueven con set_rect
@@ -89,7 +100,7 @@ class AnnotationInfo:
 
     @property
     def label(self) -> str:
-        return LABELS.get(self.kind, self.kind)
+        return kind_label(self.kind)
 
     @property
     def movable(self) -> bool:
@@ -130,7 +141,7 @@ def find(page: pymupdf.Page, xref: int) -> pymupdf.Annot:
     for annot in page.annots():
         if annot.xref == xref:
             return annot
-    raise InvalidInputError("La anotacion ya no existe en esta pagina.")
+    raise InvalidInputError(tr("La anotación ya no existe en esta página."))
 
 
 # * Crear ---------------------------------------------------------------------
@@ -141,7 +152,7 @@ def add_markup(page: pymupdf.Page, kind: str, rects: Sequence[pymupdf.Rect], sty
     if kind not in MARKUP_ADDERS:
         raise ValueError(f"Tipo de marca no valido: {kind}")
     if not rects:
-        raise InvalidInputError("Seleccione el texto que desea marcar.")
+        raise InvalidInputError(tr("Seleccione el texto que desea marcar."))
     quads = [pymupdf.Rect(rect).quad * page.derotation_matrix for rect in rects]
     annot = getattr(page, MARKUP_ADDERS[kind])(quads=quads)
     _apply_style(annot, style, border=False)
@@ -164,7 +175,7 @@ def add_free_text(
     del texto; si se dibujo, conserva su ancho y crece hacia abajo si hace falta.
     """
     if not text.strip():
-        raise InvalidInputError("Escriba el texto que desea agregar.")
+        raise InvalidInputError(tr("Escriba el texto que desea agregar."))
     rect = fit_text_rect(page, pymupdf.Rect(rect), text, fontsize, keep_width=pymupdf.Rect(rect).width >= 40)
     annot = page.add_freetext_annot(
         _to_pdf(page, rect),
@@ -205,7 +216,7 @@ def add_ink(page: pymupdf.Page, strokes: Iterable[Sequence[Point]], style: Annot
     paths = [[tuple(pymupdf.Point(point) * derotate) for point in stroke] for stroke in strokes]
     paths = [path for path in paths if len(path) >= 2]
     if not paths:
-        raise InvalidInputError("El trazo es demasiado corto.")
+        raise InvalidInputError(tr("El trazo es demasiado corto."))
     annot = page.add_ink_annot(paths)
     _apply_style(annot, style)
     return annot.xref
@@ -232,7 +243,7 @@ def move(page: pymupdf.Page, xref: int, dx: float, dy: float) -> int:
         return xref
     if kind in RECREATE_KINDS:
         return _recreate_moved(page, annot, delta)
-    raise InvalidInputError("Este tipo de anotacion no se puede mover (las marcas de texto siguen al texto).")
+    raise InvalidInputError(tr("Este tipo de anotación no se puede mover (las marcas de texto siguen al texto)."))
 
 
 def delete(page: pymupdf.Page, xref: int) -> None:
@@ -251,7 +262,7 @@ def set_color(page: pymupdf.Page, xref: int, color: Color) -> None:
 def set_text(page: pymupdf.Page, xref: int, text: str) -> None:
     annot = find(page, xref)
     if annot.type[1] == "FreeText" and not text.strip():
-        raise InvalidInputError("El texto no puede quedar vacio; elimine la anotacion si ya no la necesita.")
+        raise InvalidInputError(tr("El texto no puede quedar vacío; elimine la anotación si ya no la necesita."))
     color = _free_text_color(annot)
     annot.set_info(content=text)
     if annot.type[1] == "FreeText":
@@ -263,9 +274,9 @@ def set_font_size(page: pymupdf.Page, xref: int, size: float) -> None:
     """Cambia el tamano de letra de un texto libre; el cuadro se ajusta al nuevo tamano."""
     annot = find(page, xref)
     if annot.type[1] != "FreeText":
-        raise InvalidInputError("Solo los cuadros de texto tienen tamano de letra.")
+        raise InvalidInputError(tr("Solo los cuadros de texto tienen tamaño de letra."))
     if not 4 <= size <= 200:
-        raise InvalidInputError("El tamano de letra debe estar entre 4 y 200 puntos.")
+        raise InvalidInputError(tr("El tamaño de letra debe estar entre 4 y 200 puntos."))
     color = _free_text_color(annot)
     _refit(page, annot, annot.info.get("content") or "", size)
     annot.update(fontsize=size, text_color=color)
@@ -328,7 +339,7 @@ def _refit(page: pymupdf.Page, annot: pymupdf.Annot, text: str, size: float) -> 
 def _to_pdf(page: pymupdf.Page, rect: pymupdf.Rect) -> pymupdf.Rect:
     result = (pymupdf.Rect(rect) * page.derotation_matrix).normalize()
     if result.width < 4 or result.height < 4:
-        raise InvalidInputError("El area es demasiado pequena: arrastre para dibujarla.")
+        raise InvalidInputError(tr("El área es demasiado pequeña: arrastre para dibujarla."))
     return result
 
 

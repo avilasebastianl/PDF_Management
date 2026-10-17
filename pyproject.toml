@@ -1,6 +1,6 @@
 [project]
 name = "pdfmanagement"
-version = "4.0.0"
+version = "5.0.0"
 description = "Herramienta de escritorio, local y gratuita, para trabajar con PDFs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -38,6 +38,7 @@ omit = ["src/pdfmanagement/_vendor/*"]
 [tool.coverage.report]
 skip_empty = true
 show_missing = false
+fail_under = 85  # la CI falla si la cobertura baja de este porcentaje
 
 [tool.mypy]
 python_version = "3.12"

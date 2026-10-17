@@ -19,6 +19,8 @@ Comportamientos de PyMuPDF/MuPDF que se rodean:
    posicion antes y despues.
 5. La cache de fuentes de MuPDF conserva objetos que un deshacer borro.
 6. Leer ``needs_pass`` tras autenticar reemplaza la clave buena.
+7. ``Page.insert_text`` agrega la fuente con ``insert_font``, que (como en el
+   punto 2) no funciona dentro de una operacion si la pagina aun no la tiene.
 """
 
 import logging
@@ -154,6 +156,32 @@ def prepare_font_cache(document: pymupdf.Document) -> None:
         return
     if not had_annots:
         document.xref_set_key(page.xref, "Annots", "null")
+
+
+# * 7. Fuente para escribir texto dentro del historial ------------------------------
+
+TEXT_FONT = "helv"
+
+
+def ensure_text_font(page: pymupdf.Page) -> None:
+    """
+    Deja la fuente Helvetica (``helv``) en los recursos de la pagina con las
+    primitivas de MuPDF, para que ``insert_text`` no tenga que insertarla. El
+    objeto de la fuente sale de la cache preparada por ``prepare_font_cache``
+    (creada fuera del historial), asi deshacer no lo borra.
+    """
+    if any(font[4] == TEXT_FONT for font in page.get_fonts()):
+        return
+    pdf = _pdf(page.parent)
+    font = mupdf.pdf_add_simple_font(pdf, mupdf.fz_new_base14_font("Helvetica"), mupdf.PDF_SIMPLE_ENCODING_LATIN)
+    page_obj = mupdf.pdf_lookup_page_obj(pdf, page.number)
+    resources = mupdf.pdf_dict_get_inheritable(page_obj, mupdf.PDF_ENUM_NAME_Resources)
+    if not mupdf.pdf_is_dict(resources):
+        resources = mupdf.pdf_dict_put_dict(page_obj, mupdf.PDF_ENUM_NAME_Resources, 2)
+    fonts = mupdf.pdf_dict_get(resources, mupdf.PDF_ENUM_NAME_Font)
+    if not mupdf.pdf_is_dict(fonts):
+        fonts = mupdf.pdf_dict_put_dict(resources, mupdf.PDF_ENUM_NAME_Font, 2)
+    mupdf.pdf_dict_puts(fonts, TEXT_FONT, font)
 
 
 # * 6. Cifrado sin tocar la clave ---------------------------------------------------

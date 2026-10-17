@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import customtkinter as ctk
 
+from ...i18n import tr
 from .. import style
 from ..widgets import ToolTip, icon_button, muted_label, set_enabled
 from .panels import SearchPanel
@@ -30,7 +31,7 @@ class FindBar(ctk.CTkFrame):
         self.entry = ctk.CTkEntry(
             self,
             textvariable=search.query,
-            placeholder_text="Buscar en el documento",
+            placeholder_text=tr("Buscar en el documento"),
             width=210,
             height=30,
             border_width=1,
@@ -41,15 +42,19 @@ class FindBar(ctk.CTkFrame):
         self.entry.bind("<Escape>", lambda _e: on_close())
         self.count = muted_label(self, "", width=78, anchor="e")
         self.count.pack(side="left", padx=(0, 4))
-        self.previous_button = icon_button(self, "up", search.previous, "Anterior (Mayus+Enter o Mayus+F3)", size=28)
+        self.previous_button = icon_button(
+            self, "up", search.previous, tr("Anterior (Mayús+Enter o Mayús+F3)"), size=28
+        )
         self.previous_button.pack(side="left")
-        self.next_button = icon_button(self, "down", search.next, "Siguiente (Enter o F3)", size=28)
+        self.next_button = icon_button(self, "down", search.next, tr("Siguiente (Enter o F3)"), size=28)
         self.next_button.pack(side="left")
-        self.case_button = self._toggle("Aa", search.match_case, "Distinguir mayusculas y minusculas")
-        self.words_button = self._toggle("ab", search.whole_words, "Solo palabras completas")
-        list_button = icon_button(self, "list", on_show_list, "Ver todos los resultados en el panel lateral", size=28)
+        self.case_button = self._toggle("Aa", search.match_case, tr("Distinguir mayúsculas y minúsculas"))
+        self.words_button = self._toggle("ab", search.whole_words, tr("Solo palabras completas"))
+        list_button = icon_button(
+            self, "list", on_show_list, tr("Ver todos los resultados en el panel lateral"), size=28
+        )
         list_button.pack(side="left", padx=(4, 0))
-        close = icon_button(self, "clear", on_close, "Cerrar la busqueda (Esc)", size=28)
+        close = icon_button(self, "clear", on_close, tr("Cerrar la búsqueda (Esc)"), size=28)
         close.pack(side="left", padx=(0, 6))
         search.add_listener(self.refresh)
         self.refresh()
@@ -103,11 +108,14 @@ class FindBar(ctk.CTkFrame):
     def refresh(self) -> None:
         search = self.search
         if search.searching:
-            text = "Buscando..."
+            text = tr("Buscando...")
         elif search.hits:
-            text = f"{search.current + 1} de {len(search.hits)}" if search.current >= 0 else f"{len(search.hits)}"
+            total = len(search.hits)
+            text = (
+                tr("{actual} de {total}", actual=search.current + 1, total=total) if search.current >= 0 else str(total)
+            )
         elif search.searched_query:
-            text = "Sin resultados"
+            text = tr("Sin resultados")
         else:
             text = ""
         if self.count.cget("text") != text:

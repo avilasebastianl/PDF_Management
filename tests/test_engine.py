@@ -92,3 +92,22 @@ def test_needs_pass_after_authenticating_blanks_the_document(tmp_path):
     _ = document.needs_pass
     assert document[0].get_text().strip() == "", "si deja de pasar, needs_pass ya es seguro"
     assert not engine.was_encrypted(pymupdf.open(make_pdf(tmp_path / "plano.pdf", 1)))
+
+
+def test_insert_text_needs_the_font_prepared_inside_an_operation():
+    """Punto 7: en una pagina sin Helvetica, insert_text falla dentro del historial salvo que se prepare."""
+    document = pymupdf.open()
+    document.new_page().insert_text((72, 72), "Texto en Times", fontname="tiro")
+    document = pymupdf.open("pdf", document.tobytes())
+    engine.prepare_font_cache(document)
+    journaled(document)
+    document.journal_start_op("sin preparar")
+    with pytest.raises(Exception, match="undo/redo during an operation"):
+        document[0].insert_text((72, 200), "Nuevo", fontname="helv")
+    document.journal_stop_op()
+    document.journal_start_op("preparada")
+    page = document[0]
+    engine.ensure_text_font(page)
+    page.insert_text((72, 200), "Nuevo", fontname="helv")
+    document.journal_stop_op()
+    assert "Nuevo" in [word[4] for word in engine.visible_textpage(document[0], pymupdf.TEXTFLAGS_WORDS).extractWORDS()]

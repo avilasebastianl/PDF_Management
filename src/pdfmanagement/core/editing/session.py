@@ -15,11 +15,12 @@ from pathlib import Path
 
 import pymupdf
 
+from ...i18n import tr, trn
 from ..documents import open_document
 from ..errors import InvalidInputError
 from ..files import PDF_EXTENSIONS, atomic_output, prepare_output, require_file
 from . import annotations as annots
-from . import engine
+from . import content, engine
 from . import pages as page_ops
 from .annotations import AnnotationInfo, AnnotationStyle
 from .changes import CONTENT, SAVED, STRUCTURE, ChangeNotifier, DocumentChange
@@ -82,7 +83,7 @@ class DocumentSession:
         document = open_document(path, password)
         if document.page_count == 0:
             document.close()
-            raise InvalidInputError(f"'{path.name}' no tiene paginas.")
+            raise InvalidInputError(tr("'{name}' no tiene páginas.", name=path.name))
         session = cls(document, path, password, on_change)
         logger.info("Documento abierto: %s (%d paginas)", path.name, document.page_count)
         return session
@@ -160,16 +161,33 @@ class DocumentSession:
     def rotate(self, pages: Iterable[int], angle: int) -> str:
         """Gira paginas (indices desde 0) ``angle`` grados; positivo = horario."""
         pages = self._valid_pages(pages)
-        side = "derecha" if angle > 0 else "izquierda"
-        return self._edit(f"Rotar {_describe(pages)} a la {side}", page_ops.rotate_pages, pages, angle)
+        # Una página se nombra por su número y varias por su cantidad.
+        if angle > 0:
+            label = (
+                tr("Rotar página {page} a la derecha", page=pages[0] + 1)
+                if len(pages) == 1
+                else trn("Rotar {count} página a la derecha", "Rotar {count} páginas a la derecha", len(pages))
+            )
+        else:
+            label = (
+                tr("Rotar página {page} a la izquierda", page=pages[0] + 1)
+                if len(pages) == 1
+                else trn("Rotar {count} página a la izquierda", "Rotar {count} páginas a la izquierda", len(pages))
+            )
+        return self._edit(label, page_ops.rotate_pages, pages, angle)
 
     def delete(self, pages: Iterable[int]) -> str:
         pages = self._valid_pages(pages)
         if len(pages) >= self.page_count:
             raise InvalidInputError(
-                "No se pueden eliminar todas las paginas: el documento debe conservar al menos una."
+                tr("No se pueden eliminar todas las páginas: el documento debe conservar al menos una.")
             )
-        return self._edit(f"Eliminar {_describe(pages)}", page_ops.delete_pages, pages)
+        label = (
+            tr("Eliminar página {page}", page=pages[0] + 1)
+            if len(pages) == 1
+            else trn("Eliminar {count} página", "Eliminar {count} páginas", len(pages))
+        )
+        return self._edit(label, page_ops.delete_pages, pages)
 
     def move(self, pages: Iterable[int], target: int) -> list[int]:
         """
@@ -184,9 +202,12 @@ class DocumentSession:
         if pages == list(range(position, position + len(pages))):
             return pages  # ya estan ahi
         result: list[int] = []
-        self._edit(
-            f"Mover {_describe(pages)}", lambda document: result.extend(page_ops.move_pages(document, pages, target))
+        label = (
+            tr("Mover página {page}", page=pages[0] + 1)
+            if len(pages) == 1
+            else trn("Mover {count} página", "Mover {count} páginas", len(pages))
         )
+        self._edit(label, lambda document: result.extend(page_ops.move_pages(document, pages, target)))
         return result
 
     def insert_pdf(self, source_file: str | Path, at: int, password: str | None = None) -> int:
@@ -199,7 +220,7 @@ class DocumentSession:
         source = open_document(path, password)
         try:
             if source.page_count == 0:
-                raise InvalidInputError(f"'{path.name}' no tiene paginas.")
+                raise InvalidInputError(tr("'{name}' no tiene páginas.", name=path.name))
             # Copia en memoria sin cifrado: se modifica al copiar las anotaciones.
             copy = pymupdf.open("pdf", source.tobytes())
         finally:
@@ -207,7 +228,10 @@ class DocumentSession:
         at = max(0, min(at, self.page_count))
         try:
             count = copy.page_count
-            self._edit(f"Insertar {_plural(count, 'pagina')} de {path.name}", page_ops.insert_document, copy, at)
+            label = trn(
+                "Insertar {count} página de {name}", "Insertar {count} páginas de {name}", count, name=path.name
+            )
+            self._edit(label, page_ops.insert_document, copy, at)
         finally:
             copy.close()
         return count
@@ -218,7 +242,7 @@ class DocumentSession:
         if size is None:
             neighbor = self.document[min(at, self.page_count - 1)]
             size = (neighbor.mediabox.width, neighbor.mediabox.height)
-        return self._edit("Insertar pagina en blanco", page_ops.insert_blank_page, at, *size)
+        return self._edit(tr("Insertar página en blanco"), page_ops.insert_blank_page, at, *size)
 
     # * Anotaciones -----------------------------------------------------------
     # Coordenadas de la pagina tal como se ve; cada metodo es un paso deshacible.
@@ -233,60 +257,106 @@ class DocumentSession:
         return result
 
     def add_markup(self, page: int, kind: str, rects, style: AnnotationStyle) -> int:
-        verb = {"highlight": "Resaltar", "underline": "Subrayar", "strikeout": "Tachar"}.get(kind, "Marcar")
-        return self._annotate(f"{verb} texto (pagina {page + 1})", page, annots.add_markup, kind, rects, style)
+        number = page + 1
+        if kind == "highlight":
+            label = tr("Resaltar texto (página {page})", page=number)
+        elif kind == "underline":
+            label = tr("Subrayar texto (página {page})", page=number)
+        elif kind == "strikeout":
+            label = tr("Tachar texto (página {page})", page=number)
+        else:
+            label = tr("Marcar texto (página {page})", page=number)
+        return self._annotate(label, page, annots.add_markup, kind, rects, style)
 
     def add_note(self, page: int, point, text: str, style: AnnotationStyle) -> int:
-        return self._annotate(f"Agregar nota (pagina {page + 1})", page, annots.add_note, point, text, style)
+        label = tr("Agregar nota (página {page})", page=page + 1)
+        return self._annotate(label, page, annots.add_note, point, text, style)
 
     def add_free_text(
         self, page: int, rect, text: str, style: AnnotationStyle, fontsize: float = annots.DEFAULT_FONT_SIZE
     ) -> int:
-        return self._annotate(
-            f"Agregar texto (pagina {page + 1})", page, annots.add_free_text, rect, text, style, fontsize
-        )
+        label = tr("Agregar texto (página {page})", page=page + 1)
+        return self._annotate(label, page, annots.add_free_text, rect, text, style, fontsize)
 
     def add_shape(self, page: int, shape: str, rect, style: AnnotationStyle) -> int:
-        name = "rectangulo" if shape == "rect" else "elipse"
-        return self._annotate(f"Agregar {name} (pagina {page + 1})", page, annots.add_shape, shape, rect, style)
+        if shape == "rect":
+            label = tr("Agregar rectángulo (página {page})", page=page + 1)
+        else:
+            label = tr("Agregar elipse (página {page})", page=page + 1)
+        return self._annotate(label, page, annots.add_shape, shape, rect, style)
 
     def add_line(self, page: int, start, end, style: AnnotationStyle, arrow: bool = False) -> int:
-        name = "flecha" if arrow else "linea"
-        return self._annotate(f"Agregar {name} (pagina {page + 1})", page, annots.add_line, start, end, style, arrow)
+        if arrow:
+            label = tr("Agregar flecha (página {page})", page=page + 1)
+        else:
+            label = tr("Agregar línea (página {page})", page=page + 1)
+        return self._annotate(label, page, annots.add_line, start, end, style, arrow)
 
     def add_ink(self, page: int, strokes, style: AnnotationStyle) -> int:
-        return self._annotate(f"Dibujar a mano (pagina {page + 1})", page, annots.add_ink, strokes, style)
+        label = tr("Dibujar a mano (página {page})", page=page + 1)
+        return self._annotate(label, page, annots.add_ink, strokes, style)
 
     def move_annotation(self, page: int, xref: int, dx: float, dy: float) -> int:
         """Devuelve el xref de la anotacion movida (cambia si hubo que recrearla)."""
-        return self._annotate(f"Mover {self._annotation_label(page, xref)}", page, annots.move, xref, dx, dy)
+        label = tr("Mover {annotation}", annotation=self._annotation_label(page, xref))
+        return self._annotate(label, page, annots.move, xref, dx, dy)
 
     def delete_annotation(self, page: int, xref: int) -> None:
-        self._annotate(f"Eliminar {self._annotation_label(page, xref)}", page, annots.delete, xref)
+        label = tr("Eliminar {annotation}", annotation=self._annotation_label(page, xref))
+        self._annotate(label, page, annots.delete, xref)
 
     def set_annotation_color(self, page: int, xref: int, color) -> None:
-        self._annotate(f"Cambiar color de {self._annotation_label(page, xref)}", page, annots.set_color, xref, color)
+        label = tr("Cambiar color de {annotation}", annotation=self._annotation_label(page, xref))
+        self._annotate(label, page, annots.set_color, xref, color)
 
     def set_annotation_font_size(self, page: int, xref: int, size: float) -> None:
-        self._annotate("Cambiar tamano de texto", page, annots.set_font_size, xref, size)
+        self._annotate(tr("Cambiar tamaño de texto"), page, annots.set_font_size, xref, size)
 
     def set_annotation_text(self, page: int, xref: int, text: str) -> None:
-        self._annotate(f"Editar texto de {self._annotation_label(page, xref)}", page, annots.set_text, xref, text)
+        label = tr("Editar texto de {annotation}", annotation=self._annotation_label(page, xref))
+        self._annotate(label, page, annots.set_text, xref, text)
+
+    # * Contenido de la pagina (fase 4) -----------------------------------------
+    # Cambia el contenido mismo: lo tapado o reemplazado desaparece de verdad.
+
+    def replace_text(self, page: int, rects, new_text: str) -> None:
+        self._annotate(
+            tr("Reemplazar texto (página {page})", page=page + 1), page, content.replace_text, rects, new_text
+        )
+
+    def add_fixed_text(self, page: int, point, text: str, fontsize: float, color) -> None:
+        self._annotate(
+            tr("Agregar texto fijo (página {page})", page=page + 1),
+            page,
+            content.add_text,
+            point,
+            text,
+            fontsize,
+            color,
+        )
+
+    def add_image(self, page: int, rect, image_file) -> None:
+        self._annotate(tr("Agregar imagen (página {page})", page=page + 1), page, content.add_image, rect, image_file)
+
+    def redact(self, page: int, rect) -> None:
+        self._annotate(tr("Tapar contenido (página {page})", page=page + 1), page, content.redact, rect)
 
     def _annotation_label(self, page: int, xref: int) -> str:
+        """Nombre de la anotacion en minusculas, para componer la etiqueta del historial."""
         current = self.document[page]
         kind = annots.find(current, xref).type[1]
-        return annots.LABELS.get(kind, "anotacion").lower()
+        return annots.kind_label(kind, tr("Anotación")).lower()
 
     def _annotate(self, label: str, page: int, operation: Callable, *args):
         if not 0 <= page < self.page_count:
-            raise InvalidInputError("La pagina no existe.")
+            raise InvalidInputError(tr("La página no existe."))
         result = None
         steps = self.history.undo_depth
         with self.history.operation(label):
             current = self.document[page]  # debe seguir viva mientras se usa la anotacion
             result = operation(current, *args)
         if self.history.undo_depth != steps:
+            self.invalidate([page])  # reemplazar o tapar cambia el texto de la pagina
             logger.info("Anotacion: %s (%s)", label, self.name)
             self.changes.emit(DocumentChange(CONTENT, label, frozenset({page})))
         return result
@@ -318,9 +388,9 @@ class DocumentSession:
     def _valid_pages(self, pages: Iterable[int]) -> list[int]:
         selected = sorted(set(pages))
         if not selected:
-            raise InvalidInputError("Seleccione al menos una pagina.")
+            raise InvalidInputError(tr("Seleccione al menos una página."))
         if selected[0] < 0 or selected[-1] >= self.page_count:
-            raise InvalidInputError("La seleccion incluye paginas que no existen.")
+            raise InvalidInputError(tr("La selección incluye páginas que no existen."))
         return selected
 
     # * Guardado ------------------------------------------------------------
@@ -355,15 +425,6 @@ class DocumentSession:
 
     def close(self) -> None:
         self.document.close()
-
-
-def _plural(count: int, word: str) -> str:
-    return f"1 {word}" if count == 1 else f"{count} {word}s"
-
-
-def _describe(pages: list[int]) -> str:
-    """``[2]`` -> "pagina 3"; ``[0, 1]`` -> "2 paginas"."""
-    return f"pagina {pages[0] + 1}" if len(pages) == 1 else _plural(len(pages), "pagina")
 
 
 def _pdf_date(value: str) -> str:

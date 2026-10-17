@@ -51,7 +51,7 @@ def test_highlight_selected_text_with_one_click(viewer, gui_app):
     viewer.annotations.select_tool("highlight")
     assert kinds(viewer) == ["Highlight"]
     assert viewer.annotations.active is None, "con texto seleccionado no cambia de herramienta"
-    assert viewer.session.history.undo_label == "Resaltar texto (pagina 1)"
+    assert viewer.session.history.undo_label == "Resaltar texto (página 1)"
     assert "Ctrl+Z" in viewer.selection_label.cget("text")
 
 
@@ -109,7 +109,7 @@ def test_select_move_edit_and_delete(viewer, monkeypatch):
     )
     assert annotations.selected is not None and annotations.selected.xref == after.xref
     annotations.set_color("Verde")  # cambia el color de la seleccionada
-    assert session.history.undo_label == "Cambiar color de rectangulo"
+    assert session.history.undo_label == "Cambiar color de rectángulo"
     viewer._on_delete_key()  # Supr: elimina la anotacion, no la pagina
     assert kinds(viewer) == [] and session.page_count == 3
 
@@ -151,10 +151,10 @@ def test_annotations_panel_and_context_menu(viewer, gui_app, monkeypatch):
     labels = [
         menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) in ("command", "cascade")
     ]
-    assert labels[:3] == ["Editar texto de la nota...", "Color", "Eliminar nota"]
+    assert labels[:3] == ["Editar nota...", "Color", "Eliminar nota"]
     menu.destroy()
-    viewer.side_tabs.set("Paginas")
-    viewer._show_side("Paginas", log=False)
+    viewer.side_tabs.set("Páginas")
+    viewer._show_side("Páginas", log=False)
 
 
 def test_escape_ends_annotation_tool(viewer):
@@ -167,7 +167,7 @@ def test_escape_ends_annotation_tool(viewer):
     assert not viewer.edit_mode and viewer.annotations.bar.winfo_manager() == ""
     assert viewer.thumbnails.on_move is None, "fuera del modo edicion no se reordena arrastrando"
     viewer.toggle_edit_mode()
-    assert viewer.edit_mode and viewer.edit_button.cget("text") == "Listo"
+    assert viewer.edit_mode and viewer.edit_button.cget("text") in ("Listo", "")  # "" con la barra compacta
     viewer.set_edit_mode(False)
 
 
@@ -231,4 +231,4 @@ def test_font_size_menu_changes_selected_text(viewer, monkeypatch):
     assert annotations.selected is not None and annotations.size_menu.get() == "18"
     annotations._set_font_size("32")
     assert viewer.session.annotations(0)[0].font_size == 32
-    assert viewer.session.history.undo_label == "Cambiar tamano de texto"
+    assert viewer.session.history.undo_label == "Cambiar tamaño de texto"

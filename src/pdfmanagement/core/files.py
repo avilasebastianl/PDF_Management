@@ -12,6 +12,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ..i18n import tr
 from .errors import InvalidInputError, OutputError
 
 PDF_EXTENSIONS = (".pdf",)
@@ -21,7 +22,7 @@ IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 def as_path(file_path: str | Path) -> Path:
     """Normaliza una ruta (expande ``~`` y la vuelve absoluta)."""
     if isinstance(file_path, str) and not file_path.strip():
-        raise InvalidInputError("Debe indicar una ruta de archivo.")
+        raise InvalidInputError(tr("Debe indicar una ruta de archivo."))
     return Path(file_path).expanduser().resolve()
 
 
@@ -29,12 +30,14 @@ def require_file(file_path: str | Path, extensions: tuple[str, ...]) -> Path:
     """Valida que la ruta exista, sea un archivo y tenga una extension admitida."""
     path = as_path(file_path)
     if not path.exists():
-        raise InvalidInputError(f"El archivo no existe: {path}")
+        raise InvalidInputError(tr("El archivo no existe: {path}", path=path))
     if not path.is_file():
-        raise InvalidInputError(f"La ruta no es un archivo: {path}")
+        raise InvalidInputError(tr("La ruta no es un archivo: {path}", path=path))
     if path.suffix.lower() not in extensions:
         expected = ", ".join(extensions)
-        raise InvalidInputError(f"'{path.name}' no es valido. Formatos admitidos: {expected}")
+        raise InvalidInputError(
+            tr("'{name}' no es válido. Formatos admitidos: {formats}", name=path.name, formats=expected)
+        )
     return path
 
 
@@ -47,7 +50,7 @@ def prepare_output(output_file: str | Path, *inputs: Path, extension: str = ".pd
     if output_path.suffix.lower() != extension:
         output_path = output_path.with_name(output_path.name + extension)
     if output_path in inputs:
-        raise InvalidInputError("El archivo de salida debe ser distinto a los archivos de origen.")
+        raise InvalidInputError(tr("El archivo de salida debe ser distinto a los archivos de origen."))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
 
@@ -79,12 +82,15 @@ def atomic_output(output_path: Path) -> Iterator[Path]:
     try:
         yield temp_path
         if not temp_path.exists():
-            raise OutputError(f"No se genero el archivo de salida: {output_path.name}")
+            raise OutputError(tr("No se generó el archivo de salida: {name}", name=output_path.name))
         try:
             os.replace(temp_path, output_path)
         except PermissionError as error:
             raise OutputError(
-                f"No se pudo guardar '{output_path.name}'. Verifique que no este abierto en otro programa."
+                tr(
+                    "No se pudo guardar '{name}'. Verifique que no esté abierto en otro programa.",
+                    name=output_path.name,
+                )
             ) from error
     finally:
         temp_path.unlink(missing_ok=True)

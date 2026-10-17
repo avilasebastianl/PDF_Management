@@ -1,7 +1,9 @@
 """
 Visor de paginas reutilizable (seccion Visor, Firmar y futuras herramientas).
 
-- Modo continuo (todas las paginas en columna) o de pagina unica.
+- Modo continuo (todas las paginas en columna) o de pagina unica, y en ambos
+  la vista de dos paginas (pares lado a lado, como un libro abierto).
+- Modo nocturno: las paginas se dibujan con los colores invertidos.
 - Desplazamiento virtualizado: solo se dibujan las paginas visibles (y una de
   margen); las lejanas liberan su imagen. Abrir un PDF de cientos de paginas
   cuesta lo mismo que abrir uno de una.
@@ -25,6 +27,7 @@ import customtkinter as ctk
 import pymupdf
 from PIL import ImageTk
 
+from ...i18n import tr
 from .. import style
 from ..events import debug_event
 from ..icons import GLYPHS, render_glyph
@@ -81,13 +84,14 @@ class PageView(ctk.CTkFrame):
         master,
         *,
         continuous: bool = True,
-        placeholder: tuple[str, str] = ("Abra o arrastre un PDF", ""),
+        placeholder: tuple[str, str] | None = None,
         on_empty_click: Callable[[], None] | None = None,
         on_drop: Callable[[list], None] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.continuous = continuous
-        self.placeholder = placeholder
+        self.spread = False  # dos paginas lado a lado
+        self.placeholder = placeholder or (tr("Abra o arrastre un PDF"), "")
         self.on_empty_click = on_empty_click
         self.document: pymupdf.Document | None = None
         self.sizes: list[tuple[float, float]] = []
@@ -214,6 +218,35 @@ class PageView(ctk.CTkFrame):
         self._relayout(keep_page=self.current_page)
         self._notify_page()
 
+    # * Vista de dos paginas y modo nocturno -----------------------------------
+
+    def set_spread(self, spread: bool) -> None:
+        """Muestra las paginas de a dos (1-2, 3-4...) o de a una."""
+        if spread == self.spread:
+            return
+        self.spread = spread
+        if self.document is not None:
+            self._relayout(keep_page=self.current_page)
+
+    @property
+    def inverted(self) -> bool:
+        return self.scheduler.inverted
+
+    def set_inverted(self, inverted: bool) -> None:
+        """Modo nocturno: colores invertidos (texto claro sobre fondo oscuro)."""
+        if inverted == self.scheduler.inverted:
+            return
+        self.scheduler.set_inverted(inverted)
+        if self.document is not None:
+            self._relayout(keep_page=self.current_page)
+
+    def row_pages(self, page: int) -> range:
+        """Paginas que se muestran junto a ``page`` (su pareja en la vista de dos paginas)."""
+        if not self.spread:
+            return range(page, page + 1)
+        start = page - page % 2
+        return range(start, min(start + 2, self.page_count))
+
     # * Navegacion ----------------------------------------------------------
 
     def go_to(self, page: int) -> None:
@@ -222,8 +255,10 @@ class PageView(ctk.CTkFrame):
         page = max(0, min(page, self.page_count - 1))
         if not self.continuous:
             if page != self.current_page:
+                same_row = page in self.row_pages(self.current_page)
                 self.current_page = page
-                self._relayout(keep_page=page)
+                if not same_row:
+                    self._relayout(keep_page=page)
                 self._notify_page()
             return
         self._scroll_to_page(page)
@@ -259,7 +294,7 @@ class PageView(ctk.CTkFrame):
             self.canvas.yview_scroll(direction, "pages")
             self._schedule_update()
         else:
-            self.go_to(self.current_page + direction)
+            self.go_to(self.row_pages(self.current_page).start + direction * (2 if self.spread else 1))
 
     def _scroll_units(self, units: int) -> None:
         self.canvas.yview_scroll(units, "units")
@@ -269,7 +304,7 @@ class PageView(ctk.CTkFrame):
         total = self._content_height()
         if total <= 0:
             return
-        top = self.layout[page][1] - GAP / 2
+        top = min(self.layout[p][1] for p in self.row_pages(page)) - GAP / 2
         self.canvas.yview_moveto(max(0.0, top / total))
         self._schedule_update()
 
@@ -310,12 +345,22 @@ class PageView(ctk.CTkFrame):
         width = max(self.canvas.winfo_width(), 200)
         height = max(self.canvas.winfo_height(), 200)
         if self.zoom_mode == FIT_WIDTH:
-            widest = max(size[0] for size in self.sizes) if self.continuous else self.sizes[self.current_page][0]
-            return max((width - 2 * MARGIN) / widest, 0.05)
+            rows = self._rows() if self.continuous else [self.row_pages(self.current_page)]
+            # El espacio entre paginas no se escala: se descuenta antes de dividir.
+            usable = max(width - 2 * MARGIN - (GAP if self.spread else 0), 50)
+            widest = max(sum(self.sizes[page][0] for page in row) for row in rows)
+            return max(usable / widest, 0.05)
         if self.zoom_mode == FIT_PAGE:
-            page_w, page_h = self.sizes[self.current_page]
-            return max(min((width - 2 * MARGIN) / page_w, (height - 2 * MARGIN) / page_h), 0.05)
+            row = self.row_pages(self.current_page)
+            row_w = sum(self.sizes[page][0] for page in row)
+            row_h = max(self.sizes[page][1] for page in row)
+            usable = max(width - 2 * MARGIN - GAP * (len(row) - 1), 50)
+            return max(min(usable / row_w, (height - 2 * MARGIN) / row_h), 0.05)
         return float(self.zoom_mode) / 100 * BASE_SCALE
+
+    def _rows(self) -> list[range]:
+        step = 2 if self.spread else 1
+        return [self.row_pages(page) for page in range(0, self.page_count, step)]
 
     # * Coordenadas ---------------------------------------------------------
 
@@ -335,7 +380,7 @@ class PageView(ctk.CTkFrame):
         """Pagina bajo un punto del lienzo (o la mas cercana con ``clamp``)."""
         if not self.layout:
             return None
-        index = self._page_index_at(canvas_y) if self.continuous else self.current_page
+        index = self._page_index_at(canvas_y, canvas_x)
         if index is None:
             return None
         x0, y0, x1, y1 = self.layout[index]
@@ -353,23 +398,30 @@ class PageView(ctk.CTkFrame):
         if not self.layout:
             return range(0)
         if not self.continuous:
-            return range(self.current_page, self.current_page + 1)
+            return self.row_pages(self.current_page)
         top = self.canvas.canvasy(0)
         bottom = top + self.canvas.winfo_height()
-        first = max(bisect.bisect_right(self._tops, top) - 1, 0)
-        last = first
+        first = self.row_pages(max(bisect.bisect_right(self._tops, top) - 1, 0)).start
+        last = self.row_pages(first).stop - 1
         while last + 1 < len(self.layout) and self.layout[last + 1][1] <= bottom:
             last += 1
         return range(first, last + 1)
 
-    def _page_index_at(self, canvas_y: float) -> int | None:
+    def _page_index_at(self, canvas_y: float, canvas_x: float | None = None) -> int | None:
+        """Pagina a la altura ``canvas_y``; en la vista de dos paginas, ``canvas_x`` elige el lado."""
         if not self.continuous:
-            return self.current_page
-        index = max(bisect.bisect_right(self._tops, canvas_y) - 1, 0)
-        _x0, _y0, _x1, y1 = self.layout[index]
-        if canvas_y > y1 + GAP / 2 and index + 1 < len(self.layout):
-            index += 1
-        return index
+            if canvas_x is None or not self.spread:
+                return self.current_page
+            row = self.row_pages(self.current_page)
+        else:
+            row = self.row_pages(max(bisect.bisect_right(self._tops, canvas_y) - 1, 0))
+            bottom = max(self.layout[page][3] for page in row)
+            if canvas_y > bottom + GAP / 2 and row.stop < len(self.layout):
+                row = self.row_pages(row.stop)
+        if canvas_x is not None and len(row) > 1:
+            middle = (self.layout[row[0]][2] + self.layout[row[1]][0]) / 2
+            return row[1] if canvas_x > middle else row[0]
+        return row[0]
 
     # * Capas ---------------------------------------------------------------
 
@@ -449,23 +501,34 @@ class PageView(ctk.CTkFrame):
         self.scale = self._compute_scale()
         width = max(canvas.winfo_width(), 200)
         height = max(canvas.winfo_height(), 200)
-        pages = range(self.page_count) if self.continuous else [self.current_page]
+        rows = self._rows() if self.continuous else [self.row_pages(self.current_page)]
         self.layout = [(0.0, 0.0, 0.0, 0.0)] * self.page_count
-        widest = max((self.sizes[p][0] for p in pages), default=0) * self.scale
+        scale = self.scale
+        row_widths = [sum(self.sizes[p][0] for p in row) * scale + GAP * (len(row) - 1) for row in rows]
+        widest = max(row_widths, default=0)
         y: float = MARGIN
-        shadow, paper = style.themed(style.PAGE_SHADOW), "white"
-        for page in pages:
-            page_w, page_h = (value * self.scale for value in self.sizes[page])
-            x = max(MARGIN, (width - page_w) / 2)
+        shadow = style.themed(style.PAGE_SHADOW)
+        paper = "black" if self.inverted else "white"  # el blanco invertido es negro
+        self._tops = []
+        for row, row_w in zip(rows, row_widths, strict=True):
+            row_h = max(self.sizes[p][1] for p in row) * scale
+            x = max(MARGIN, (width - row_w) / 2)
             if not self.continuous:
-                y = max(MARGIN, (height - page_h) / 2)
-            self.layout[page] = (x, y, x + page_w, y + page_h)
-            canvas.create_rectangle(x + 3, y + 3, x + page_w + 3, y + page_h + 3, fill=shadow, outline="", tags="frame")
-            canvas.create_rectangle(
-                x, y, x + page_w, y + page_h, fill=paper, outline="", tags=("frame", f"paper{page}")
-            )
-            y += page_h + GAP
-        self._tops = [self.layout[page][1] for page in range(self.page_count)] if self.continuous else []
+                y = max(MARGIN, (height - row_h) / 2)
+            for page in row:
+                page_w, page_h = (value * scale for value in self.sizes[page])
+                top = y + (row_h - page_h) / 2  # paginas de distinta altura: centradas en la fila
+                self.layout[page] = (x, top, x + page_w, top + page_h)
+                canvas.create_rectangle(
+                    x + 3, top + 3, x + page_w + 3, top + page_h + 3, fill=shadow, outline="", tags="frame"
+                )
+                canvas.create_rectangle(
+                    x, top, x + page_w, top + page_h, fill=paper, outline="", tags=("frame", f"paper{page}")
+                )
+                x += page_w + GAP
+            if self.continuous:
+                self._tops.extend(y for _page in row)  # misma altura para la fila: bisect sigue valiendo
+            y += row_h + GAP
         content_w = max(width, widest + 2 * MARGIN)
         content_h = max(height, y - GAP + MARGIN)
         canvas.configure(scrollregion=(0, 0, content_w, content_h))

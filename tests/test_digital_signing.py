@@ -185,7 +185,7 @@ def test_certificate_without_password(pdf_factory, tmp_path):
 
 def test_expired_certificate_is_rejected(pdf_factory, tmp_path):
     expired = make_certificate(tmp_path / "vencido.p12", valid_days=(-30, -1))
-    with pytest.raises(core.CertificateError, match="vencio"):
+    with pytest.raises(core.CertificateError, match="venció"):
         core.sign_pdf_with_certificate(pdf_factory("a.pdf", 1), tmp_path / "out.pdf", expired[0], CERTIFICATE_PASSWORD)
 
 
@@ -200,5 +200,5 @@ def test_invalid_certificate_file(pdf_factory, tmp_path):
 
 def test_all_pages_is_rejected(pdf_factory, tmp_path, certificate):
     placement = core.SignaturePlacement(x=10, y=10, all_pages=True)
-    with pytest.raises(core.InvalidInputError, match="una sola pagina"):
+    with pytest.raises(core.InvalidInputError, match="una sola página"):
         sign(pdf_factory("a.pdf", 2), tmp_path / "out.pdf", certificate, placement=placement)

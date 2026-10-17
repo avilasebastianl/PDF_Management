@@ -2,6 +2,10 @@
 Anotaciones en el Visor: barra de herramientas, colores y grosor, seleccion,
 movimiento, edicion de texto, menu contextual y panel "Notas".
 
+Tambien las herramientas que cambian el contenido de la pagina (no son
+anotaciones: quedan impresas en ella): reemplazar texto, texto fijo, imagen y
+tapar (elimina de verdad lo que hay debajo).
+
 Separado de ``viewer.py`` para que la pagina siga siendo legible: aqui solo
 se traducen gestos a llamadas de ``DocumentSession`` (que registra cada
 cambio en el historial) y se mantiene la vista al dia.
@@ -10,6 +14,7 @@ cambio en el historial) y se mantiene la vista al dia.
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import filedialog
 from typing import TYPE_CHECKING
 
 import customtkinter as ctk
@@ -18,6 +23,7 @@ import pymupdf
 from ... import core
 from ...core.editing import AnnotationInfo, AnnotationStyle
 from ...core.editing.annotations import DEFAULT_FONT_SIZE, FONT_SIZES
+from ...i18n import tr
 from .. import style
 from ..dialogs import ask_text
 from ..dropdown import dropdown_menu
@@ -37,23 +43,41 @@ COLORS = {
     "Negro": (0.1, 0.1, 0.1),
 }
 WIDTHS = {"Fino": 1.0, "Medio": 2.0, "Grueso": 4.0}
+# Las claves de COLORS y WIDTHS son identificadores internos (en espanol, no cambian con el
+# idioma: set_color("Rojo")); lo que se muestra es su nombre traducido.
+COLOR_NAMES = {
+    "Amarillo": tr("Amarillo"),
+    "Verde": tr("Verde"),
+    "Azul": tr("Azul"),
+    "Rojo": tr("Rojo"),
+    "Negro": tr("Negro"),
+}
+WIDTH_NAMES = {"Fino": tr("Fino"), "Medio": tr("Medio"), "Grueso": tr("Grueso")}
 # (clave, icono, descripcion); None = separador
 TOOLS = (
-    ("highlight", "highlight", "Resaltar texto: arrastre sobre el texto"),
-    ("underline", "underline", "Subrayar texto"),
-    ("strikeout", "strikeout", "Tachar texto"),
+    ("highlight", "highlight", tr("Resaltar texto: arrastre sobre el texto")),
+    ("underline", "underline", tr("Subrayar texto")),
+    ("strikeout", "strikeout", tr("Tachar texto")),
     None,
-    ("note", "note", "Nota: haga clic donde va"),
-    ("free_text", "free_text", "Texto: arrastre para dibujar el cuadro (o haga clic)"),
+    ("note", "note", tr("Nota: haga clic donde va")),
+    ("free_text", "free_text", tr("Texto: arrastre para dibujar el cuadro (o haga clic)")),
     None,
-    ("rect", "rectangle", "Rectangulo"),
-    ("ellipse", "ellipse", "Elipse"),
-    ("line", "line", "Linea"),
-    ("arrow", "arrow", "Flecha"),
-    ("ink", "ink", "Dibujo a mano alzada"),
+    ("rect", "rectangle", tr("Rectángulo")),
+    ("ellipse", "ellipse", tr("Elipse")),
+    ("line", "line", tr("Línea")),
+    ("arrow", "arrow", tr("Flecha")),
+    ("ink", "ink", tr("Dibujo a mano alzada")),
+    None,
+    ("replace_text", "replace_text", tr("Reemplazar texto: seleccione el texto que quiere cambiar")),
+    ("fixed_text", "fixed_text", tr("Texto fijo: haga clic donde va (queda escrito en la página)")),
+    ("image", "image", tr("Imagen: arrastre el área donde irá (o haga clic)")),
+    ("redact", "redact", tr("Tapar: arrastre sobre lo que quiere eliminar definitivamente")),
 )
 MARKUP = ("highlight", "underline", "strikeout")
+CONTENT_TOOLS = ("replace_text", "fixed_text", "image", "redact")
 DEFAULT_TEXT_BOX = (220, 44)  # cuadro de texto cuando solo se hace clic
+DEFAULT_IMAGE_BOX = (200, 150)  # area de la imagen cuando solo se hace clic
+IMAGE_PATTERNS = "*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff"
 HIT_TOLERANCE = 3  # puntos alrededor de la anotacion que tambien cuentan como clic
 
 
@@ -80,16 +104,22 @@ class ViewerAnnotations:
 
     def _build_bar(self, parent) -> ctk.CTkFrame:
         bar = ctk.CTkFrame(parent, fg_color="transparent")
+        # Dos grupos: herramientas y estilo. Con poco ancho el estilo baja a otra fila (fit_width).
+        tools = self.tools_row = ctk.CTkFrame(bar, fg_color="transparent")
+        tools.grid(row=0, column=0, sticky="w")
+        styles = self.style_row = ctk.CTkFrame(bar, fg_color="transparent")
+        styles.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self._wrapped = False
         self.tool_buttons: dict[str, ctk.CTkButton] = {}
         for entry in TOOLS:
             if entry is None:
-                ctk.CTkFrame(bar, width=1, height=22, fg_color=style.CARD_BORDER).pack(side="left", padx=6)
+                ctk.CTkFrame(tools, width=1, height=22, fg_color=style.CARD_BORDER).pack(side="left", padx=6)
                 continue
             key, icon_name, tip = entry
-            button = icon_button(bar, icon_name, lambda k=key: self.select_tool(k), tip)
+            button = icon_button(tools, icon_name, lambda k=key: self.select_tool(k), tip)
             button.pack(side="left", padx=(0, 1))
             self.tool_buttons[key] = button
-        ctk.CTkFrame(bar, width=1, height=22, fg_color=style.CARD_BORDER).pack(side="left", padx=6)
+        bar = styles  # lo que sigue va en el grupo de estilo
         self.swatches: dict[str, ctk.CTkButton] = {}
         for name, rgb in COLORS.items():
             swatch = ctk.CTkButton(
@@ -104,24 +134,38 @@ class ViewerAnnotations:
                 command=lambda n=name: self.set_color(n),
             )
             swatch.pack(side="left", padx=2)
-            ToolTip(swatch, f"Color {name.lower()} (tambien cambia la anotacion seleccionada)")
+            ToolTip(
+                swatch,
+                tr("Color {color} (también cambia la anotación seleccionada)", color=COLOR_NAMES[name].lower()),
+            )
             self.swatches[name] = swatch
         self.width_selector = ctk.CTkSegmentedButton(
-            bar, values=list(WIDTHS), command=self._set_width, font=style.fonts().small
+            bar, values=[WIDTH_NAMES[key] for key in WIDTHS], command=self._set_width, font=style.fonts().small
         )
-        self.width_selector.set("Medio")
+        self.width_selector.set(WIDTH_NAMES["Medio"])
         self.width_selector.pack(side="left", padx=(10, 0))
         for value, button in self.width_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
-            ToolTip(button, f"Grosor {value.lower()} para formas, lineas y dibujos")
-        muted_label(bar, "Letra").pack(side="left", padx=(12, 4))
+            ToolTip(button, tr("Grosor {grosor} para formas, líneas y dibujos", grosor=value.lower()))
+        muted_label(bar, tr("Letra")).pack(side="left", padx=(12, 4))
         self.size_menu = dropdown_menu(
             bar, [str(size) for size in FONT_SIZES], self._set_font_size, width=64, height=28
         )
         self.size_menu.set(str(DEFAULT_FONT_SIZE))
         self.size_menu.pack(side="left")
-        ToolTip(self.size_menu, "Tamano de letra del texto nuevo o del cuadro de texto seleccionado")
+        ToolTip(self.size_menu, tr("Tamaño de letra del texto nuevo o del cuadro de texto seleccionado"))
         self._refresh_swatches()
-        return bar
+        return tools.master
+
+    def fit_width(self, width: int) -> None:
+        """Pone el grupo de estilo debajo de las herramientas si no caben en ``width`` pixeles."""
+        wrap = self.tools_row.winfo_reqwidth() + self.style_row.winfo_reqwidth() + 12 > width
+        if wrap == self._wrapped:
+            return
+        self._wrapped = wrap
+        if wrap:
+            self.style_row.grid(row=1, column=0, sticky="w", padx=0, pady=(4, 0))
+        else:
+            self.style_row.grid(row=0, column=1, sticky="w", padx=(12, 0), pady=0)
 
     # * Herramientas ----------------------------------------------------------
 
@@ -135,19 +179,26 @@ class ViewerAnnotations:
         if key == self.active:
             self.cancel_tool()
             return
-        if key in MARKUP and page.text_tool.selected_words():
-            # Ya hay texto seleccionado: se marca enseguida, sin cambiar de herramienta.
+        if key in (*MARKUP, "replace_text") and page.text_tool.selected_words():
+            # Ya hay texto seleccionado: se aplica enseguida, sin cambiar de herramienta.
             lines = line_rects(page.text_tool.selected_words())
+            text = page.text_tool.selected_text()
             page.text_tool.clear(self.view)
-            self._markup(key, lines)
+            if key == "replace_text":
+                self._replace_text(lines, text)
+            else:
+                self._markup(key, lines)
             return
         tools = {
             "note": lambda: NoteTool(self._note_done),
+            "fixed_text": lambda: NoteTool(self._fixed_text_done),
             "ink": lambda: InkTool(self._ink_done, lambda: self.color, lambda: self.width),
         }
         tool: Tool
         if key in MARKUP:
             tool = MarkupTool(key, page._words_for, self._markup)  # noqa: SLF001
+        elif key == "replace_text":
+            tool = MarkupTool(key, page._words_for, self._replace_selected)  # noqa: SLF001
         elif key in tools:
             tool = tools[key]()
         else:
@@ -157,7 +208,7 @@ class ViewerAnnotations:
         self.view.set_tool(tool)
         self._refresh_tool_buttons()
         hint = next(tip for entry in TOOLS if entry and entry[0] == key for tip in [entry[2]])
-        page.selection_label.configure(text=f"{hint}  ·  Esc para terminar")
+        page.selection_label.configure(text=f"{hint}  ·  " + tr("Esc para terminar"))
         page.log("Herramienta de anotacion: %s", key)
 
     def cancel_tool(self) -> None:
@@ -199,8 +250,10 @@ class ViewerAnnotations:
             )
 
     def _set_width(self, name: str) -> None:
-        self.width = WIDTHS[name]
-        self.page.log_debug("Grosor de anotacion: %s", name)
+        """``name``: el grosor tal como se muestra (o su clave interna, p. ej. "Grueso")."""
+        key = next((key for key, shown in WIDTH_NAMES.items() if shown == name), name)
+        self.width = WIDTHS[key]
+        self.page.log_debug("Grosor de anotacion: %s", key)
 
     def _refresh_swatches(self) -> None:
         for name, swatch in self.swatches.items():
@@ -217,7 +270,7 @@ class ViewerAnnotations:
             self._run(lambda session, p=page_index, r=rects: session.add_markup(p, kind, r, self.style()), page_index)
 
     def _note_done(self, page_index: int, point: tuple[float, float]) -> None:
-        text = ask_text(self.page, "Nueva nota", "Escriba el comentario de la nota:")
+        text = ask_text(self.page, tr("Nueva nota"), tr("Escriba el comentario de la nota:"))
         if text is None:
             self.page.log_debug("Nota cancelada")
             return
@@ -226,15 +279,76 @@ class ViewerAnnotations:
     def _ink_done(self, page_index: int, points: list[tuple[float, float]]) -> None:
         self._run(lambda session: session.add_ink(page_index, [points], self.style()), page_index)
 
+    # * Contenido de la pagina -------------------------------------------------
+
+    def _replace_selected(self, _kind: str, lines: dict[int, list[pymupdf.Rect]]) -> None:
+        """Fin del arrastre con la herramienta Reemplazar: el texto bajo la seleccion."""
+        page_index = min(lines)
+        words = self.page._words_for(page_index)  # noqa: SLF001
+        rects = lines[page_index]
+        text = " ".join(word[4] for word in words if any(pymupdf.Rect(word[:4]).intersects(r) for r in rects))
+        self._replace_text(lines, text)
+
+    def _replace_text(self, lines: dict[int, list[pymupdf.Rect]], current: str) -> None:
+        """Pide el texto nuevo y lo escribe en lugar del seleccionado (de una pagina)."""
+        page_index = min(lines)
+        if len(lines) > 1:
+            self.page.selection_label.configure(
+                text=tr("Se reemplaza solo el texto de la primera página seleccionada.")
+            )
+        new_text = ask_text(
+            self.page,
+            tr("Reemplazar texto"),
+            tr("Texto nuevo (se escribe con el mismo tamaño y color, en letra Helvetica):"),
+            initial=current,
+        )
+        if new_text is None or new_text == current:
+            self.page.log_debug("Reemplazo de texto cancelado")
+            return
+        rects = lines[page_index]
+        self._run(lambda session: session.replace_text(page_index, rects, new_text), page_index)
+
+    def _fixed_text_done(self, page_index: int, point: tuple[float, float]) -> None:
+        text = ask_text(self.page, tr("Texto fijo"), tr("Escriba el texto que quedará escrito en la página:"))
+        if not text:
+            self.page.log_debug("Texto fijo cancelado")
+            return
+        # El amarillo (color por defecto, pensado para resaltar) no se lee sobre blanco.
+        color = COLORS["Negro"] if self.color == COLORS["Amarillo"] else self.color
+        self._run(lambda session: session.add_fixed_text(page_index, point, text, self.font_size, color), page_index)
+
+    def _image_done(self, page_index: int, rect: pymupdf.Rect) -> None:
+        if rect.width < 10 or rect.height < 10:
+            bounds = self.view.page_rect(page_index)
+            x0 = max(min(rect.x0, bounds.width - DEFAULT_IMAGE_BOX[0] - 4), 0)
+            y0 = max(min(rect.y0, bounds.height - DEFAULT_IMAGE_BOX[1] - 4), 0)
+            rect = pymupdf.Rect(x0, y0, x0 + DEFAULT_IMAGE_BOX[0], y0 + DEFAULT_IMAGE_BOX[1])
+        image = filedialog.askopenfilename(
+            parent=self.page, title=tr("Elegir imagen"), filetypes=[(tr("Imagen"), IMAGE_PATTERNS)]
+        )
+        if not image:
+            self.page.log_debug("Imagen cancelada")
+            return
+        self._run(lambda session: session.add_image(page_index, rect, image), page_index)
+
     def _drag_done(self, kind: str, page_index: int, start, end) -> None:
         rect = pymupdf.Rect(start, end).normalize()
+        if kind == "image":
+            self._image_done(page_index, rect)
+            return
+        if kind == "redact":
+            if rect.width < 4 or rect.height < 4:
+                self.page.selection_label.configure(text=tr("Arrastre sobre lo que quiere tapar  ·  Esc para terminar"))
+                return
+            self._run(lambda session: session.redact(page_index, rect), page_index)
+            return
         if kind == "free_text":
             if rect.width < 10 or rect.height < 10:  # clic: cuadro de tamano estandar dentro de la pagina
                 bounds = self.view.page_rect(page_index)
                 x0 = min(start[0], bounds.width - DEFAULT_TEXT_BOX[0] - 4)
                 y0 = min(start[1], bounds.height - DEFAULT_TEXT_BOX[1] - 4)
                 rect = pymupdf.Rect(x0, y0, x0 + DEFAULT_TEXT_BOX[0], y0 + DEFAULT_TEXT_BOX[1])
-            text = ask_text(self.page, "Texto sobre la pagina", "Escriba el texto que aparecera en la pagina:")
+            text = ask_text(self.page, tr("Texto sobre la página"), tr("Escriba el texto que aparecerá en la página:"))
             if text is None:
                 self.page.log_debug("Texto cancelado")
                 return
@@ -244,7 +358,7 @@ class ViewerAnnotations:
             return
         if kind in ("line", "arrow"):
             if abs(end[0] - start[0]) + abs(end[1] - start[1]) < 4:
-                self.page.selection_label.configure(text="Arrastre para dibujar la linea  ·  Esc para terminar")
+                self.page.selection_label.configure(text=tr("Arrastre para dibujar la línea  ·  Esc para terminar"))
                 return
             self._run(
                 lambda session: session.add_line(page_index, start, end, self.style(), arrow=kind == "arrow"),
@@ -252,7 +366,7 @@ class ViewerAnnotations:
             )
             return
         if rect.width < 4 or rect.height < 4:
-            self.page.selection_label.configure(text="Arrastre para dibujar la forma  ·  Esc para terminar")
+            self.page.selection_label.configure(text=tr("Arrastre para dibujar la forma  ·  Esc para terminar"))
             return
         shape = "rect" if kind == "rect" else "ellipse"
         self._run(lambda session: session.add_shape(page_index, shape, rect, self.style()), page_index)
@@ -282,16 +396,17 @@ class ViewerAnnotations:
         self.view.redraw_overlays()
         self.panel.show_selected(info)
         if info is not None:
-            actions = ["Supr para eliminar"]
+            actions = [tr("Supr para eliminar")]
             if info.movable:
-                actions.insert(0, "arrastre para mover")
+                actions.insert(0, tr("arrastre para mover"))
             if info.has_text:
-                actions.insert(0, "doble clic para editar")
+                actions.insert(0, tr("doble clic para editar"))
             if info.font_size:
-                actions.insert(0, "tamano en Letra")
+                actions.insert(0, tr("tamaño en Letra"))
                 self.font_size = info.font_size
                 self.size_menu.set(f"{info.font_size:g}")
-            self.page.selection_label.configure(text=f"{info.label} seleccionada  ·  " + "  ·  ".join(actions))
+            selected = tr("Anotación seleccionada: {anotacion}", anotacion=info.label)
+            self.page.selection_label.configure(text="  ·  ".join([selected, *actions]))
             self.page.log_debug("Anotacion seleccionada: %s", info.label, pagina=info.page + 1)
 
     def move(self, info: AnnotationInfo, dx: float, dy: float) -> None:
@@ -306,7 +421,12 @@ class ViewerAnnotations:
         info = info or self.selected
         if info is None or not info.has_text:
             return
-        text = ask_text(self.page, f"Editar {info.label.lower()}", "Texto de la anotacion:", initial=info.content)
+        text = ask_text(
+            self.page,
+            tr("Editar {anotacion}", anotacion=info.label.lower()),
+            tr("Texto de la anotación:"),
+            initial=info.content,
+        )
         if text is None or text == info.content:
             return
         self._run(lambda session: session.set_annotation_text(info.page, info.xref, text), info.page, select=info.xref)
@@ -342,14 +462,19 @@ class ViewerAnnotations:
 
     def add_menu_items(self, menu: tk.Menu, info: AnnotationInfo) -> None:
         if info.has_text:
-            menu.add_command(label=f"Editar texto de la {info.label.lower()}...", command=lambda: self.edit_text(info))
+            menu.add_command(
+                label=tr("Editar {anotacion}...", anotacion=info.label.lower()), command=lambda: self.edit_text(info)
+            )
         colors = tk.Menu(menu, tearoff=0)
         for name in COLORS:
-            colors.add_command(label=name, command=lambda n=name: self._recolor(info, n))  # type: ignore[misc]
-        menu.add_cascade(label="Color", menu=colors)
+            colors.add_command(
+                label=COLOR_NAMES[name],
+                command=lambda n=name: self._recolor(info, n),  # type: ignore[misc]
+            )
+        menu.add_cascade(label=tr("Color"), menu=colors)
         menu.add_command(
-            label=f"Eliminar {info.label.lower()}",
-            accelerator="Supr",
+            label=tr("Eliminar {anotacion}", anotacion=info.label.lower()),
+            accelerator=tr("Supr"),
             command=lambda: self._delete(info),
         )
         menu.add_separator()
@@ -384,7 +509,7 @@ class ViewerAnnotations:
         self.panel.show_selected(self.selected)
         self.view.redraw_overlays()
         label = session.history.undo_label
-        page.selection_label.configure(text=f"{label}  ·  Ctrl+Z para deshacer")
+        page.selection_label.configure(text=f"{label}  ·  " + tr("Ctrl+Z para deshacer"))
         page.log("Anotacion: %s", label, archivo=session.name)
         return True
 

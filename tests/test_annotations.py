@@ -37,10 +37,10 @@ def test_shapes_are_placed_where_they_are_seen(session):
     style = AnnotationStyle(color=BLUE, width=3)
     session.add_shape(0, "rect", (100, 120, 250, 200), style)
     info = only(session)
-    assert info.kind == "Square" and info.label == "Rectangulo"
+    assert info.kind == "Square" and info.label == "Rectángulo"
     assert close_to(info.rect, (100, 120, 250, 200)), info.rect
     assert info.color == pytest.approx(BLUE)
-    assert session.history.undo_label == "Agregar rectangulo (pagina 1)"
+    assert session.history.undo_label == "Agregar rectángulo (página 1)"
     session.undo()
     assert session.annotations(0) == []
     session.redo()
@@ -58,7 +58,7 @@ def test_markup_from_selected_words(session):
     for index, rect in enumerate(rects):
         corners = [pymupdf.Point(point) * page.rotation_matrix for point in quads[index * 4 : index * 4 + 4]]
         assert close_to(pymupdf.Rect(corners[0], corners[0]) | corners[1] | corners[2] | corners[3], rect, tolerance=1)
-    assert session.history.undo_label == "Resaltar texto (pagina 1)"
+    assert session.history.undo_label == "Resaltar texto (página 1)"
     session.add_markup(0, "strikeout", rects[:1], AnnotationStyle(color=RED))
     assert [a.kind for a in session.annotations(0)] == ["Highlight", "StrikeOut"]
     with pytest.raises(core.InvalidInputError):
@@ -86,7 +86,7 @@ def test_lines_arrows_and_ink(session):
     line, ink = session.annotations(0)
     assert (line.kind, ink.kind) == ("Line", "Ink")
     assert close_to(line.rect, (100, 100, 300, 200), tolerance=12)
-    assert session.history.undo_label == "Dibujar a mano (pagina 1)"
+    assert session.history.undo_label == "Dibujar a mano (página 1)"
     with pytest.raises(core.InvalidInputError):
         session.add_ink(0, [[(10, 10)]], AnnotationStyle())
 
@@ -125,7 +125,7 @@ def test_markup_cannot_be_moved(session):
     xref = session.add_markup(0, "underline", [pymupdf.Rect(session.words(0)[0][:4])], AnnotationStyle())
     with pytest.raises(core.InvalidInputError):
         session.move_annotation(0, xref, 10, 10)
-    assert session.history.undo_label == "Subrayar texto (pagina 1)", "el intento fallido no queda en el historial"
+    assert session.history.undo_label == "Subrayar texto (página 1)", "el intento fallido no queda en el historial"
 
 
 def test_recolor_edit_text_and_delete(session):
@@ -170,7 +170,7 @@ def test_failed_operation_does_not_undo_the_previous_one(session):
     assert session.history.undo_depth == 1
     with session.history.operation("Nada"):
         pass
-    assert session.history.undo_label == "Agregar nota (pagina 1)", "una operacion vacia no se registra"
+    assert session.history.undo_label == "Agregar nota (página 1)", "una operacion vacia no se registra"
 
 
 def test_text_after_undo_has_a_valid_font(session):
@@ -195,7 +195,7 @@ def test_free_text_font_size_and_fitting(session):
     bigger = only(session)
     assert bigger.font_size == 28 and bigger.rect.height > info.rect.height * 1.6
     assert close_to(bigger.rect.tl, info.rect.tl, tolerance=1), "crece desde la esquina superior izquierda"
-    assert session.history.undo_label == "Cambiar tamano de texto"
+    assert session.history.undo_label == "Cambiar tamaño de texto"
     session.set_annotation_text(0, xref, "Un texto bastante mas largo que ya no cabe en una sola linea del cuadro")
     longer = only(session)
     assert longer.rect.height > bigger.rect.height * 1.8 and longer.rect.width == pytest.approx(

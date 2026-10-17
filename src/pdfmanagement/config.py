@@ -26,6 +26,9 @@ _LAYOUT: dict[str, tuple[str, tuple[str, str] | None]] = {
     "window_height": ("Window", ("Size", "height")),
     "window_maximized": ("Window", None),
     "sidebar_collapsed": ("Window", None),
+    "language": ("General", None),
+    "viewer_night_mode": ("Viewer", None),
+    "viewer_two_pages": ("Viewer", None),
     "appearance_mode": ("Appearance", ("Theme", "theme")),
     "color_theme": ("Appearance", ("Theme", "color_theme")),
     "ui_scaling": ("Appearance", ("Display", "ui_scaling")),
@@ -66,6 +69,9 @@ class Settings:
     output_dir: str = ""
     debug_logging: bool = False  # registro detallado (DEBUG) en log/app.log
     sidebar_collapsed: bool = False  # menu lateral solo con iconos
+    language: str = "es"  # es, en, ru (ver i18n.LANGUAGES); se aplica al reiniciar
+    viewer_night_mode: bool = False  # paginas con colores invertidos
+    viewer_two_pages: bool = False  # paginas de a dos, lado a lado
 
     @property
     def output_path(self) -> Path:
@@ -125,6 +131,8 @@ class Settings:
             self.color_theme = DEFAULT_COLOR_THEME
         self.ui_scaling = max(0.75, min(round(self.ui_scaling, 2), 2.0))
         self.initial_page = _LEGACY_PAGES.get(self.initial_page, self.initial_page)
+        if self.language not in ("es", "en", "ru"):
+            self.language = defaults.language
 
 
 def _read_option(parser: configparser.ConfigParser, key: str) -> str | None:

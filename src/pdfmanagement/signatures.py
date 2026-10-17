@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import paths
 from .core.files import IMAGE_EXTENSIONS, require_file
+from .i18n import tr
 
 
 def list_signatures() -> list[Path]:
@@ -50,5 +51,5 @@ def delete_signature(signature: Path) -> None:
     """Elimina una firma de la biblioteca (solo archivos dentro de ``signs/``)."""
     signature = signature.resolve()
     if signature.parent != paths.SIGNATURES_DIR.resolve():
-        raise ValueError("Solo se pueden borrar firmas de la biblioteca.")
+        raise ValueError(tr("Solo se pueden borrar firmas de la biblioteca."))
     signature.unlink(missing_ok=True)

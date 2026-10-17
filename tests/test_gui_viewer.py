@@ -132,8 +132,8 @@ def test_protected_pdf_asks_for_password(gui_app, manual_pdf, tmp_path, monkeypa
 
 def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
     gui_app.show_page("Unir")
-    viewer.side_tabs.set("Paginas")
-    viewer._show_side("Paginas", log=False)
+    viewer.side_tabs.set("Páginas")
+    viewer._show_side("Páginas", log=False)
     event = type("E", (), {"keysym": "f"})()
     assert viewer._shortcut(event, viewer.open_search) is None
     assert not viewer.find_bar.visible
@@ -159,7 +159,7 @@ def test_rotate_and_undo_update_the_whole_viewer(viewer, gui_app):
     assert width > height, "la pagina girada se ve apaisada"
     assert viewer.session.modified and viewer.file_label.cget("text").endswith("•")
     assert viewer.undo_button.cget("state") == "normal"
-    assert "Rotar pagina 1 a la derecha" in viewer._history_tip("Deshacer", "Ctrl+Z")
+    assert "Rotar página 1 a la derecha" in viewer._history_tip("Deshacer", "Ctrl+Z")
     viewer.undo()
     assert not viewer.session.modified and viewer.view.sizes[0][0] < viewer.view.sizes[0][1]
     assert viewer.redo_button.cget("state") == "normal"
@@ -185,7 +185,7 @@ def test_drag_thumbnails_to_reorder(viewer, gui_app):
     pump(gui_app, timeout=0.2)
     assert page_titles(viewer, 3) == ["Capitulo 1 - Seccion 2", "Capitulo 1 - Seccion 1", "Capitulo 1 - Seccion 3"]
     assert strip.selection() == [1] and viewer.view.current_page == 1
-    assert viewer.session.history.undo_label == "Mover pagina 1"
+    assert viewer.session.history.undo_label == "Mover página 1"
     viewer.undo()
     assert page_titles(viewer, 2) == ["Capitulo 1 - Seccion 1", "Capitulo 1 - Seccion 2"]
     viewer.set_edit_mode(False)
@@ -199,7 +199,7 @@ def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
     strip._select_click(4, 0x0001)  # Mayus: 3 a 5
     strip._select_click(7, 0x0004)  # Ctrl: agrega la 8
     assert strip.selection() == [2, 3, 4, 7]
-    assert viewer.pages_hint.cget("text") == "4 paginas seleccionadas"
+    assert viewer.pages_hint.cget("text") == "4 páginas seleccionadas"
     asked = []
     monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
     viewer.delete_pages()
@@ -277,7 +277,7 @@ def test_page_menu_and_editing_shortcuts(viewer, gui_app):
     viewer.thumbnails._select_click(2, 0x0001)
     menu = viewer._page_menu()
     labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
-    assert labels[:3] == ["Rotar 2 paginas a la derecha", "Rotar 2 paginas a la izquierda", "Eliminar 2 paginas"]
+    assert labels[:3] == ["Rotar 2 páginas a la derecha", "Rotar 2 páginas a la izquierda", "Eliminar 2 páginas"]
     menu.destroy()
     undo = type("E", (), {"keysym": "z"})()
     viewer.rotate_pages(-90)

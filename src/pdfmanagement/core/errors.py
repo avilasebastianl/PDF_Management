@@ -7,6 +7,8 @@ distinguir errores esperados (mostrados al usuario) de fallos inesperados.
 
 from pathlib import Path
 
+from ..i18n import tr
+
 
 class PdfManagementError(Exception):
     """Error base de la aplicacion. Su mensaje es apto para el usuario final."""
@@ -25,14 +27,14 @@ class PasswordRequiredError(PdfManagementError):
 
     def __init__(self, file_path: Path, message: str | None = None) -> None:
         self.file_path = Path(file_path)
-        super().__init__(message or f"El PDF '{self.file_path.name}' esta protegido con contrasena.")
+        super().__init__(message or tr("El PDF '{name}' está protegido con contraseña.", name=self.file_path.name))
 
 
 class WrongPasswordError(PasswordRequiredError):
     """La contrasena indicada no abre el PDF."""
 
     def __init__(self, file_path: Path) -> None:
-        super().__init__(file_path, f"La contrasena de '{Path(file_path).name}' no es correcta.")
+        super().__init__(file_path, tr("La contraseña de '{name}' no es correcta.", name=Path(file_path).name))
 
 
 class ConversionError(PdfManagementError):
@@ -52,4 +54,4 @@ class WrongCertificatePasswordError(CertificateError):
 
     def __init__(self, certificate_path: Path) -> None:
         self.certificate_path = Path(certificate_path)
-        super().__init__(f"La contrasena del certificado '{self.certificate_path.name}' no es correcta.")
+        super().__init__(tr("La contraseña del certificado '{name}' no es correcta.", name=self.certificate_path.name))

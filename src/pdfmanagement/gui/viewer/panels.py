@@ -15,6 +15,7 @@ import customtkinter as ctk
 import pymupdf
 
 from ...core.editing import AnnotationInfo, SearchHit, SearchOptions, iter_search
+from ...i18n import tr, trn
 from .. import style
 from ..events import log_event
 from ..widgets import icon_button, muted_label, secondary_button, set_enabled
@@ -91,7 +92,7 @@ class OutlinePanel(ctk.CTkFrame):
         self.view = view
         self.entries: list[tuple[int, str, int]] = []
         self.list = ThemedList(self, self._go_to)
-        self.empty = muted_label(self, "Este documento no tiene marcadores.", wraplength=200)
+        self.empty = muted_label(self, tr("Este documento no tiene marcadores."), wraplength=200)
         self.set_entries([])
 
     def set_entries(self, entries: list[tuple[int, str, int]]) -> None:
@@ -131,9 +132,9 @@ class AnnotationsPanel(ctk.CTkFrame):
         self.list.pack(fill="both", expand=True)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.pack(fill="x", padx=6, pady=(6, 0))
-        self.edit_button = secondary_button(buttons, "Editar texto", on_edit, "edit", width=118, height=30)
+        self.edit_button = secondary_button(buttons, tr("Editar texto"), on_edit, "edit", width=118, height=30)
         self.edit_button.pack(side="left")
-        self.delete_button = secondary_button(buttons, "Eliminar", on_delete, "delete", width=100, height=30)
+        self.delete_button = secondary_button(buttons, tr("Eliminar"), on_delete, "delete", width=100, height=30)
         self.delete_button.pack(side="left", padx=(6, 0))
         self.set_annotations([])
 
@@ -142,9 +143,9 @@ class AnnotationsPanel(ctk.CTkFrame):
         self.list.set_items([self._describe(info) for info in annotations])
         total = len(annotations)
         self.count.configure(
-            text="Sin anotaciones. Use la barra de anotacion sobre el visor."
+            text=tr("Sin anotaciones. Use la barra de anotación sobre el visor.")
             if not total
-            else f"{total} anotacion{'es' if total != 1 else ''} · clic para ir"
+            else trn("{count} anotación · clic para ir", "{count} anotaciones · clic para ir", total)
         )
         self.show_selected(selected)
 
@@ -168,7 +169,7 @@ class AnnotationsPanel(ctk.CTkFrame):
     def _describe(info: AnnotationInfo) -> str:
         content = " ".join(info.content.split())
         detail = f": {content[:48]}{'...' if len(content) > 48 else ''}" if content else ""
-        return f"p. {info.page + 1}  ·  {info.label}{detail}"
+        return tr("p. {n}", n=info.page + 1) + f"  ·  {info.label}{detail}"
 
     def _selected(self, index: int) -> None:
         if 0 <= index < len(self.annotations):
@@ -202,15 +203,17 @@ class SearchPanel(ctk.CTkFrame):
         self.whole_words = tk.BooleanVar(value=False)
         self._listeners: list[Callable[[], None]] = []
 
-        self.entry = ctk.CTkEntry(self, textvariable=self.query, placeholder_text="Buscar en el documento", height=32)
+        self.entry = ctk.CTkEntry(
+            self, textvariable=self.query, placeholder_text=tr("Buscar en el documento"), height=32
+        )
         self.entry.pack(fill="x", padx=8, pady=(8, 4))
         self.entry.bind("<Return>", lambda _e: self.start() if self.query.get().strip() != self._query else self.next())
         self.entry.bind("<Shift-Return>", lambda _e: self.previous())
         options = ctk.CTkFrame(self, fg_color="transparent")
         options.pack(fill="x", padx=8)
         for text, variable in (
-            ("Distinguir mayusculas", self.match_case),
-            ("Solo palabras completas", self.whole_words),
+            (tr("Distinguir mayúsculas"), self.match_case),
+            (tr("Solo palabras completas"), self.whole_words),
         ):
             ctk.CTkCheckBox(
                 options,
@@ -225,8 +228,8 @@ class SearchPanel(ctk.CTkFrame):
         navigation.pack(fill="x", padx=8, pady=(6, 4))
         self.status = muted_label(navigation, "")
         self.status.pack(side="left", fill="x", expand=True)
-        self.previous_button = icon_button(navigation, "up", self.previous, "Anterior (Mayus + F3)", size=28)
-        self.next_button = icon_button(navigation, "down", self.next, "Siguiente (F3)", size=28)
+        self.previous_button = icon_button(navigation, "up", self.previous, tr("Anterior (Mayús + F3)"), size=28)
+        self.next_button = icon_button(navigation, "down", self.next, tr("Siguiente (F3)"), size=28)
         self.next_button.pack(side="right")
         self.previous_button.pack(side="right", padx=2)
         self.results = ThemedList(self, self._go_to_hit)
@@ -299,7 +302,7 @@ class SearchPanel(ctk.CTkFrame):
         self.hits, self.current = [], -1
         self.results.set_items([])
         self.view.set_search_hits({})
-        self.status.configure(text="El documento cambio: pulse Enter para buscar de nuevo" if had_results else "")
+        self.status.configure(text=tr("El documento cambió: pulse Enter para buscar de nuevo") if had_results else "")
         self._update_buttons()
 
     def next(self) -> None:
@@ -332,7 +335,7 @@ class SearchPanel(ctk.CTkFrame):
             self.hits.extend(new_hits)
             room = MAX_LISTED_RESULTS - self.results.listbox.size()
             if room > 0:
-                self.results.append([f"Pag. {hit.page + 1}  ·  {hit.context}" for hit in new_hits[:room]])
+                self.results.append([tr("Pág. {n}", n=hit.page + 1) + f"  ·  {hit.context}" for hit in new_hits[:room]])
             if first_batch:
                 self._select(0)  # el primer resultado se muestra apenas aparece
         now = time.perf_counter()
@@ -344,7 +347,7 @@ class SearchPanel(ctk.CTkFrame):
         if finished:
             self._iterator = None
             elapsed = (time.perf_counter() - self._started) * 1000
-            self.status.configure(text=self._count_text() if self.hits else "Sin resultados")
+            self.status.configure(text=self._count_text() if self.hits else tr("Sin resultados"))
             log_event(
                 "Visor",
                 "Busqueda: %s",
@@ -356,7 +359,14 @@ class SearchPanel(ctk.CTkFrame):
                 duracion=f"{elapsed:.0f} ms",
             )
         else:
-            self.status.configure(text=f"Buscando... {self._scanned}/{total} paginas · {len(self.hits)} resultados")
+            scanned = trn(
+                "Buscando... {revisadas}/{count} página",
+                "Buscando... {revisadas}/{count} páginas",
+                total,
+                revisadas=self._scanned,
+            )
+            found = trn("{count} resultado", "{count} resultados", len(self.hits))
+            self.status.configure(text=f"{scanned} · {found}")
             self._job = self.after(1, self._step)
         self._update_buttons()
 
@@ -387,7 +397,9 @@ class SearchPanel(ctk.CTkFrame):
         self._update_buttons()
 
     def _count_text(self) -> str:
-        return f"{self.current + 1} de {len(self.hits)}" if self.current >= 0 else f"{len(self.hits)} resultados"
+        if self.current >= 0:
+            return tr("{actual} de {total}", actual=self.current + 1, total=len(self.hits))
+        return trn("{count} resultado", "{count} resultados", len(self.hits))
 
     def _update_buttons(self) -> None:
         set_enabled(self.previous_button, len(self.hits) > 1)

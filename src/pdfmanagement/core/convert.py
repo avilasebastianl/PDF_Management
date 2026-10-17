@@ -8,6 +8,7 @@ de forma diferida para que el resto de la aplicacion funcione sin Office.
 import logging
 from pathlib import Path
 
+from ..i18n import tr
 from .errors import ConversionError
 from .files import atomic_output, prepare_output, require_file
 
@@ -45,15 +46,19 @@ def _run_com(exporter, source: Path, target: Path) -> None:
         import comtypes
         import comtypes.client
     except ImportError as error:
-        raise ConversionError("La conversion requiere Windows con el paquete 'comtypes'.") from error
+        raise ConversionError(tr("La conversión requiere Windows con el paquete 'comtypes'.")) from error
 
     comtypes.CoInitialize()
     try:
         exporter(comtypes.client, source, target)
     except (OSError, comtypes.COMError) as error:
         raise ConversionError(
-            f"No se pudo convertir '{source.name}'. Verifique que Microsoft Office "
-            f"este instalado y que el archivo no este danado. Detalle: {error}"
+            tr(
+                "No se pudo convertir '{name}'. Verifique que Microsoft Office esté instalado y que el archivo "
+                "no esté dañado. Detalle: {error}",
+                name=source.name,
+                error=error,
+            )
         ) from error
     finally:
         comtypes.CoUninitialize()

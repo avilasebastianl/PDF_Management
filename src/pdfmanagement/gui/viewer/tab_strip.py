@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import customtkinter as ctk
 
+from ...i18n import tr
 from .. import style
 from ..icons import icon
 from ..widgets import ToolTip, icon_button
@@ -107,7 +108,7 @@ class TabStrip(ctk.CTkFrame):
             )
             title.place(x=34, rely=0.5, anchor="w")
             dot = ctk.CTkLabel(tab, text="●", width=20, font=style.fonts().small, text_color=accent)
-            close = icon_button(tab, "clear", lambda i=index: self.on_close(i), "Cerrar pestana (Ctrl+W)", size=22)
+            close = icon_button(tab, "clear", lambda i=index: self.on_close(i), tr("Cerrar pestaña (Ctrl+W)"), size=22)
             indicator = ctk.CTkFrame(tab, height=3, corner_radius=2, fg_color=accent if active else "transparent")
             indicator.place(relx=0.5, rely=1.0, y=-3, anchor="s", relwidth=0.86)
             parts = {"frame": tab, "title": title, "dot": dot, "close": close, "hover": False}
@@ -120,7 +121,7 @@ class TabStrip(ctk.CTkFrame):
             close.bind("<Enter>", lambda _e, i=index: self._hover(i, True), add="+")
             ToolTip(title, info.tooltip)
             self._refresh_close(index)
-        new = icon_button(self, "add", self.on_new, "Abrir otro PDF en una pestana nueva (Ctrl+O)", size=30)
+        new = icon_button(self, "add", self.on_new, tr("Abrir otro PDF en una pestaña nueva (Ctrl+O)"), size=30)
         new.pack(side="left", padx=(2, 0))
 
     def _hover(self, index: int, inside: bool) -> None:

@@ -190,6 +190,10 @@ def _reset_gui_state(request):
         viewer.set_view_mode("normal")
         viewer.set_edit_mode(False)
         viewer.close_all_documents()
+        if viewer.two_pages.get():
+            viewer.set_two_pages(False)
+        if viewer.night_mode.get():
+            viewer.set_night_mode(False)
     if app.settings.sidebar_collapsed:
         app.toggle_sidebar(animate=False)
     app.show_page("Unir", source="pruebas")

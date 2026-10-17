@@ -16,7 +16,8 @@ from tkinter import filedialog, messagebox
 from typing import TYPE_CHECKING
 
 from ... import core
-from ...core.editing import CONTENT, STRUCTURE, DocumentChange, DocumentSession
+from ...core.editing import CONTENT, SAVED, STRUCTURE, DocumentChange, DocumentSession
+from ...i18n import tr, trn
 from .. import style
 
 if TYPE_CHECKING:
@@ -36,8 +37,12 @@ class OrganizeMixin:
             return False
         pages = pages or self.thumbnails.selection()
         if len(pages) > 1 and not messagebox.askyesno(
-            "Eliminar paginas",
-            f"Se eliminaran {len(pages)} paginas. Puede deshacerlo con Ctrl+Z.\n\nContinuar?",
+            tr("Eliminar páginas"),
+            trn(
+                "Se eliminará {count} página. Puede deshacerlo con Ctrl+Z.\n\n¿Continuar?",
+                "Se eliminarán {count} páginas. Puede deshacerlo con Ctrl+Z.\n\n¿Continuar?",
+                len(pages),
+            ),
             parent=self,
         ):
             self.log_debug("Eliminar paginas cancelado", paginas=len(pages))
@@ -59,7 +64,7 @@ class OrganizeMixin:
         """Pide un PDF y lo inserta despues de la seleccion (o antes de ``at``)."""
         if self.session is None:
             return False
-        chosen = filedialog.askopenfilename(title="Insertar PDF", filetypes=(("Archivos PDF", "*.pdf"),))
+        chosen = filedialog.askopenfilename(title=tr("Insertar PDF"), filetypes=((tr("Archivos PDF"), "*.pdf"),))
         if not chosen:
             self.log_debug("Insertar PDF: dialogo cancelado")
             return False
@@ -98,8 +103,9 @@ class OrganizeMixin:
         label = session.redo() if redo else session.undo()  # el aviso de cambios redibuja
         page = min(self.view.current_page, session.page_count - 1)
         self._focus([page], page)
-        verb = "Rehecho" if redo else "Deshecho"
-        self.selection_label.configure(text=f"{verb}: {label}")
+        verb = "Rehecho" if redo else "Deshecho"  # para el registro
+        shown = tr("Rehecho: {cambio}", cambio=label) if redo else tr("Deshecho: {cambio}", cambio=label)
+        self.selection_label.configure(text=shown)
         self.log("%s: %s", verb, label, archivo=session.name, paginas=session.page_count)
 
     def _insert_position(self: ViewerPage) -> int:
@@ -124,7 +130,7 @@ class OrganizeMixin:
         selected = select() if callable(select) else select
         self._focus(selected, page() if callable(page) else page)  # el aviso de cambios ya redibujo
         label = session.history.undo_label
-        self.selection_label.configure(text=f"{label}  ·  Ctrl+Z para deshacer")
+        self.selection_label.configure(text=f"{label}  ·  " + tr("Ctrl+Z para deshacer"))
         self.log("Edicion: %s", label, archivo=session.name, paginas=session.page_count)
         return True
 
@@ -151,6 +157,8 @@ class OrganizeMixin:
             self.thumbnails.refresh_pages(change.pages)
             self.annotations.content_changed(change.pages)
         self._refresh_file_state()
+        if change.kind == SAVED:
+            self.document_shown()
 
     def _focus(self: ViewerPage, select: list[int], page: int | None) -> None:
         """Tras una edicion: pagina a mostrar y miniaturas seleccionadas."""
@@ -163,9 +171,11 @@ class OrganizeMixin:
         if self._signatures_confirmed or self.session is None or not self.session.has_signatures():
             return True
         confirmed = messagebox.askyesno(
-            "Documento firmado",
-            "Este PDF tiene firmas digitales. Cualquier cambio en las paginas hara que las firmas "
-            "dejen de ser validas en la copia que guarde (el original no se modifica).\n\nDesea continuar?",
+            tr("Documento firmado"),
+            tr(
+                "Este PDF tiene firmas digitales. Cualquier cambio en las páginas hará que las firmas "
+                "dejen de ser válidas en la copia que guarde (el original no se modifica).\n\n¿Desea continuar?"
+            ),
             icon="warning",
             parent=self,
         )
@@ -201,12 +211,13 @@ class OrganizeMixin:
         self.thumbnails.on_move = self._move_dragged_pages if enabled else None
         accent = style.accent_color()
         self.edit_button.configure(
-            text="Listo" if enabled else "Editar",
+            text=self.edit_button_text(),
             fg_color=accent if enabled else "transparent",
             hover_color=style.accent_hover_color() if enabled else style.HOVER,
             text_color=style.WHITE if enabled else style.TEXT,
         )
         self._on_pages_selected(sorted(self.thumbnails.selected))
+        self.fit_bars()
         self.log("Modo edicion %s", "activado" if enabled else "desactivado")
 
     def _on_view_right_click(self: ViewerPage, event) -> None:
@@ -223,26 +234,35 @@ class OrganizeMixin:
     def _page_menu(self: ViewerPage, from_view: bool = False, annotation=None) -> tk.Menu:
         """Menu de las paginas seleccionadas (miniaturas o clic derecho en el visor)."""
         pages = self.thumbnails.selection()
-        subject = f"pagina {pages[0] + 1}" if len(pages) == 1 else f"{len(pages)} paginas"
+        count, first = len(pages), pages[0] + 1
+        # Frases completas (no "Rotar {sujeto}"): otros idiomas declinan "página" segun la frase.
+        if count == 1:
+            rotate_right = tr("Rotar página {n} a la derecha", n=first)
+            rotate_left = tr("Rotar página {n} a la izquierda", n=first)
+            delete = tr("Eliminar página {n}", n=first)
+        else:
+            rotate_right = trn("Rotar {count} página a la derecha", "Rotar {count} páginas a la derecha", count)
+            rotate_left = trn("Rotar {count} página a la izquierda", "Rotar {count} páginas a la izquierda", count)
+            delete = trn("Eliminar {count} página", "Eliminar {count} páginas", count)
         menu = tk.Menu(self, tearoff=0)
         if annotation is not None:
             self.annotations.add_menu_items(menu, annotation)
         if from_view and self.text_tool.selected_text():
-            menu.add_command(label="Copiar texto", accelerator="Ctrl+C", command=self.copy_selection)
+            menu.add_command(label=tr("Copiar texto"), accelerator="Ctrl+C", command=self.copy_selection)
             menu.add_separator()
+        menu.add_command(label=rotate_right, accelerator="Ctrl+R", command=lambda: self.rotate_pages(90, pages))
         menu.add_command(
-            label=f"Rotar {subject} a la derecha", accelerator="Ctrl+R", command=lambda: self.rotate_pages(90, pages)
-        )
-        menu.add_command(
-            label=f"Rotar {subject} a la izquierda",
-            accelerator="Ctrl+Mayus+R",
+            label=rotate_left,
+            accelerator=tr("Ctrl+Mayús+R"),
             command=lambda: self.rotate_pages(-90, pages),
         )
-        menu.add_command(label=f"Eliminar {subject}", accelerator="Supr", command=lambda: self.delete_pages(pages))
+        menu.add_command(label=delete, accelerator=tr("Supr"), command=lambda: self.delete_pages(pages))
         menu.add_separator()
-        menu.add_command(label="Insertar PDF antes...", command=lambda: self.insert_pdf(min(pages)))
-        menu.add_command(label="Insertar PDF despues...", command=lambda: self.insert_pdf(max(pages) + 1))
-        menu.add_command(label="Insertar pagina en blanco despues", command=lambda: self.insert_blank(max(pages) + 1))
+        menu.add_command(label=tr("Insertar PDF antes..."), command=lambda: self.insert_pdf(min(pages)))
+        menu.add_command(label=tr("Insertar PDF después..."), command=lambda: self.insert_pdf(max(pages) + 1))
+        menu.add_command(
+            label=tr("Insertar página en blanco después"), command=lambda: self.insert_blank(max(pages) + 1)
+        )
         return menu
 
     def _show_page_menu(self: ViewerPage, page: int, event, from_view: bool = False, annotation=None) -> None:

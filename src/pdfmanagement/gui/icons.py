@@ -57,6 +57,7 @@ GLYPHS = {
     "refresh": "\ue72c",
     "list": "\ue8fd",
     "menu": "\ue700",
+    "tools": "\ue90f",
     "fullscreen": "\ue740",
     "exit_fullscreen": "\ue73f",
     "window_mode": "\ue737",
@@ -79,6 +80,17 @@ GLYPHS = {
     "rotate_left": "\ue8b4",  # reflejado (ver MIRRORED)
     "insert_pdf": "\ued0e",
     "blank_page": "\ue7c3",
+    "replace_text": "\ue8ac",
+    "fixed_text": "\ue8e9",
+    "redact": "\ued1a",
+    "print": "\ue749",
+    "night": "\ue708",
+    "two_pages": "\ue89a",
+    "compare": "\ueb91",
+    "pages_tab": "\ue8a9",
+    "outline": "\ue8a4",
+    "signature": "\uee56",
+    "view_options": "\ue890",
 }
 
 # La fuente no trae algunas variantes; se obtienen reflejando horizontalmente.

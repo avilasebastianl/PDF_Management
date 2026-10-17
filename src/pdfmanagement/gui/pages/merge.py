@@ -22,6 +22,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from ... import core
+from ...i18n import tr, trn
 from .. import style
 from ..events import describe_files
 from ..icons import icon
@@ -41,11 +42,11 @@ from ..widgets import (
 )
 from .base import BasePage
 
-BOOKMARKS_HELP = (
+BOOKMARKS_HELP = tr(
     "Marcador por cada archivo\n"
-    "El PDF unido tendra un marcador (el indice lateral que muestran los lectores de PDF) "
-    "por cada archivo de origen, con su nombre. Asi puede saltar directo al inicio de cada "
-    "documento dentro del PDF final. Los marcadores que ya traian los PDFs se conservan, "
+    "El PDF unido tendrá un marcador (el índice lateral que muestran los lectores de PDF) "
+    "por cada archivo de origen, con su nombre. Así puede saltar directo al inicio de cada "
+    "documento dentro del PDF final. Los marcadores que ya traían los PDFs se conservan, "
     "anidados dentro del marcador de su archivo.\n"
     "Si lo deja desactivado, el resultado conserva solo los marcadores originales."
 )
@@ -90,7 +91,7 @@ class _FileRow:
         ctk.CTkLabel(self.frame, text=entry.path.name, font=style.fonts().body_bold, anchor="w").grid(
             row=0, column=2, sticky="ew", pady=(8, 0)
         )
-        self.meta = muted_label(self.frame, f"Leyendo...  ·  {entry.path.parent}")
+        self.meta = muted_label(self.frame, tr("Leyendo...  ·  {carpeta}", carpeta=entry.path.parent))
         self.meta.grid(row=1, column=2, sticky="ew", pady=(0, 8))
 
         actions = ctk.CTkFrame(self.frame, fg_color="transparent")
@@ -99,17 +100,17 @@ class _FileRow:
             actions,
             "up",
             lambda: page.move_entry(entry, -1),
-            "Subir",
+            tr("Subir"),
             state="disabled" if self._edges[0] else "normal",
         )
         self.down = icon_button(
             actions,
             "down",
             lambda: page.move_entry(entry, 1),
-            "Bajar",
+            tr("Bajar"),
             state="disabled" if self._edges[1] else "normal",
         )
-        remove = icon_button(actions, "delete", lambda: page.remove_entry(entry), "Quitar de la lista")
+        remove = icon_button(actions, "delete", lambda: page.remove_entry(entry), tr("Quitar de la lista"))
         self.up.pack(side="left")
         self.down.pack(side="left", padx=2)
         remove.pack(side="left")
@@ -130,7 +131,11 @@ class _FileRow:
             self._edges = edges
 
     def update_info(self, info: core.PdfInfo) -> None:
-        pages = f"{info.page_count} paginas" if info.page_count is not None else "protegido"
+        pages = (
+            trn("{count} página", "{count} páginas", info.page_count)
+            if info.page_count is not None
+            else tr("protegido")
+        )
         self.meta.configure(text=f"{pages}  ·  {format_size(info.size_bytes)}  ·  {info.path.parent}")
         self.kind.configure(image=icon("lock" if info.encrypted else "pdf", 20, style.TEXT_MUTED))
 
@@ -141,8 +146,8 @@ class _FileRow:
 
 class MergePage(BasePage):
     name = "Unir"
-    title = "Unir PDFs"
-    subtitle = "Combine varios documentos en un solo PDF. Arrastre archivos a la lista y ordenelos."
+    title = tr("Unir PDFs")
+    subtitle = tr("Combine varios documentos en un solo PDF. Arrastre archivos a la lista y ordénelos.")
     icon_name = "merge"
     scrollable = False
 
@@ -159,9 +164,9 @@ class MergePage(BasePage):
         toolbar = ctk.CTkFrame(self.body, fg_color="transparent")
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
         toolbar.grid_columnconfigure(3, weight=1)
-        primary_button(toolbar, "Agregar PDFs", self._browse_files, "add").grid(row=0, column=0)
-        secondary_button(toolbar, "Ordenar A-Z", self._sort_by_name, "sort").grid(row=0, column=1, padx=8)
-        secondary_button(toolbar, "Vaciar lista", self._clear, "clear").grid(row=0, column=2)
+        primary_button(toolbar, tr("Agregar PDFs"), self._browse_files, "add").grid(row=0, column=0)
+        secondary_button(toolbar, tr("Ordenar A-Z"), self._sort_by_name, "sort").grid(row=0, column=1, padx=8)
+        secondary_button(toolbar, tr("Vaciar lista"), self._clear, "clear").grid(row=0, column=2)
         self.summary = muted_label(toolbar, anchor="e")
         self.summary.grid(row=0, column=3, sticky="e")
 
@@ -179,20 +184,20 @@ class MergePage(BasePage):
         output = Card(self.body)
         output.grid(row=2, column=0, sticky="ew", pady=(style.GAP + 2, style.PAD))
         self.output_field = FileField(
-            output, output.row(0), "Guardar como", mode="save", initial_dir=lambda: self.app.settings.output_path
+            output, output.row(0), tr("Guardar como"), mode="save", initial_dir=lambda: self.app.settings.output_path
         )
         options = ctk.CTkFrame(output, fg_color="transparent")
         options.grid(row=output.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(4, 0))
         options.grid_columnconfigure(0, weight=1)
         self.bookmarks = ctk.CTkCheckBox(
             options,
-            text="Crear un marcador por cada archivo",
+            text=tr("Crear un marcador por cada archivo"),
             font=style.fonts().body,
             command=self._on_bookmarks_toggled,
         )
         self.bookmarks.grid(row=0, column=0, sticky="w")
         ToolTip(self.bookmarks, BOOKMARKS_HELP, above=True)  # la casilla esta al pie de la seccion
-        self.run_button = primary_button(options, "Unir PDFs", self._merge, "merge", width=150)
+        self.run_button = primary_button(options, tr("Unir PDFs"), self._merge, "merge", width=150)
         self.run_button.grid(row=0, column=1, sticky="e")
 
         # Contenedores registrados una sola vez; las filas heredan el destino.
@@ -207,10 +212,10 @@ class MergePage(BasePage):
     def _build_empty_state(self) -> None:
         self.empty_state = ctk.CTkFrame(self.list_frame, fg_color="transparent")
         ctk.CTkLabel(self.empty_state, text="", image=icon("pdf", 48, style.TEXT_MUTED)).pack()
-        ctk.CTkLabel(self.empty_state, text="Arrastre aqui sus archivos PDF", font=style.fonts().section).pack(
+        ctk.CTkLabel(self.empty_state, text=tr("Arrastre aquí sus archivos PDF"), font=style.fonts().section).pack(
             pady=(12, 2)
         )
-        muted_label(self.empty_state, 'o use el boton "Agregar PDFs". Tambien puede soltar carpetas.').pack()
+        muted_label(self.empty_state, tr('o use el botón "Agregar PDFs". También puede soltar carpetas.')).pack()
         self.empty_state.grid(row=0, column=0, sticky="nsew", pady=80)
 
     def on_show(self) -> None:
@@ -225,7 +230,7 @@ class MergePage(BasePage):
     # * Agregar -------------------------------------------------------------
 
     def _browse_files(self) -> None:
-        files = filedialog.askopenfilenames(title="Agregar PDFs", filetypes=(("Archivos PDF", "*.pdf"),))
+        files = filedialog.askopenfilenames(title=tr("Agregar PDFs"), filetypes=((tr("Archivos PDF"), "*.pdf"),))
         self._add_files([Path(file) for file in files])
 
     def _add_files(self, files: Iterable[Path]) -> None:
@@ -259,7 +264,7 @@ class MergePage(BasePage):
             self._refresh_summary()
             paths = [entry.path for entry in new_entries]
             self.app.runner.submit(
-                f"Leyendo {len(paths)} PDF" + ("s" if len(paths) > 1 else ""),
+                trn("Leyendo {count} PDF", "Leyendo {count} PDFs", len(paths)),
                 lambda: _read_infos(paths),
                 self._on_infos_read,
                 self.app.show_error,
@@ -268,7 +273,9 @@ class MergePage(BasePage):
             self.log_debug("Archivos ya presentes en la lista: %d (no se duplican)", duplicated)
         if rejected:
             self.log("Ignorados %d archivos no validos: %s", len(rejected), describe_files(rejected))
-            self.app.show_error(core.InvalidInputError("Se ignoraron archivos no validos:\n" + "\n".join(rejected)))
+            self.app.show_error(
+                core.InvalidInputError(tr("Se ignoraron archivos no válidos:") + "\n" + "\n".join(rejected))
+            )
 
     @staticmethod
     def _expand(files: Iterable[Path]) -> list[Path]:
@@ -303,7 +310,9 @@ class MergePage(BasePage):
             protegidos=sum(1 for info in valid if info.encrypted),
         )
         if rejected:
-            self.app.show_error(core.InvalidInputError("Se quitaron archivos no validos:\n" + "\n".join(rejected)))
+            self.app.show_error(
+                core.InvalidInputError(tr("Se quitaron archivos no válidos:") + "\n" + "\n".join(rejected))
+            )
 
     # * Construccion por lotes ------------------------------------------------
 
@@ -407,23 +416,26 @@ class MergePage(BasePage):
             return
         infos = [entry.info for entry in self.entries if entry.info is not None]
         pending = len(self.entries) - len(infos)
-        text = (
-            f"{len(self.entries)} archivos  ·  {sum(info.page_count or 0 for info in infos)} paginas"
-            f"  ·  {format_size(sum(info.size_bytes for info in infos))}"
+        text = "  ·  ".join(
+            (
+                trn("{count} archivo", "{count} archivos", len(self.entries)),
+                trn("{count} página", "{count} páginas", sum(info.page_count or 0 for info in infos)),
+                format_size(sum(info.size_bytes for info in infos)),
+            )
         )
         if pending:
-            text += f"  ·  leyendo {pending}..."
+            text += "  ·  " + tr("leyendo {count}...", count=pending)
         self.summary.configure(text=text)
 
     # * Accion ----------------------------------------------------------------
 
     def _reset_output(self) -> None:
-        self.output_field.set(core.unique_path(self.app.settings.output_path / "PDF_unido.pdf"), auto=True)
+        self.output_field.set(core.unique_path(self.app.settings.output_path / (tr("PDF_unido") + ".pdf")), auto=True)
 
     def _merge(self) -> None:
         def start() -> None:
             if len(self.entries) < 2:
-                raise core.InvalidInputError("Agregue al menos dos PDFs para unir.")
+                raise core.InvalidInputError(tr("Agregue al menos dos PDFs para unir."))
             output = self.resolve_output(self.output_field)
             if output is None:
                 return
@@ -437,8 +449,8 @@ class MergePage(BasePage):
                 salida=output,
             )
             self.run_task(
-                "Uniendo PDFs",
-                "PDF unido",
+                tr("Uniendo PDFs"),
+                tr("PDF unido"),
                 lambda passwords: core.merge_pdfs(sources, output, passwords=passwords, add_bookmarks=add_bookmarks),
                 button=self.run_button,
                 on_success=lambda _result: self._reset_output() if self.output_field.auto else None,

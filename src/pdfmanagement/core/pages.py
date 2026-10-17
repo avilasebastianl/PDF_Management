@@ -2,11 +2,13 @@
 Interprete de selecciones de paginas escritas por el usuario.
 """
 
+from ..i18n import tr, trn
 from .errors import InvalidInputError
 
-_ALL = {"all", "todo", "todos", "todas"}
-_ODD = {"odd", "impar", "impares"}
-_EVEN = {"even", "par", "pares"}
+# Palabras clave en los tres idiomas de la interfaz (la ayuda muestra las del idioma activo).
+_ALL = {"all", "todo", "todos", "todas", "все", "всё"}
+_ODD = {"odd", "impar", "impares", "нечётные", "нечетные"}
+_EVEN = {"even", "par", "pares", "чётные", "четные"}
 
 
 def parse_page_selection(selection: str, total_pages: int) -> list[int]:
@@ -29,9 +31,9 @@ def parse_page_selection(selection: str, total_pages: int) -> list[int]:
     """
     normalized = selection.strip().lower().replace(" ", "").replace(";", ",")
     if not normalized:
-        raise InvalidInputError("Debe indicar las paginas a extraer.")
+        raise InvalidInputError(tr("Debe indicar las páginas a extraer."))
     if total_pages < 1:
-        raise InvalidInputError("El PDF no tiene paginas.")
+        raise InvalidInputError(tr("El PDF no tiene páginas."))
 
     if normalized in _ALL:
         return list(range(total_pages))
@@ -47,7 +49,7 @@ def parse_page_selection(selection: str, total_pages: int) -> list[int]:
             start = _to_page(start_text, block) if start_text else 1
             end = _to_page(end_text, block) if end_text else total_pages
             if start > end:
-                raise InvalidInputError(f"El rango '{block}' esta invertido.")
+                raise InvalidInputError(tr("El rango '{range}' está invertido.", range=block))
             indexes.extend(range(start - 1, end))
         else:
             indexes.append(_to_page(block, block) - 1)
@@ -55,13 +57,20 @@ def parse_page_selection(selection: str, total_pages: int) -> list[int]:
     unique_indexes = list(dict.fromkeys(indexes))
     out_of_range = [index + 1 for index in unique_indexes if index >= total_pages]
     if out_of_range:
-        raise InvalidInputError(f"Paginas fuera de rango: {out_of_range}. El PDF tiene {total_pages} paginas.")
+        raise InvalidInputError(
+            trn(
+                "Páginas fuera de rango: {pages}. El PDF tiene {count} página.",
+                "Páginas fuera de rango: {pages}. El PDF tiene {count} páginas.",
+                total_pages,
+                pages=", ".join(map(str, out_of_range)),
+            )
+        )
     if not unique_indexes:
-        raise InvalidInputError("No se encontraron paginas validas.")
+        raise InvalidInputError(tr("No se encontraron páginas válidas."))
     return unique_indexes
 
 
 def _to_page(text: str, block: str) -> int:
     if not text.isdigit() or int(text) < 1:
-        raise InvalidInputError(f"Seleccion de paginas invalida: '{block}'")
+        raise InvalidInputError(tr("Selección de páginas no válida: '{selection}'", selection=block))
     return int(text)

@@ -18,6 +18,7 @@ from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import Settings
+from ..i18n import tr
 from . import icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
 from .dialogs import HelpWindow
@@ -25,6 +26,7 @@ from .events import debug_event, log_event
 from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
+from .pages.registry import page_label
 from .status_bar import StatusBar
 from .system import open_path
 from .tasks import TaskRunner
@@ -52,6 +54,9 @@ SETTING_LABELS = {
     "output_dir": "Carpeta de salida",
     "debug_logging": "Registro detallado",
     "sidebar_collapsed": "Menu lateral contraido",
+    "language": "Idioma",
+    "viewer_night_mode": "Visor en modo nocturno",
+    "viewer_two_pages": "Visor a dos paginas",
 }
 
 
@@ -168,13 +173,14 @@ class MainWindow:
         )
         self.sidebar_toggle.pack(side="left")
         ToolTip(
-            self.sidebar_toggle, lambda: "Expandir el menu" if self.settings.sidebar_collapsed else "Contraer el menu"
+            self.sidebar_toggle,
+            lambda: tr("Expandir el menú") if self.settings.sidebar_collapsed else tr("Contraer el menú"),
         )
         self._brand = ctk.CTkFrame(header, fg_color="transparent")
         ctk.CTkLabel(self._brand, text=__app_name__, font=style.fonts().brand, anchor="w").pack(anchor="w")
         ctk.CTkLabel(
             self._brand,
-            text=f"Version {__version__}",
+            text=tr("Versión {version}", version=__version__),
             font=style.fonts().small,
             text_color=style.TEXT_MUTED,
             anchor="w",
@@ -183,7 +189,7 @@ class MainWindow:
         for index, page_class in enumerate(PAGES, start=1):
             button = ctk.CTkButton(
                 sidebar,
-                text=f"  {page_class.name}",
+                text=f"  {page_label(page_class.name)}",
                 anchor="w",
                 height=40,
                 corner_radius=8,
@@ -195,7 +201,9 @@ class MainWindow:
             ToolTip(
                 button,
                 lambda page=page_class, key=index: (  # type: ignore[misc]
-                    f"{page.name}  (Ctrl+{key})" if self.settings.sidebar_collapsed else f"{page.title}  (Ctrl+{key})"
+                    f"{page_label(page.name)}  (Ctrl+{key})"
+                    if self.settings.sidebar_collapsed
+                    else f"{page.title}  (Ctrl+{key})"
                 ),
             )
             self.nav_buttons[page_class.name] = button
@@ -218,10 +226,10 @@ class MainWindow:
         self.theme_button.grid(row=0, column=0, sticky="ew")
         ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
         self.help_button = ctk.CTkButton(
-            footer, text="  Ayuda", image=icon("help", 18), command=self.open_help, **footer_style
+            footer, text=f"  {tr('Ayuda')}", image=icon("help", 18), command=self.open_help, **footer_style
         )
         self.help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        ToolTip(self.help_button, "Guia de uso (F1)")
+        ToolTip(self.help_button, tr("Guía de uso (F1)"))
         self._apply_sidebar_mode()
         self._refresh_nav()
 
@@ -339,8 +347,8 @@ class MainWindow:
         elif not self._brand.winfo_manager():
             self._brand.pack(side="left", padx=(8, 0))
         for page_class in PAGES:
-            self.nav_buttons[page_class.name].configure(text="" if collapsed else f"  {page_class.name}")
-        self.help_button.configure(text="" if collapsed else "  Ayuda")
+            self.nav_buttons[page_class.name].configure(text="" if collapsed else f"  {page_label(page_class.name)}")
+        self.help_button.configure(text="" if collapsed else f"  {tr('Ayuda')}")
         self._refresh_theme_button()
 
     def _build_content(self) -> None:
@@ -499,7 +507,7 @@ class MainWindow:
         self.save_settings()
 
     def _theme_label(self) -> str:
-        return "Modo claro" if ctk.get_appearance_mode() == "Dark" else "Modo oscuro"
+        return tr("Modo claro") if ctk.get_appearance_mode() == "Dark" else tr("Modo oscuro")
 
     def _refresh_theme_button(self) -> None:
         dark = ctk.get_appearance_mode() == "Dark"
@@ -571,11 +579,13 @@ class MainWindow:
             message = str(error)
         else:
             logger.error("Error inesperado", exc_info=(type(error), error, error.__traceback__))
-            message = (
-                f"Ocurrio un error inesperado:\n{error}\n\nEl detalle quedo registrado en {paths.LOG_DIR / 'error.log'}"
+            message = tr(
+                "Ocurrió un error inesperado:\n{error}\n\nEl detalle quedó registrado en {log}",
+                error=error,
+                log=paths.LOG_DIR / "error.log",
             )
         self.status_bar.set_error(str(error))
-        messagebox.showerror("No se pudo completar la operacion", message, parent=self.root)
+        messagebox.showerror(tr("No se pudo completar la operación"), message, parent=self.root)
 
     def _on_callback_exception(self, exc_type, exc_value, exc_traceback) -> None:
         if self._closing:  # la ventana se esta destruyendo: un dialogo modal la bloquearia

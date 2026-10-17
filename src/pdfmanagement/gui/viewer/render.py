@@ -13,6 +13,8 @@ ventana nunca queda bloqueada mas de lo que tarda una pagina (~10-40 ms).
 - Las imagenes quedan en una cache LRU con limite de memoria; quien las
   muestra debe guardar su propia referencia (Tk borra la imagen si nadie la
   referencia).
+- En modo nocturno las imagenes se generan con los colores invertidos (la
+  cache se vacia al cambiar de modo).
 - Con zoom alto el visor pide **mosaicos**: solo el trozo visible de la pagina
   (``clip``), asi una pagina al 400 % no genera una imagen de decenas de MB.
 """
@@ -56,6 +58,7 @@ class RenderScheduler:
         self._order = itertools.count()
         self._job: str | None = None
         self._paused = False
+        self.inverted = False
         self.rendered = 0  # paginas dibujadas (para mediciones)
 
     # * Documento -----------------------------------------------------------
@@ -65,6 +68,13 @@ class RenderScheduler:
         self._document = document
         self._generation += 1
         self.clear()
+
+    def set_inverted(self, inverted: bool) -> None:
+        """Modo nocturno: las imagenes nuevas salen invertidas; las de antes se descartan."""
+        if inverted != self.inverted:
+            self.inverted = inverted
+            self._generation += 1
+            self.clear()
 
     def clear(self) -> None:
         self._cache.clear()
@@ -191,6 +201,8 @@ class RenderScheduler:
         except (RuntimeError, ValueError) as error:
             logger.warning("No se pudo dibujar la pagina %d: %s", page + 1, error)
             return None
+        if self.inverted:
+            pixmap.invert_irect()
         photo = ImageTk.PhotoImage(Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples))
         size = pixmap.width * pixmap.height * 4
         self._cache[key] = (photo, size)

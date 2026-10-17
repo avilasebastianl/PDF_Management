@@ -32,6 +32,7 @@ from pyhanko.sign import fields, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.stamp import TextStamp, TextStampStyle
 
+from ..i18n import tr
 from .documents import open_document
 from .errors import (
     CertificateError,
@@ -51,7 +52,6 @@ CERTIFICATE_EXTENSIONS = (".pfx", ".p12")
 CAPTION_RATIO = 0.24
 """Alto de la leyenda ("Firmado digitalmente por...") relativo al ancho del recuadro."""
 
-CAPTION_TEXT = "Firmado digitalmente por:\n%(signer)s\nFecha: %(ts)s"
 TIMESTAMP_FORMAT = "%d/%m/%Y %H:%M:%S %z"
 FIELD_PREFIX = "FirmaDigital"
 
@@ -89,11 +89,13 @@ def _load_pkcs12(pfx_path: Path, password: str | None) -> tuple[bytes, bytes | N
     try:
         data = pfx_path.read_bytes()
     except OSError as error:
-        raise InvalidInputError(f"No se pudo leer el certificado '{pfx_path.name}': {error}") from error
+        raise InvalidInputError(
+            tr("No se pudo leer el certificado '{name}': {error}", name=pfx_path.name, error=error)
+        ) from error
     try:
         _ = asn1_pkcs12.Pfx.load(data, strict=True)["auth_safe"]["content_type"].native  # valida la estructura
     except (ValueError, TypeError, KeyError) as error:
-        raise CertificateError(f"'{pfx_path.name}' no es un certificado .pfx/.p12 valido.") from error
+        raise CertificateError(tr("'{name}' no es un certificado .pfx/.p12 válido.", name=pfx_path.name)) from error
 
     # Sin contrasena se prueba tanto "sin cifrar" como "contrasena vacia".
     candidates = [password.encode("utf-8")] if password else [None, b""]
@@ -104,7 +106,7 @@ def _load_pkcs12(pfx_path: Path, password: str | None) -> tuple[bytes, bytes | N
             continue
         if key is None or certificate is None:
             raise CertificateError(
-                f"El certificado '{pfx_path.name}' no contiene la clave privada necesaria para firmar."
+                tr("El certificado '{name}' no contiene la clave privada necesaria para firmar.", name=pfx_path.name)
             )
         return data, secret, certificate
     raise WrongCertificatePasswordError(pfx_path)
@@ -114,10 +116,12 @@ def _check_validity(pfx_path: Path, certificate: x509.Certificate) -> None:
     now = datetime.now(UTC)
     if certificate.not_valid_after_utc < now:
         expired = certificate.not_valid_after_utc.astimezone().strftime("%d/%m/%Y")
-        raise CertificateError(f"El certificado '{pfx_path.name}' vencio el {expired}.")
+        raise CertificateError(tr("El certificado '{name}' venció el {date}.", name=pfx_path.name, date=expired))
     if certificate.not_valid_before_utc > now:
         start = certificate.not_valid_before_utc.astimezone().strftime("%d/%m/%Y")
-        raise CertificateError(f"El certificado '{pfx_path.name}' aun no es valido (desde el {start}).")
+        raise CertificateError(
+            tr("El certificado '{name}' aún no es válido (desde el {date}).", name=pfx_path.name, date=start)
+        )
 
 
 def load_certificate(pfx_file: str | Path, pfx_password: str | None) -> CertificateInfo:
@@ -148,7 +152,9 @@ def _create_signer(pfx_path: Path, pfx_password: str | None) -> tuple[signers.Si
     try:
         signer = signers.SimpleSigner.load_pkcs12_data(data, other_certs=(), passphrase=secret)
     except ValueError as error:
-        raise CertificateError(f"No se pudo usar el certificado '{pfx_path.name}': {error}") from error
+        raise CertificateError(
+            tr("No se pudo usar el certificado '{name}': {error}", name=pfx_path.name, error=error)
+        ) from error
     return signer, _common_name(certificate.subject)
 
 
@@ -194,7 +200,8 @@ def _stamp_style(image: Image.Image | None, rect: pymupdf.Rect, rotation: int) -
     # redondeo cuando el contenido ocupa exactamente el espacio disponible.
     return _OrientedTextStampStyle(
         page_rotation=rotation,
-        stamp_text=CAPTION_TEXT,
+        # Marcadores de pyHanko (%-format): el titular y la fecha.
+        stamp_text=tr("Firmado digitalmente por:\n%(signer)s\nFecha: %(ts)s"),
         timestamp_format=TIMESTAMP_FORMAT,
         border_width=0,
         text_box_style=TextBoxStyle(font_size=10, text_color=(0.15, 0.15, 0.2)),
@@ -261,7 +268,7 @@ def sign_pdf_with_certificate(
     certificate = require_file(pfx_path, CERTIFICATE_EXTENSIONS)
     output_path = prepare_output(output_file, source)
     if placement is not None and placement.all_pages:
-        raise InvalidInputError("La firma digital se ubica en una sola pagina. Desmarque 'todas las paginas'.")
+        raise InvalidInputError(tr("La firma digital se ubica en una sola página. Desmarque 'todas las páginas'."))
     signer, signer_name = _create_signer(certificate, pfx_password)
 
     field_spec = None
@@ -306,7 +313,7 @@ def sign_pdf_with_certificate(
             with open(temp_path, "wb") as output:
                 pdf_signer.sign_pdf(writer, output=output, appearance_text_params={"signer": signer_name})
     except (PdfError, SigningError) as error:
-        raise DigitalSignatureError(f"No se pudo firmar '{source.name}': {error}") from error
+        raise DigitalSignatureError(tr("No se pudo firmar '{name}': {error}", name=source.name, error=error)) from error
 
     logger.info("PDF firmado digitalmente por %s: %s", signer_name, output_path)
     return output_path

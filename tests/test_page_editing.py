@@ -29,11 +29,11 @@ def session(tmp_path):
 
 
 def test_rotate_undo_redo(session):
-    assert session.rotate([0, 2], 90) == "Rotar 2 paginas a la derecha"
+    assert session.rotate([0, 2], 90) == "Rotar 2 páginas a la derecha"
     assert labels(session)[:3] == ["Pagina 1@90", "Pagina 2", "Pagina 3@90"]
-    assert session.rotate([0], -90) == "Rotar pagina 1 a la izquierda"
+    assert session.rotate([0], -90) == "Rotar página 1 a la izquierda"
     assert labels(session)[0] == "Pagina 1"
-    assert session.undo() == "Rotar pagina 1 a la izquierda"
+    assert session.undo() == "Rotar página 1 a la izquierda"
     assert labels(session)[0] == "Pagina 1@90"
     session.undo()
     assert not session.modified and labels(session)[0] == "Pagina 1"
@@ -55,7 +55,7 @@ def test_text_and_search_work_on_rotated_pages_with_history(session):
 
 
 def test_delete_pages_and_keep_at_least_one(session):
-    assert session.delete([1, 3]) == "Eliminar 2 paginas"
+    assert session.delete([1, 3]) == "Eliminar 2 páginas"
     assert labels(session) == ["Pagina 1", "Pagina 3", "Pagina 5"]
     with pytest.raises(core.InvalidInputError):
         session.delete([0, 1, 2])
@@ -110,7 +110,7 @@ def test_insert_pdf_with_rotation_images_and_annotations(session, tmp_path):
     assert len(inserted.get_images()) == 1
     assert [annot.type[1] for annot in inserted.annots()] == ["Text"]
     assert [link.get("uri") for link in inserted.get_links()] == ["https://example.com"], "enlaces internos descartados"
-    assert session.history.undo_label == "Insertar 2 paginas de anexo.pdf"
+    assert session.history.undo_label == "Insertar 2 páginas de anexo.pdf"
     session.undo()
     assert session.page_count == 5
     session.redo()

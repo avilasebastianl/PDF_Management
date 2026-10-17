@@ -15,6 +15,7 @@ from pathlib import Path
 import pymupdf
 from PIL import Image
 
+from ..i18n import tr, trn
 from .documents import open_document
 from .errors import InvalidInputError
 from .files import IMAGE_EXTENSIONS, PDF_EXTENSIONS, atomic_output, prepare_output, require_file
@@ -67,7 +68,7 @@ def load_signature(image_path: str | Path) -> Image.Image:
         )
     bbox = image.getchannel("A").getbbox()
     if not bbox:
-        raise InvalidInputError("La imagen de firma esta vacia.")
+        raise InvalidInputError(tr("La imagen de firma está vacía."))
     return image.crop(bbox)
 
 
@@ -96,7 +97,14 @@ def resolve_page_index(page_number: int | None, page_count: int) -> int:
     if page_number is None:
         return page_count - 1
     if not 1 <= page_number <= page_count:
-        raise InvalidInputError(f"La pagina {page_number} no existe. El PDF tiene {page_count} paginas.")
+        raise InvalidInputError(
+            trn(
+                "La página {page} no existe. El PDF tiene {count} página.",
+                "La página {page} no existe. El PDF tiene {count} páginas.",
+                page_count,
+                page=page_number,
+            )
+        )
     return page_number - 1
 
 

@@ -14,12 +14,13 @@ from typing import ClassVar
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES
 
+from ..i18n import tr
 from . import style
 from .events import area_of, debug_event, log_event
 from .icons import icon
 
 FileTypes = tuple[tuple[str, str], ...]
-PDF_FILETYPES: FileTypes = (("Archivos PDF", "*.pdf"),)
+PDF_FILETYPES: FileTypes = ((tr("Archivos PDF"), "*.pdf"),)
 LABEL_COLUMN_WIDTH = 170  # alinea los campos de todas las tarjetas
 
 
@@ -244,7 +245,7 @@ class FileField:
         pad = style.CARD_PAD
         label_widget = field_label(parent, label)
         self.entry = ctk.CTkEntry(parent, textvariable=self.variable, placeholder_text=placeholder, height=34)
-        self.button = secondary_button(parent, "Examinar", self.browse, "folder", width=110)
+        self.button = secondary_button(parent, tr("Examinar"), self.browse, "folder", width=110)
 
         if stacked:
             label_widget.grid(row=row, column=0, columnspan=3, sticky="w", padx=pad, pady=(style.GAP, 2))
@@ -255,8 +256,17 @@ class FileField:
             self.entry.grid(row=row, column=1, sticky="ew", pady=style.GAP // 2 + 2)
             self.button.grid(row=row, column=2, sticky="e", padx=(8, pad), pady=style.GAP // 2 + 2)
 
+        self._widgets = (label_widget, self.entry, self.button)
         if mode == "open":
             enable_file_drop(self.entry, self._on_drop)
+
+    def hide(self) -> None:
+        for widget in self._widgets:
+            hide(widget)
+
+    def show(self) -> None:
+        for widget in self._widgets:
+            show(widget)
 
     @property
     def path(self) -> Path | None:
@@ -283,7 +293,7 @@ class FileField:
         initialdir = str(initial) if initial else None
         if self.mode == "save":
             chosen = filedialog.asksaveasfilename(
-                title="Guardar como",
+                title=tr("Guardar como"),
                 defaultextension=".pdf",
                 initialfile=current.name if current else "",
                 filetypes=self.filetypes,
@@ -297,7 +307,7 @@ class FileField:
                 debug_event(area_of(self.entry), "%s: dialogo cancelado", self.label)
         else:
             chosen = filedialog.askopenfilename(
-                title="Seleccionar archivo", filetypes=self.filetypes, initialdir=initialdir
+                title=tr("Seleccionar archivo"), filetypes=self.filetypes, initialdir=initialdir
             )
             if chosen:
                 self._log_choice(Path(chosen), "dialogo")
@@ -329,7 +339,7 @@ class PasswordField:
         pad = style.CARD_PAD
         self.entry = ctk.CTkEntry(parent, textvariable=self.variable, show="•", placeholder_text=placeholder, height=34)
         self.entry.grid(row=row, column=1, sticky="ew", pady=style.GAP // 2 + 2)
-        self.toggle = icon_button(parent, "eye", self._toggle, "Mostrar u ocultar")
+        self.toggle = icon_button(parent, "eye", self._toggle, tr("Mostrar u ocultar"))
         self.toggle.grid(row=row, column=2, sticky="w", padx=(8, pad))
         self.label = field_label(parent, label)
         self.label.grid(row=row, column=0, sticky="w", padx=(pad, style.GAP), pady=style.GAP // 2 + 2)

@@ -3,6 +3,7 @@ Ventanas secundarias: contrasena, ayuda y creacion de firmas.
 """
 
 import tkinter as tk
+import unicodedata
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -11,7 +12,8 @@ from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image, ImageDraw
 
-from .. import paths
+from .. import i18n, paths
+from ..i18n import tr
 from ..signatures import signature_path_for
 from . import style
 from .events import debug_event
@@ -39,11 +41,11 @@ def _prepare_toplevel(window: ctk.CTkToplevel, parent, title: str, width: int, h
 def ask_password(parent, file_name: str, retry: bool = False) -> str | None:
     """Solicita la contrasena de un PDF en un dialogo modal. ``None`` si se cancela."""
     message = (
-        f"La contrasena de '{file_name}' no es correcta. Intente de nuevo:"
+        tr("La contraseña de «{file}» no es correcta. Inténtelo de nuevo:", file=file_name)
         if retry
-        else f"'{file_name}' esta protegido. Ingrese su contrasena:"
+        else tr("«{file}» está protegido. Ingrese su contraseña:", file=file_name)
     )
-    return _password_dialog(parent, "Contrasena requerida", message) or None
+    return _password_dialog(parent, tr("Contraseña requerida"), message) or None
 
 
 def ask_certificate_password(parent, file_name: str, retry: bool = False) -> str | None:
@@ -53,11 +55,11 @@ def ask_certificate_password(parent, file_name: str, retry: bool = False) -> str
     guarda: solo vive en memoria durante la firma.
     """
     message = (
-        f"La contrasena del certificado '{file_name}' no es correcta. Intente de nuevo:"
+        tr("La contraseña del certificado «{file}» no es correcta. Inténtelo de nuevo:", file=file_name)
         if retry
-        else f"Ingrese la contrasena del certificado '{file_name}'.\nNo se guarda en ningun lugar."
+        else tr("Ingrese la contraseña del certificado «{file}».\nNo se guarda en ningún lugar.", file=file_name)
     )
-    return _password_dialog(parent, "Contrasena del certificado", message)
+    return _password_dialog(parent, tr("Contraseña del certificado"), message)
 
 
 def _password_dialog(parent, title: str, message: str) -> str | None:
@@ -78,8 +80,8 @@ def _password_dialog(parent, title: str, message: str) -> str | None:
 
     buttons = ctk.CTkFrame(window, fg_color="transparent")
     buttons.pack(fill="x", padx=20, pady=20)
-    primary_button(buttons, "Aceptar", accept, width=110).pack(side="right")
-    secondary_button(buttons, "Cancelar", window.destroy, width=110).pack(side="right", padx=8)
+    primary_button(buttons, tr("Aceptar"), accept, width=110).pack(side="right")
+    secondary_button(buttons, tr("Cancelar"), window.destroy, width=110).pack(side="right", padx=8)
     entry.bind("<Return>", accept)
     window.after(100, entry.focus_force)
     parent.wait_window(window)
@@ -110,9 +112,9 @@ def ask_text(parent, title: str, message: str, initial: str = "") -> str | None:
 
     buttons = ctk.CTkFrame(window, fg_color="transparent")
     buttons.pack(fill="x", padx=20, pady=16)
-    primary_button(buttons, "Aceptar", accept, width=110).pack(side="right")
-    secondary_button(buttons, "Cancelar", window.destroy, width=110).pack(side="right", padx=8)
-    muted_label(buttons, "Ctrl+Enter para aceptar").pack(side="left")
+    primary_button(buttons, tr("Aceptar"), accept, width=110).pack(side="right")
+    secondary_button(buttons, tr("Cancelar"), window.destroy, width=110).pack(side="right", padx=8)
+    muted_label(buttons, tr("Ctrl+Enter para aceptar")).pack(side="left")
     box.bind("<Control-Return>", accept)
     window.bind("<Escape>", lambda _event: window.destroy())
     window.after(100, box.focus_force)
@@ -128,7 +130,7 @@ class DocumentPropertiesWindow(ctk.CTkToplevel):
 
     def __init__(self, parent, properties, current_page_size: tuple[float, float] | None = None) -> None:
         super().__init__(parent)
-        _prepare_toplevel(self, parent, "Propiedades del documento", 520, 520, modal=False)
+        _prepare_toplevel(self, parent, tr("Propiedades del documento"), 520, 520, modal=False)
         self.resizable(False, False)
         frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=12, pady=12)
@@ -143,31 +145,34 @@ class DocumentPropertiesWindow(ctk.CTkToplevel):
             return f"{value:.1f} GB"
 
         rows = [
-            ("Archivo", properties.path.name),
-            ("Carpeta", str(properties.path.parent)),
-            ("Tamano", size_text(properties.size_bytes)),
-            ("Paginas", str(properties.page_count)),
+            (tr("Archivo"), properties.path.name),
+            (tr("Carpeta"), str(properties.path.parent)),
+            (tr("Tamaño"), size_text(properties.size_bytes)),
+            (tr("Páginas"), str(properties.page_count)),
         ]
         if current_page_size:
             width, height = current_page_size
             rows.append(
                 (
-                    "Pagina actual",
+                    tr("Página actual"),
                     f"{width:.0f} x {height:.0f} pt  ({width / 72 * 25.4:.0f} x {height / 72 * 25.4:.0f} mm)",
                 )
             )
         rows += [
-            ("Version PDF", properties.pdf_version or "-"),
-            ("Protegido", "Si, con contrasena" if properties.encrypted else "No"),
-            ("Firmas digitales", "Si (editarlo invalidaria las firmas)" if properties.has_signatures else "No"),
-            ("Titulo", properties.title or "-"),
-            ("Autor", properties.author or "-"),
-            ("Asunto", properties.subject or "-"),
-            ("Palabras clave", properties.keywords or "-"),
-            ("Creado con", properties.creator or "-"),
-            ("Producido por", properties.producer or "-"),
-            ("Creado", properties.created or "-"),
-            ("Modificado", properties.modified or "-"),
+            (tr("Versión PDF"), properties.pdf_version or "-"),
+            (tr("Protegido"), tr("Sí, con contraseña") if properties.encrypted else tr("No")),
+            (
+                tr("Firmas digitales"),
+                tr("Sí (editarlo invalidaría las firmas)") if properties.has_signatures else tr("No"),
+            ),
+            (tr("Título"), properties.title or "-"),
+            (tr("Autor"), properties.author or "-"),
+            (tr("Asunto"), properties.subject or "-"),
+            (tr("Palabras clave"), properties.keywords or "-"),
+            (tr("Creado con"), properties.creator or "-"),
+            (tr("Producido por"), properties.producer or "-"),
+            (tr("Creado"), properties.created or "-"),
+            (tr("Modificado"), properties.modified or "-"),
         ]
         for row, (label, value) in enumerate(rows):
             ctk.CTkLabel(frame, text=label, font=style.fonts().body_bold, anchor="nw").grid(
@@ -176,10 +181,29 @@ class DocumentPropertiesWindow(ctk.CTkToplevel):
             ctk.CTkLabel(frame, text=value, font=style.fonts().body, anchor="w", justify="left", wraplength=320).grid(
                 row=row, column=1, sticky="w", pady=3
             )
-        primary_button(self, "Cerrar", self.destroy, width=110).pack(anchor="e", padx=16, pady=(0, 14))
+        primary_button(self, tr("Cerrar"), self.destroy, width=110).pack(anchor="e", padx=16, pady=(0, 14))
 
 
 # * Ayuda -------------------------------------------------------------------
+
+
+def user_guide_file() -> Path:
+    """
+    Guia en el idioma activo (``docs/user_guide.<codigo>.md``); si no existe,
+    la original en espanol (``docs/user_guide.md``).
+    """
+    code = i18n.language()
+    if code != i18n.DEFAULT_LANGUAGE:
+        localized = paths.USER_GUIDE_FILE.with_name(f"{paths.USER_GUIDE_FILE.stem}.{code}.md")
+        if localized.exists():
+            return localized
+    return paths.USER_GUIDE_FILE
+
+
+def _heading_key(title: str) -> str:
+    """Titulo sin tildes ni mayusculas: encuentra la seccion aunque cambie la ortografia."""
+    decomposed = unicodedata.normalize("NFKD", title.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char)).strip()
 
 
 class HelpWindow(ctk.CTkToplevel):
@@ -190,7 +214,7 @@ class HelpWindow(ctk.CTkToplevel):
 
     def __init__(self, parent, section: str | None = None) -> None:
         super().__init__(parent)
-        _prepare_toplevel(self, parent, "Guia de uso", 1000, 680, modal=False)
+        _prepare_toplevel(self, parent, tr("Guía de uso"), 1000, 680, modal=False)
         self.minsize(760, 460)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -198,16 +222,17 @@ class HelpWindow(ctk.CTkToplevel):
 
         self.index = ctk.CTkScrollableFrame(self, width=210, corner_radius=0, fg_color=style.SIDEBAR_BG)
         self.index.grid(row=0, column=0, sticky="nsw")
-        ctk.CTkLabel(self.index, text="Contenido", font=style.fonts().section, anchor="w").pack(
+        ctk.CTkLabel(self.index, text=tr("Contenido"), font=style.fonts().section, anchor="w").pack(
             fill="x", padx=12, pady=(14, 6)
         )
 
         self.text_box = ctk.CTkTextbox(self, wrap="word", font=style.fonts().body, corner_radius=0)
         self.text_box.grid(row=0, column=1, sticky="nsew")
+        guide_file = user_guide_file()
         guide = (
-            paths.USER_GUIDE_FILE.read_text(encoding="utf-8")
-            if paths.USER_GUIDE_FILE.exists()
-            else "# Guia de uso\n\nNo se encontro la documentacion."
+            guide_file.read_text(encoding="utf-8")
+            if guide_file.exists()
+            else "# {}\n\n{}".format(tr("Guía de uso"), tr("No se encontró la documentación."))
         )
         self._render_markdown(guide)
         self.text_box.configure(state="disabled")
@@ -215,8 +240,15 @@ class HelpWindow(ctk.CTkToplevel):
             self.after(80, lambda: self.show_section(section))
 
     def show_section(self, title: str) -> None:
-        """Desplaza la guia para que la seccion ``title`` quede arriba."""
-        mark = self._sections.get(title)
+        """
+        Desplaza la guia para que la seccion ``title`` quede arriba. El codigo
+        pasa el titulo en espanol: con la guia traducida se busca ``tr(title)``
+        y, si tampoco esta, se compara sin tildes ni mayusculas.
+        """
+        mark = self._sections.get(title) or self._sections.get(tr(title))
+        if mark is None:
+            wanted = {_heading_key(title), _heading_key(tr(title))}
+            mark = next((found for name, found in self._sections.items() if _heading_key(name) in wanted), None)
         debug_event("Ayuda", "Seccion mostrada: %s", title)
         if mark is None:
             return
@@ -318,7 +350,7 @@ class HelpWindow(ctk.CTkToplevel):
         code = "\n".join(lines).strip("\n")
         button = ctk.CTkButton(
             native,
-            text="Copiar",
+            text=tr("Copiar"),
             width=70,
             height=24,
             corner_radius=6,
@@ -332,8 +364,8 @@ class HelpWindow(ctk.CTkToplevel):
     def _copy(self, code: str, button: ctk.CTkButton) -> None:
         self.clipboard_clear()
         self.clipboard_append(code)
-        button.configure(text="Copiado")
-        self.after(1500, lambda: button.winfo_exists() and button.configure(text="Copiar"))
+        button.configure(text=tr("Copiado"))
+        self.after(1500, lambda: button.winfo_exists() and button.configure(text=tr("Copiar")))
 
     @staticmethod
     def _insert_inline(native: tk.Text, line: str, base_tag: str) -> None:
@@ -380,7 +412,7 @@ class SignaturePad(ctk.CTkToplevel):
 
     def __init__(self, parent, on_saved: Callable[[Path], None]) -> None:
         super().__init__(parent)
-        _prepare_toplevel(self, parent, "Crear firma", 700, 470, modal=True)
+        _prepare_toplevel(self, parent, tr("Crear firma"), 700, 470, modal=True)
         self.resizable(False, False)
         self.on_saved = on_saved
         self.strokes: list[list[tuple[int, int, int]]] = []  # (x, y, grosor)
@@ -389,9 +421,9 @@ class SignaturePad(ctk.CTkToplevel):
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=20, pady=(18, 8))
-        ctk.CTkLabel(header, text="Nombre", font=style.fonts().body).pack(side="left")
+        ctk.CTkLabel(header, text=tr("Nombre"), font=style.fonts().body).pack(side="left")
         ctk.CTkEntry(header, textvariable=self.name, width=260, height=32).pack(side="left", padx=10)
-        ctk.CTkLabel(header, text="Grosor", font=style.fonts().body).pack(side="left", padx=(12, 6))
+        ctk.CTkLabel(header, text=tr("Grosor"), font=style.fonts().body).pack(side="left", padx=(12, 6))
         width_selector = ctk.CTkSegmentedButton(
             header,
             values=["2", "3", "5"],
@@ -415,14 +447,14 @@ class SignaturePad(ctk.CTkToplevel):
         self.canvas.bind("<B1-Motion>", self._draw)
 
         ctk.CTkLabel(
-            self, text="Dibuje su firma sobre la linea.", font=style.fonts().small, text_color=style.TEXT_MUTED
+            self, text=tr("Dibuje su firma sobre la línea."), font=style.fonts().small, text_color=style.TEXT_MUTED
         ).pack()
 
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.pack(fill="x", padx=20, pady=14)
-        secondary_button(buttons, "Limpiar", self._clear, "clear", width=110).pack(side="left")
-        secondary_button(buttons, "Deshacer", self._undo, "previous", width=110).pack(side="left", padx=8)
-        primary_button(buttons, "Guardar firma", self._save, "check", width=150).pack(side="right")
+        secondary_button(buttons, tr("Limpiar"), self._clear, "clear", width=110).pack(side="left")
+        secondary_button(buttons, tr("Deshacer"), self._undo, "previous", width=110).pack(side="left", padx=8)
+        primary_button(buttons, tr("Guardar firma"), self._save, "check", width=150).pack(side="right")
         self.bind("<Control-z>", lambda _event: self._undo())
 
     def _start(self, event) -> None:
@@ -462,7 +494,7 @@ class SignaturePad(ctk.CTkToplevel):
     def _save(self) -> None:
         strokes = [stroke for stroke in self.strokes if len(stroke) > 1]
         if not strokes:
-            messagebox.showwarning("Firma vacia", "Dibuje una firma antes de guardarla.", parent=self)
+            messagebox.showwarning(tr("Firma vacía"), tr("Dibuje una firma antes de guardarla."), parent=self)
             return
 
         scale = self.RENDER_SCALE

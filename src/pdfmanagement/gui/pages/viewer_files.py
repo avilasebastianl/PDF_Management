@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from ... import core, recent
 from ...core.editing import DocumentSession
+from ...i18n import tr, trn
 from ..dialogs import DocumentPropertiesWindow, ask_password
 from ..dropdown import set_dropdown_values
 from .viewer_tabs import MAX_TABS, DocumentTab
@@ -24,16 +25,17 @@ if TYPE_CHECKING:
     from .viewer import ViewerPage
 
 
-SEND_TARGETS = ("Unir", "Extraer", "Firmar", "Proteger")
-RECENT_PLACEHOLDER = "Recientes"
-SEND_PLACEHOLDER = "Enviar a..."
+# Texto mostrado en "Enviar a" -> seccion de destino (su identificador, sin traducir).
+SEND_TARGETS = {tr("Unir"): "Unir", tr("Extraer"): "Extraer", tr("Firmar"): "Firmar", tr("Proteger"): "Proteger"}
+RECENT_PLACEHOLDER = tr("Recientes")
+SEND_PLACEHOLDER = tr("Enviar a...")
 
 
 class FilesMixin:
     """Abrir, guardar (siempre Guardar como), propiedades, Enviar a y recientes."""
 
     def browse(self: ViewerPage) -> None:
-        chosen = filedialog.askopenfilename(title="Abrir PDF", filetypes=(("Archivos PDF", "*.pdf"),))
+        chosen = filedialog.askopenfilename(title=tr("Abrir PDF"), filetypes=((tr("Archivos PDF"), "*.pdf"),))
         if chosen:
             self.open_file(Path(chosen), source="dialogo")
         else:
@@ -66,7 +68,12 @@ class FilesMixin:
         if len(self.tabs) >= MAX_TABS:
             self.app.show_error(
                 core.InvalidInputError(
-                    f"Puede tener hasta {MAX_TABS} documentos abiertos. Cierre alguna pestana (Ctrl+W) para abrir otro."
+                    trn(
+                        "Puede tener hasta {count} documento abierto. Cierre alguna pestaña (Ctrl+W) para abrir otro.",
+                        "Puede tener hasta {count} documentos abiertos. "
+                        "Cierre alguna pestaña (Ctrl+W) para abrir otro.",
+                        MAX_TABS,
+                    )
                 )
             )
             return False
@@ -126,9 +133,9 @@ class FilesMixin:
             return False
         suggested = self.saved_path or self.default_output(self.session.path, "editado")
         chosen = filedialog.asksaveasfilename(
-            title="Guardar como",
+            title=tr("Guardar como"),
             defaultextension=".pdf",
-            filetypes=(("Archivos PDF", "*.pdf"),),
+            filetypes=((tr("Archivos PDF"), "*.pdf"),),
             initialdir=str(suggested.parent),
             initialfile=suggested.name,
             parent=self,
@@ -157,19 +164,29 @@ class FilesMixin:
             paginas=session.page_count,
             protegido=bool(session.password),
         )
-        self.app.notify_success("Documento guardado", saved)
+        self.app.notify_success(tr("Documento guardado"), saved)
         return True
 
     def _confirm_discard(self: ViewerPage, action: str) -> bool:
-        """Si hay cambios sin guardar pregunta: guardar como, descartar o cancelar."""
+        """
+        Si hay cambios sin guardar pregunta: guardar como, descartar o cancelar.
+        ``action`` ("cerrar la pestana" o "cerrar la aplicacion") elige la pregunta y va al registro.
+        """
         session = self.session
         if session is None or not session.modified:
             return True
+        questions = {
+            "cerrar la pestana": tr("¿Desea guardarlos en un archivo nuevo antes de cerrar la pestaña?"),
+            "cerrar la aplicacion": tr("¿Desea guardarlos en un archivo nuevo antes de cerrar la aplicación?"),
+        }
+        question = questions.get(action) or tr("¿Desea guardarlos en un archivo nuevo?")
         answer = messagebox.askyesnocancel(
-            "Cambios sin guardar",
-            f"{session.name} tiene cambios sin guardar.\n\n"
-            f"Desea guardarlos en un archivo nuevo antes de {action}?\n\n"
-            "Si: Guardar como...\nNo: descartar los cambios\nCancelar: seguir editando",
+            tr("Cambios sin guardar"),
+            tr("{documento} tiene cambios sin guardar.", documento=session.name)
+            + "\n\n"
+            + question
+            + "\n\n"
+            + tr("Sí: Guardar como...\nNo: descartar los cambios\nCancelar: seguir editando"),
             icon="warning",
             parent=self,
         )
@@ -191,18 +208,22 @@ class FilesMixin:
         session = self.session
         if session is None:
             return
+        section = SEND_TARGETS.get(target, target)  # tambien se admite el identificador de la seccion
         if session.modified:
             answer = messagebox.askyesnocancel(
-                "Cambios sin guardar",
-                f"Para enviar a {target} la version editada hay que guardarla primero.\n\n"
-                "Si: Guardar como... y enviar la copia\nNo: enviar el ultimo archivo guardado\nCancelar: no enviar",
+                tr("Cambios sin guardar"),
+                tr("Para enviar a {destino} la versión editada hay que guardarla primero.", destino=target)
+                + "\n\n"
+                + tr(
+                    "Sí: Guardar como... y enviar la copia\nNo: enviar el último archivo guardado\nCancelar: no enviar"
+                ),
                 parent=self,
             )
             if answer is None or (answer and not self.save_as()):
                 return
         path = self.saved_path or session.path
-        self.log("Documento enviado a %s", target, archivo=path.name)
-        self.app.open_in(target, path)
+        self.log("Documento enviado a %s", section, archivo=path.name)
+        self.app.open_in(section, path)
 
     def _recent_labels(self: ViewerPage) -> list[str]:
         labels = [entry.name for entry in self._recent]
@@ -211,4 +232,4 @@ class FilesMixin:
             if label in seen:
                 labels[index] = f"{label}  ({self._recent[index].parent.name})"
             seen[label] = index
-        return labels or ["(sin recientes)"]
+        return labels or [tr("(sin recientes)")]

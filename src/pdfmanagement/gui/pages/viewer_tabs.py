@@ -114,6 +114,7 @@ class TabsMixin:
             self.search.set_document(None)
             self.view.set_document(None)
         tab = self.tabs.pop(index)
+        self.forget_compared(tab)
         if tab.unsubscribe is not None:
             tab.unsubscribe()
         tab.session.close()
@@ -169,6 +170,7 @@ class TabsMixin:
             self.search.set_document(session.document)
         self.annotations.reset()
         self._refresh_file_state()
+        self.document_shown()
 
     def _render_tabs(self: ViewerPage) -> None:
         """Vuelve a dibujar la barra de pestanas (al abrir, cerrar o cambiar de pestana)."""
@@ -203,6 +205,7 @@ class TabsMixin:
         return True
 
     def on_close(self: ViewerPage) -> None:
+        self.close_compare(log=False)
         self.search.set_document(None)
         self.view.set_document(None)
         for tab in self.tabs:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pypdf import PdfWriter
 
+from ..i18n import tr
 from .documents import open_reader
 from .errors import InvalidInputError
 from .files import PDF_EXTENSIONS, atomic_output, dedupe, prepare_output, require_file
@@ -42,7 +43,7 @@ def merge_pdfs(
     """
     sources = [require_file(path, PDF_EXTENSIONS) for path in dedupe(pdf_files)]
     if not sources:
-        raise InvalidInputError("Debe agregar al menos un PDF.")
+        raise InvalidInputError(tr("Debe agregar al menos un PDF."))
     output_path = prepare_output(output_file, *sources)
     passwords = passwords or {}
 

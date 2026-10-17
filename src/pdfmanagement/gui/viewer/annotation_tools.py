@@ -107,7 +107,11 @@ class DragTool(Tool):
         x1, y1 = view.page_to_canvas(self._start.page, *self._end)
         color = tk_color(self.color())
         width = max(1.0, self.width() * view.scale)
-        if self.kind in ("rect", "free_text"):
+        if self.kind == "redact":
+            view.canvas.create_rectangle(x0, y0, x1, y1, fill="black", stipple="gray50", outline="", tags="overlay")
+        elif self.kind == "image":
+            view.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=1.5, dash=(6, 4), tags="overlay")
+        elif self.kind in ("rect", "free_text"):
             dash = (4, 3) if self.kind == "free_text" else ()
             view.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=width, dash=dash, tags="overlay")
         elif self.kind == "ellipse":

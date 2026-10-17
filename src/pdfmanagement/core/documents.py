@@ -9,6 +9,7 @@ import pymupdf
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from ..i18n import tr
 from .errors import InvalidInputError, PasswordRequiredError, WrongPasswordError
 from .files import PDF_EXTENSIONS, require_file
 
@@ -38,7 +39,7 @@ def open_reader(pdf_path: Path, password: str | None = None) -> PdfReader:
     try:
         reader = PdfReader(pdf_path)
     except (PdfReadError, ValueError, OSError) as error:
-        raise InvalidInputError(f"No se pudo leer '{pdf_path.name}': {error}") from error
+        raise InvalidInputError(tr("No se pudo leer '{name}': {error}", name=pdf_path.name, error=error)) from error
 
     if reader.is_encrypted and not reader.decrypt(""):
         if not password:
@@ -59,7 +60,7 @@ def open_document(pdf_path: Path, password: str | None = None) -> pymupdf.Docume
     try:
         document = pymupdf.open(pdf_path)
     except (pymupdf.FileDataError, RuntimeError) as error:
-        raise InvalidInputError(f"No se pudo leer '{pdf_path.name}': {error}") from error
+        raise InvalidInputError(tr("No se pudo leer '{name}': {error}", name=pdf_path.name, error=error)) from error
 
     if document.needs_pass and not document.authenticate(""):
         if not password:
@@ -82,4 +83,4 @@ def get_pdf_info(pdf_file: str | Path) -> PdfInfo:
                 return PdfInfo(path, None, size_bytes, True)
             return PdfInfo(path, document.page_count, size_bytes, encrypted)
     except (pymupdf.FileDataError, RuntimeError) as error:
-        raise InvalidInputError(f"No se pudo leer '{path.name}': {error}") from error
+        raise InvalidInputError(tr("No se pudo leer '{name}': {error}", name=path.name, error=error)) from error

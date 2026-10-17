@@ -106,7 +106,7 @@ def test_gui_never_logs_passwords(gui_app, caplog, pdf_factory):
     gui_app.show_page("Proteger")
     page = gui_app.pages["Proteger"]
     page.source_field.set(pdf_factory("secreto.pdf", 1))
-    page.mode.set("Proteger con contrasena")
+    page.mode.set("Proteger con contraseña")
     page._apply_mode()
     page.password.set("clave-ultra-secreta")
     page.confirmation.set("clave-ultra-secreta")

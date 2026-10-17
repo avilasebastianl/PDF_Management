@@ -155,7 +155,7 @@ def test_session_announces_each_change(text_pdf, tmp_path):
         (STRUCTURE, frozenset()),
         (SAVED, frozenset()),
     ]
-    assert changes[0].label == "Rotar pagina 1 a la derecha"
+    assert changes[0].label == "Rotar página 1 a la derecha"
     unsubscribe()
     session.rotate([0], 90)
     assert len(changes) == 4, "dado de baja: ya no recibe avisos"

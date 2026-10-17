@@ -6,14 +6,16 @@ import tkinter as tk
 
 import customtkinter as ctk
 
+from ...i18n import tr
 from .. import style
 from ..dropdown import dropdown_menu
 from ..widgets import icon_button, set_enabled
 from .page_view import FIT_PAGE, FIT_WIDTH, PageView
 
+# Texto mostrado -> modo de zoom (FIT_WIDTH y FIT_PAGE son los identificadores internos).
 ZOOM_OPTIONS = {
-    "Ajustar ancho": FIT_WIDTH,
-    "Ajustar pagina": FIT_PAGE,
+    tr("Ajustar ancho"): FIT_WIDTH,
+    tr("Ajustar página"): FIT_PAGE,
     **{f"{step}%": step for step in (50, 75, 100, 125, 150, 200, 300, 400)},
 }
 
@@ -32,9 +34,9 @@ class ViewerToolbar(ctk.CTkFrame):
 
         navigation = ctk.CTkFrame(self, fg_color="transparent")
         navigation.pack(side="left")
-        self.first = icon_button(navigation, "first", lambda: view.go_to(0), "Primera pagina (Inicio)")
+        self.first = icon_button(navigation, "first", lambda: view.go_to(0), tr("Primera página (Inicio)"))
         self.previous = icon_button(
-            navigation, "previous", lambda: view.go_to(view.current_page - 1), "Pagina anterior (RePag)"
+            navigation, "previous", lambda: view.go_to(view.current_page - 1), tr("Página anterior (RePág)")
         )
         self.first.pack(side="left", padx=1)
         self.previous.pack(side="left", padx=1)
@@ -51,15 +53,15 @@ class ViewerToolbar(ctk.CTkFrame):
             self.page_label.pack(side="left", padx=2)
             self.total = None
         self.next = icon_button(
-            navigation, "next", lambda: view.go_to(view.current_page + 1), "Pagina siguiente (AvPag)"
+            navigation, "next", lambda: view.go_to(view.current_page + 1), tr("Página siguiente (AvPág)")
         )
-        self.last = icon_button(navigation, "last", lambda: view.go_to(view.page_count - 1), "Ultima pagina (Fin)")
+        self.last = icon_button(navigation, "last", lambda: view.go_to(view.page_count - 1), tr("Última página (Fin)"))
         self.next.pack(side="left", padx=1)
         self.last.pack(side="left", padx=1)
 
         zoom = ctk.CTkFrame(self, fg_color="transparent")
         zoom.pack(side="right")
-        self.zoom_out = icon_button(zoom, "zoom_out", view.zoom_out, "Alejar (Ctrl + rueda)")
+        self.zoom_out = icon_button(zoom, "zoom_out", view.zoom_out, tr("Alejar (Ctrl + rueda)"))
         self.zoom_out.pack(side="left", padx=1)
         if zoom_menu:
             self.zoom_menu = dropdown_menu(zoom, list(ZOOM_OPTIONS), self._choose_zoom, width=128, height=28)
@@ -69,9 +71,9 @@ class ViewerToolbar(ctk.CTkFrame):
             self.zoom_menu = None
             self.zoom_label = ctk.CTkLabel(zoom, text="", width=52, font=style.fonts().body)
             self.zoom_label.pack(side="left")
-        self.zoom_in = icon_button(zoom, "zoom_in", view.zoom_in, "Acercar (Ctrl + rueda)")
+        self.zoom_in = icon_button(zoom, "zoom_in", view.zoom_in, tr("Acercar (Ctrl + rueda)"))
         self.zoom_in.pack(side="left", padx=1)
-        self.fit = icon_button(zoom, "fit", lambda: view.set_zoom(FIT_PAGE), "Ajustar pagina a la ventana")
+        self.fit = icon_button(zoom, "fit", lambda: view.set_zoom(FIT_PAGE), tr("Ajustar página a la ventana"))
         self.fit.pack(side="left", padx=(4, 0))
 
         # Espacio libre entre navegacion y zoom (p. ej. el nombre del documento en Firmar).
@@ -102,10 +104,12 @@ class ViewerToolbar(ctk.CTkFrame):
             return
         self._last_state = state
         if self.page_label is not None:
-            self.page_label.configure(text=f"Pagina {page + 1} de {count}" if has_document else "Sin documento")
+            self.page_label.configure(
+                text=tr("Página {n} de {total}", n=page + 1, total=count) if has_document else tr("Sin documento")
+            )
         else:
             self.page_var.set(str(page + 1) if has_document else "")
-            self.total.configure(text=f"de {count}" if has_document else "")
+            self.total.configure(text=tr("de {total}", total=count) if has_document else "")
         set_enabled(self.first, has_document and page > 0)
         set_enabled(self.previous, has_document and page > 0)
         set_enabled(self.next, has_document and page < count - 1)
