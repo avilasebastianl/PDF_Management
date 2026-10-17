@@ -35,6 +35,7 @@ class BasePage(ctk.CTkFrame):
     subtitle: str = ""
     icon_name: str = ""
     scrollable: bool = True
+    show_header: bool = True  # False: sin titulo grande, para secciones que necesitan todo el espacio (Visor)
 
     def __init__(self, master, app: MainWindow) -> None:
         super().__init__(master, fg_color="transparent", corner_radius=0)
@@ -42,13 +43,15 @@ class BasePage(ctk.CTkFrame):
         self.log_area = self.name  # seccion para el registro de eventos (ver events.area_of)
         self.passwords: Passwords = {}
 
-        PageHeader(self, self.title, self.subtitle).pack(fill="x", padx=style.PAD, pady=(style.PAD, style.GAP))
+        if self.show_header:
+            PageHeader(self, self.title, self.subtitle).pack(fill="x", padx=style.PAD, pady=(style.PAD, style.GAP))
+        pad = style.PAD if self.show_header else style.COMPACT_PAD
         if self.scrollable:
             self.body = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
-            self.body.pack(fill="both", expand=True, padx=(style.PAD - 6, 6), pady=(0, 0))
+            self.body.pack(fill="both", expand=True, padx=(pad - 6, 6), pady=(0 if self.show_header else pad, 0))
         else:
             self.body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
-            self.body.pack(fill="both", expand=True, padx=style.PAD)
+            self.body.pack(fill="both", expand=True, padx=pad, pady=(0 if self.show_header else pad, 0))
         self.body.grid_columnconfigure(0, weight=1)
         self.build()
 

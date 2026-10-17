@@ -87,7 +87,7 @@ def secondary_button(parent, text: str, command: Callable, icon_name: str | None
         text=text,
         command=command,
         image=icon(icon_name, 16) if icon_name else None,
-        height=34,
+        height=kwargs.pop("height", 34),
         fg_color="transparent",
         hover_color=style.HOVER,
         border_width=1,

@@ -109,6 +109,14 @@ class ThumbnailStrip(ctk.CTkFrame):
         self._highlight(self.view.current_page)
         self._schedule()
 
+    def refresh_pages(self, pages) -> None:
+        """Vuelve a dibujar las miniaturas cuyo contenido cambio (p. ej. al anotar)."""
+        for page in pages:
+            entry = self._images.pop(page, None)
+            if entry is not None:
+                self.canvas.delete(entry[0])
+        self._schedule()
+
     # * Dibujo --------------------------------------------------------------
 
     def _schedule(self) -> None:

@@ -15,7 +15,7 @@ from .. import paths
 from ..signatures import signature_path_for
 from . import style
 from .events import debug_event
-from .widgets import primary_button, secondary_button
+from .widgets import muted_label, primary_button, secondary_button
 
 
 def _prepare_toplevel(window: ctk.CTkToplevel, parent, title: str, width: int, height: int, modal: bool) -> None:
@@ -81,6 +81,40 @@ def _password_dialog(parent, title: str, message: str) -> str | None:
     secondary_button(buttons, "Cancelar", window.destroy, width=110).pack(side="right", padx=8)
     entry.bind("<Return>", accept)
     window.after(100, entry.focus_force)
+    parent.wait_window(window)
+    return result["value"]
+
+
+def ask_text(parent, title: str, message: str, initial: str = "") -> str | None:
+    """
+    Pide un texto de varias lineas (notas y texto libre). Devuelve ``None`` si
+    se cancela. Ctrl+Enter acepta y Escape cancela.
+    """
+    window = ctk.CTkToplevel(parent)
+    _prepare_toplevel(window, parent, title, 460, 300, modal=True)
+    window.resizable(False, False)
+    result: dict[str, str | None] = {"value": None}
+
+    ctk.CTkLabel(window, text=message, font=style.fonts().body, wraplength=420, justify="left").pack(
+        fill="x", padx=20, pady=(18, 8)
+    )
+    box = ctk.CTkTextbox(window, height=130, font=style.fonts().body, wrap="word")
+    box.pack(fill="both", expand=True, padx=20)
+    box.insert("1.0", initial)
+
+    def accept(_event=None) -> str:
+        result["value"] = box.get("1.0", "end-1c")
+        window.destroy()
+        return "break"
+
+    buttons = ctk.CTkFrame(window, fg_color="transparent")
+    buttons.pack(fill="x", padx=20, pady=16)
+    primary_button(buttons, "Aceptar", accept, width=110).pack(side="right")
+    secondary_button(buttons, "Cancelar", window.destroy, width=110).pack(side="right", padx=8)
+    muted_label(buttons, "Ctrl+Enter para aceptar").pack(side="left")
+    box.bind("<Control-Return>", accept)
+    window.bind("<Escape>", lambda _event: window.destroy())
+    window.after(100, box.focus_force)
     parent.wait_window(window)
     return result["value"]
 

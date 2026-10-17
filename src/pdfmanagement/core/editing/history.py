@@ -83,20 +83,31 @@ class History:
         Agrupa los cambios del bloque en un solo paso deshacible. Si el bloque
         falla, se deshace lo que alcanzo a modificar.
         """
+        # MuPDF descarta las operaciones vacias: comparar la posicion del journal
+        # evita deshacer (o registrar) un paso que no es de esta operacion.
+        position = self._position()
         self._document.journal_start_op(label)
         try:
             yield
         except BaseException:
             self._document.journal_stop_op()
-            self._document.journal_undo()
+            if self._position() != position:
+                self._document.journal_undo()
             raise
         self._document.journal_stop_op()
+        if self._position() == position:
+            logger.debug("Operacion sin cambios, no se registra: %s", label)
+            return
         if any(state == self._saved_state for state, _label in self._redo):
             self._saved_state = None
         self._undo.append((next(self._ids), label))
         self._redo.clear()
         logger.debug("Operacion registrada: %s (deshacer: %d)", label, len(self._undo))
         self._changed()
+
+    def _position(self) -> int:
+        """Paso actual del journal (cuantas operaciones hay aplicadas)."""
+        return self._document.journal_position()[0]
 
     def undo(self) -> str | None:
         """Deshace la ultima operacion; devuelve su etiqueta."""

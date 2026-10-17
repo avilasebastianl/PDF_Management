@@ -25,6 +25,7 @@ _LAYOUT: dict[str, tuple[str, tuple[str, str] | None]] = {
     "window_width": ("Window", ("Size", "width")),
     "window_height": ("Window", ("Size", "height")),
     "window_maximized": ("Window", None),
+    "sidebar_collapsed": ("Window", None),
     "appearance_mode": ("Appearance", ("Theme", "theme")),
     "color_theme": ("Appearance", ("Theme", "color_theme")),
     "ui_scaling": ("Appearance", ("Display", "ui_scaling")),
@@ -54,8 +55,8 @@ def available_color_themes() -> list[str]:
 class Settings:
     """Preferencias persistentes. Los nombres de campo son las claves del .ini."""
 
-    window_width: int = 1180
-    window_height: int = 760
+    window_width: int = 1360
+    window_height: int = 860
     window_maximized: bool = False
     appearance_mode: str = "System"
     color_theme: str = DEFAULT_COLOR_THEME
@@ -64,6 +65,7 @@ class Settings:
     open_after_save: bool = True
     output_dir: str = ""
     debug_logging: bool = False  # registro detallado (DEBUG) en log/app.log
+    sidebar_collapsed: bool = False  # menu lateral solo con iconos
 
     @property
     def output_path(self) -> Path:

@@ -5,9 +5,11 @@ Es la primera seccion de la aplicacion y el punto de partida para las
 herramientas de edicion: desde aqui el documento se puede enviar a Unir,
 Extraer, Firmar o Proteger.
 
-Organizar paginas (panel Miniaturas, menu contextual o atajos): rotar,
+Organizar paginas (panel Paginas, menu contextual o atajos): rotar,
 eliminar, reordenar arrastrando miniaturas, insertar otro PDF o una pagina en
-blanco. Todo se puede deshacer y se guarda siempre con "Guardar como": el
+blanco. Anotar (barra de anotacion y panel Notas, ver viewer_annotations.py):
+resaltar, subrayar, tachar, notas, texto, formas, lineas, flechas y dibujo a
+mano. Todo se puede deshacer y se guarda siempre con "Guardar como": el
 archivo original nunca se modifica.
 
 Atajos (con la seccion visible): Ctrl+O abrir, Ctrl+S / Ctrl+Mayus+S guardar
@@ -15,7 +17,7 @@ como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
 rotar a la derecha / izquierda, Supr eliminar paginas, Ctrl+F buscar, F3 /
 Mayus+F3 resultado siguiente / anterior, Ctrl+C copiar seleccion, Ctrl+A
 seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
-limpiar.
+terminar la herramienta de anotacion y limpiar la seleccion.
 """
 
 import tkinter as tk
@@ -30,12 +32,14 @@ from ...core.editing import DocumentSession
 from .. import style
 from ..dialogs import DocumentPropertiesWindow, ask_password
 from ..dropdown import dropdown_menu, set_dropdown_values
-from ..viewer import FIT_WIDTH, HandTool, PageView, TextSelectTool, ThumbnailStrip, ViewerToolbar
+from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
+from ..viewer.annotation_tools import SelectTool
 from ..viewer.panels import OutlinePanel, SearchPanel
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
+from .viewer_annotations import ViewerAnnotations
 
-SIDE_TABS = ("Miniaturas", "Marcadores", "Buscar")
+SIDE_TABS = ("Paginas", "Marcadores", "Buscar", "Notas")
 TOOLS = ("Texto", "Mano")
 SEND_TARGETS = ("Unir", "Extraer", "Firmar", "Proteger")
 RECENT_PLACEHOLDER = "Recientes"
@@ -51,15 +55,18 @@ TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
 class ViewerPage(BasePage):
     name = "Visor"
     title = "Visor de PDF"
-    subtitle = "Lea, busque y copie texto, y organice las paginas: rotar, eliminar, reordenar e insertar."
+    subtitle = "Lea, busque, anote y organice las paginas de cualquier PDF."
     icon_name = "pdf"
     scrollable = False
+    show_header = False  # el visor aprovecha todo el alto; el titulo ya lo indica el menu lateral
 
     def build(self) -> None:
         self.session: DocumentSession | None = None
         self.saved_path: Path | None = None  # ultimo "Guardar como" de esta sesion
         self._signatures_confirmed = False
         self._recent: list[Path] = recent.load_recent()
+        # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
+        self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
         self.body.grid_rowconfigure(1, weight=1)
         self._build_file_bar()
@@ -105,7 +112,7 @@ class ViewerPage(BasePage):
     def _build_side_panel(self) -> None:
         self.side = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
                                  border_width=1, border_color=style.CARD_BORDER, width=272)
-        self.side.grid(row=1, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.PAD))
+        self.side.grid(row=1, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.COMPACT_PAD))
         self.side.grid_propagate(False)
         self.side.pack_propagate(False)
         self.side_tabs = ctk.CTkSegmentedButton(self.side, values=list(SIDE_TABS), command=self._show_side,
@@ -140,9 +147,9 @@ class ViewerPage(BasePage):
     def _build_viewer(self) -> None:
         card = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
                             border_width=1, border_color=style.CARD_BORDER)
-        card.grid(row=1, column=1, sticky="nsew", pady=(0, style.PAD))
+        card.grid(row=1, column=1, sticky="nsew", pady=(0, style.COMPACT_PAD))
         card.grid_columnconfigure(0, weight=1)
-        card.grid_rowconfigure(2, weight=1)
+        card.grid_rowconfigure(3, weight=1)
 
         self.view = PageView(card, continuous=True, placeholder=PLACEHOLDER, on_empty_click=self.browse,
                              on_drop=self._on_drop)
@@ -158,22 +165,33 @@ class ViewerPage(BasePage):
         tips = {TOOLS[0]: "Seleccionar y copiar texto (Ctrl+C)", TOOLS[1]: "Arrastrar para mover la pagina"}
         for value, button in self.tool_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
             ToolTip(button, tips[value])
-        self.search_button = icon_button(top, "zoom_in", self.open_search, "Buscar (Ctrl+F)")
+        self.search_button = icon_button(top, "search", self.open_search, "Buscar (Ctrl+F)")
         self.search_button.pack(side="left")
-        ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(row=1, column=0, sticky="ew", padx=1)
-        self.view.grid(row=2, column=0, sticky="nsew", padx=8, pady=8)
+        self.annotate_button = icon_button(top, "edit", self.toggle_annotation_bar,
+                                           "Mostrar u ocultar la barra de anotacion")
+        self.annotate_button.pack(side="left", padx=(2, 0))
+        ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(row=2, column=0, sticky="ew", padx=1)
+        self.view.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
         self.view.canvas.bind("<ButtonPress-3>", self._on_view_right_click, add="+")
         self.selection_label = muted_label(card, "")
-        self.selection_label.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 6))
+        self.selection_label.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 6))
 
-        self.text_tool = TextSelectTool(self._words_for, on_change=self._on_selection_changed)
+        self.text_tool = SelectTool(
+            self._words_for, self._on_selection_changed,
+            hit_annotation=lambda hit: self.annotations.hit(hit), on_select=lambda info: self.annotations.select(info),
+            on_move=lambda info, dx, dy: self.annotations.move(info, dx, dy),
+            on_edit=lambda info: self.annotations.edit_text(info),
+        )
         self.hand_tool = HandTool()
         self.view.set_tool(self.text_tool)
 
         self.pages_panel = self._build_pages_panel()
         self.outline = OutlinePanel(self.side_stack, self.view)
         self.search = SearchPanel(self.side_stack, self.view)
-        self._side_panels = dict(zip(SIDE_TABS, (self.pages_panel, self.outline, self.search)))
+        self.annotations = ViewerAnnotations(self, card, self.side_stack)
+        self.annotations.bar.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
+        self.annotation_bar_visible = True
+        self._side_panels = dict(zip(SIDE_TABS, (self.pages_panel, self.outline, self.search, self.annotations.panel)))
         self._show_side(SIDE_TABS[0], log=False)
 
     def _bind_shortcuts(self) -> None:
@@ -187,7 +205,7 @@ class ViewerPage(BasePage):
             "<Control-Z>": self.redo,
             "<Control-r>": lambda: self.rotate_pages(90),
             "<Control-R>": lambda: self.rotate_pages(-90),
-            "<Delete>": self.delete_pages,
+            "<Delete>": self._on_delete_key,
             "<Control-f>": self.open_search,
             "<F3>": lambda: self.search.next(),
             "<Shift-F3>": lambda: self.search.previous(),
@@ -257,6 +275,9 @@ class ViewerPage(BasePage):
         self.outline.set_entries(session.table_of_contents())
         self.search.set_document(session.document)
         self.text_tool.clear(self.view)
+        self.annotations.cancel_tool()
+        self.annotations.selected = None
+        self.annotations.reset()
         self.selection_label.configure(text="")
         self._recent = recent.add_recent(session.path)
         set_dropdown_values(self.recent_menu, self._recent_labels())
@@ -297,6 +318,8 @@ class ViewerPage(BasePage):
             self.view.set_document(None)
             self.session.close()
             self.session = None
+            self.annotations.selected = None
+            self.annotations.reset()
 
     def can_close(self) -> bool:
         return self._confirm_discard("cerrar la aplicacion")
@@ -408,6 +431,7 @@ class ViewerPage(BasePage):
         self.outline.set_entries(session.table_of_contents())
         self.search.invalidate()
         self.text_tool.clear(self.view)
+        self.annotations.reset()
         self._refresh_file_state()
 
     def _confirm_signed_edit(self) -> bool:
@@ -524,8 +548,29 @@ class ViewerPage(BasePage):
             self.text_tool.select_all(self.view, self.view.current_page)
 
     def clear_marks(self) -> None:
+        self.annotations.cancel_tool()
+        self.annotations.select(None)
         self.text_tool.clear(self.view)
         self.search.clear()
+
+    def _on_delete_key(self) -> None:
+        """Supr elimina la anotacion seleccionada; si no hay, las paginas seleccionadas."""
+        if not self.annotations.delete_selected():
+            self.delete_pages()
+
+    def toggle_annotation_bar(self) -> None:
+        self.annotation_bar_visible = not self.annotation_bar_visible
+        if self.annotation_bar_visible:
+            self.annotations.bar.grid()
+        else:
+            self.annotations.cancel_tool()
+            self.annotations.bar.grid_remove()
+        self.log_debug("Barra de anotacion %s", "visible" if self.annotation_bar_visible else "oculta")
+
+    def restore_tool(self) -> None:
+        """Vuelve a la herramienta Texto (al terminar una herramienta de anotacion)."""
+        self.tool_selector.set(TOOLS[0])
+        self.view.set_tool(self.text_tool)
 
     def toggle_side_panel(self) -> None:
         self.side_visible = not self.side_visible
@@ -541,10 +586,15 @@ class ViewerPage(BasePage):
                 panel.pack(fill="both", expand=True)
             else:
                 panel.pack_forget()
+        if name == "Notas":
+            self.annotations.on_panel_shown()
         if log:
             self.log_debug("Panel lateral: %s", name)
 
     def _choose_tool(self, name: str, log: bool = True) -> None:
+        if self.annotations.active is not None:
+            self.annotations.active = None
+            self.annotations._refresh_tool_buttons()  # noqa: SLF001
         self.view.set_tool(self.text_tool if name == TOOLS[0] else self.hand_tool)
         if log:
             self.log("Herramienta: %s", name)
@@ -557,13 +607,18 @@ class ViewerPage(BasePage):
             return
         if hit.page not in self.thumbnails.selected:
             self.thumbnails.set_selection([hit.page], anchor=hit.page)
-        self._show_page_menu(hit.page, event, from_view=True)
+        annotation = self.annotations.hit(hit)
+        if annotation is not None:
+            self.annotations.select(annotation)
+        self._show_page_menu(hit.page, event, from_view=True, annotation=annotation)
 
-    def _page_menu(self, from_view: bool = False) -> tk.Menu:
+    def _page_menu(self, from_view: bool = False, annotation=None) -> tk.Menu:
         """Menu de las paginas seleccionadas (miniaturas o clic derecho en el visor)."""
         pages = self.thumbnails.selection()
         subject = f"pagina {pages[0] + 1}" if len(pages) == 1 else f"{len(pages)} paginas"
         menu = tk.Menu(self, tearoff=0)
+        if annotation is not None:
+            self.annotations.add_menu_items(menu, annotation)
         if from_view and self.text_tool.selected_text():
             menu.add_command(label="Copiar texto", accelerator="Ctrl+C", command=self.copy_selection)
             menu.add_separator()
@@ -578,10 +633,10 @@ class ViewerPage(BasePage):
         menu.add_command(label="Insertar pagina en blanco despues", command=lambda: self.insert_blank(max(pages) + 1))
         return menu
 
-    def _show_page_menu(self, page: int, event, from_view: bool = False) -> None:
+    def _show_page_menu(self, page: int, event, from_view: bool = False, annotation=None) -> None:
         if self.session is None:
             return
-        menu = self._page_menu(from_view)
+        menu = self._page_menu(from_view, annotation)
         self.log_debug("Menu de paginas abierto", pagina=page + 1, origen="visor" if from_view else "miniaturas")
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -639,7 +694,7 @@ class ViewerPage(BasePage):
         set_enabled(self.properties_button, session is not None)
         set_enabled(self.undo_button, session is not None and session.history.can_undo)
         set_enabled(self.redo_button, session is not None and session.history.can_redo)
-        for button in self.page_buttons:
+        for button in (*self.page_buttons, *self.annotations.tool_buttons.values()):
             set_enabled(button, session is not None)
         self._on_pages_selected(sorted(self.thumbnails.selected))
 

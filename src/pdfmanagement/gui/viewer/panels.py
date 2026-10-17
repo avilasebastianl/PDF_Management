@@ -1,5 +1,5 @@
 """
-Paneles laterales del visor: marcadores (indice) y busqueda.
+Paneles laterales del visor: marcadores (indice), busqueda y anotaciones.
 
 Usan ``tk.Listbox`` (con los colores del tema) en lugar de un widget de
 CustomTkinter por fila: listas de miles de entradas siguen siendo instantaneas.
@@ -14,10 +14,10 @@ from collections.abc import Callable, Iterator
 import customtkinter as ctk
 import pymupdf
 
-from ...core.editing import SearchHit, SearchOptions, iter_search
+from ...core.editing import AnnotationInfo, SearchHit, SearchOptions, iter_search
 from .. import style
 from ..events import log_event
-from ..widgets import icon_button, muted_label, set_enabled
+from ..widgets import icon_button, muted_label, secondary_button, set_enabled
 from .page_view import PageView
 
 SEARCH_BUDGET_MS = 15       # tiempo maximo de busqueda por ciclo de eventos
@@ -98,6 +98,63 @@ class OutlinePanel(ctk.CTkFrame):
         if page >= 1:
             log_event("Visor", "Marcador: %s", title, pagina=page)
             self.view.go_to(page - 1)
+
+
+class AnnotationsPanel(ctk.CTkFrame):
+    """Anotaciones del documento: ir a cada una, editar su texto o eliminarla."""
+
+    def __init__(self, master, *, on_select: Callable[[AnnotationInfo], None],
+                 on_edit: Callable[[], None], on_delete: Callable[[], None]) -> None:
+        super().__init__(master, fg_color="transparent", corner_radius=0)
+        self.on_select = on_select
+        self.annotations: list[AnnotationInfo] = []
+        self.count = muted_label(self, "")
+        self.count.pack(fill="x", padx=10, pady=(0, 4))
+        self.list = ThemedList(self, self._selected)
+        self.list.pack(fill="both", expand=True)
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.pack(fill="x", padx=6, pady=(6, 0))
+        self.edit_button = secondary_button(buttons, "Editar texto", on_edit, "edit", width=118, height=30)
+        self.edit_button.pack(side="left")
+        self.delete_button = secondary_button(buttons, "Eliminar", on_delete, "delete", width=100, height=30)
+        self.delete_button.pack(side="left", padx=(6, 0))
+        self.set_annotations([])
+
+    def set_annotations(self, annotations: list[AnnotationInfo], selected: AnnotationInfo | None = None) -> None:
+        self.annotations = annotations
+        self.list.set_items([self._describe(info) for info in annotations])
+        total = len(annotations)
+        self.count.configure(
+            text="Sin anotaciones. Use la barra de anotacion sobre el visor." if not total
+            else f"{total} anotacion{'es' if total != 1 else ''} · clic para ir"
+        )
+        self.show_selected(selected)
+
+    def show_selected(self, selected: AnnotationInfo | None) -> None:
+        index = next((i for i, info in enumerate(self.annotations)
+                      if selected is not None and (info.page, info.xref) == (selected.page, selected.xref)), None)
+        self.list.listbox.selection_clear(0, "end")
+        if index is not None:
+            self.list.listbox.selection_set(index)
+            self.list.listbox.see(index)
+        set_enabled_button(self.edit_button, selected is not None and selected.has_text)
+        set_enabled_button(self.delete_button, selected is not None)
+
+    @staticmethod
+    def _describe(info: AnnotationInfo) -> str:
+        content = " ".join(info.content.split())
+        detail = f": {content[:48]}{'...' if len(content) > 48 else ''}" if content else ""
+        return f"p. {info.page + 1}  ·  {info.label}{detail}"
+
+    def _selected(self, index: int) -> None:
+        if 0 <= index < len(self.annotations):
+            self.on_select(self.annotations[index])
+
+
+def set_enabled_button(button: ctk.CTkButton, enabled: bool) -> None:
+    state = "normal" if enabled else "disabled"
+    if button.cget("state") != state:
+        button.configure(state=state)
 
 
 class SearchPanel(ctk.CTkFrame):

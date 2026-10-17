@@ -1,0 +1,194 @@
+"""
+Anotaciones en el Visor (fase 3) y menu lateral contraible.
+
+Los gestos se simulan con eventos del lienzo en coordenadas de la pagina, como
+los haria el raton. Requiere una pantalla (se omite si Tk no puede crear ventanas).
+"""
+
+import pytest
+
+from conftest import make_pdf, pump
+from pdfmanagement.gui.pages import viewer_annotations
+
+
+class Event:
+    def __init__(self, view, page, x, y):
+        cx, cy = view.page_to_canvas(page, x, y)
+        self.x = int(cx - view.canvas.canvasx(0))
+        self.y = int(cy - view.canvas.canvasy(0))
+        self.state = 0
+        self.x_root = self.y_root = 0
+
+
+def gesture(viewer, points, page=0, double=False):
+    view = viewer.view
+    view._dispatch("press", Event(view, page, *points[0]))
+    for point in points[1:]:
+        view._dispatch("drag", Event(view, page, *point))
+    view._dispatch("release", Event(view, page, *points[-1]))
+    if double:
+        view._dispatch("double", Event(view, page, *points[-1]))
+
+
+@pytest.fixture
+def viewer(gui_app, tmp_path):
+    gui_app.show_page("Visor")
+    page = gui_app.pages["Visor"]
+    assert page.open_file(make_pdf(tmp_path / "contrato.pdf", 3))
+    page.view.set_zoom(100)
+    pump(gui_app, timeout=0.4)
+    yield page
+    page.clear_marks()
+    page._close_session()
+
+
+def kinds(viewer, page=0):
+    return [info.kind for info in viewer.session.annotations(page)]
+
+
+def test_highlight_selected_text_with_one_click(viewer, gui_app):
+    viewer.text_tool.select_all(viewer.view, 0)
+    viewer.annotations.select_tool("highlight")
+    assert kinds(viewer) == ["Highlight"]
+    assert viewer.annotations.active is None, "con texto seleccionado no cambia de herramienta"
+    assert viewer.session.history.undo_label == "Resaltar texto (pagina 1)"
+    assert "Ctrl+Z" in viewer.selection_label.cget("text")
+
+
+def test_markup_tool_drag_over_text(viewer):
+    viewer.annotations.set_color("Rojo")
+    viewer.annotations.select_tool("strikeout")
+    assert viewer.annotations.tool_buttons["strikeout"].cget("fg_color") != "transparent"
+    gesture(viewer, [(70, 65), (150, 70)])
+    assert kinds(viewer) == ["StrikeOut"]
+    assert viewer.session.annotations(0)[0].color == pytest.approx((0.9, 0.15, 0.15), abs=0.01)
+
+
+def test_drag_shapes_lines_and_ink(viewer):
+    annotations = viewer.annotations
+    annotations.select_tool("rect")
+    gesture(viewer, [(100, 200), (180, 250), (250, 300)])
+    annotations.select_tool("arrow")
+    gesture(viewer, [(100, 350), (300, 420)])
+    annotations.select_tool("ink")
+    gesture(viewer, [(100 + i * 8, 500 + (i % 3) * 6) for i in range(12)])
+    annotations.select_tool("ellipse")
+    gesture(viewer, [(300, 200), (301, 201)])  # un clic no dibuja nada
+    assert kinds(viewer) == ["Square", "Line", "Ink"]
+    assert "Arrastre" in viewer.selection_label.cget("text")
+    viewer.undo()
+    assert kinds(viewer) == ["Square", "Line"]
+
+
+def test_note_and_free_text_ask_for_text(viewer, monkeypatch):
+    answers = iter(["Revisar", None, "APROBADO"])
+    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: next(answers))
+    annotations = viewer.annotations
+    annotations.select_tool("note")
+    gesture(viewer, [(400, 100)])
+    gesture(viewer, [(400, 200)])  # cancelada: no agrega nada
+    annotations.select_tool("free_text")
+    gesture(viewer, [(100, 600)])  # clic: cuadro de tamano estandar
+    infos = viewer.session.annotations(0)
+    assert [(info.kind, info.content) for info in infos] == [("Text", "Revisar"), ("FreeText", "APROBADO")]
+    assert infos[1].rect.width == pytest.approx(220, abs=2)
+
+
+def test_select_move_edit_and_delete(viewer, monkeypatch):
+    session = viewer.session
+    annotations = viewer.annotations
+    annotations.select_tool("rect")
+    gesture(viewer, [(100, 200), (200, 260)])
+    annotations.cancel_tool()
+    assert viewer.view.tool is viewer.text_tool and viewer.tool_selector.get() == "Texto"
+    before = session.annotations(0)[0].rect
+    gesture(viewer, [(101, 230), (130, 250), (160, 270)])  # arrastrar el borde del rectangulo
+    after = session.annotations(0)[0]
+    assert after.rect.x0 == pytest.approx(before.x0 + 60, abs=2) and after.rect.y0 == pytest.approx(before.y0 + 40, abs=2)
+    assert annotations.selected is not None and annotations.selected.xref == after.xref
+    annotations.set_color("Verde")  # cambia el color de la seleccionada
+    assert session.history.undo_label == "Cambiar color de rectangulo"
+    viewer._on_delete_key()  # Supr: elimina la anotacion, no la pagina
+    assert kinds(viewer) == [] and session.page_count == 3
+
+    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "nuevo texto")
+    session.add_note(0, (300, 300), "viejo", annotations.style())
+    annotations.reset()
+    gesture(viewer, [(305, 305)], double=True)
+    assert session.annotations(0)[0].content == "nuevo texto"
+
+
+def test_dragging_on_highlight_still_selects_text(viewer):
+    viewer.text_tool.select_all(viewer.view, 0)
+    viewer.annotations.select_tool("highlight")
+    gesture(viewer, [(75, 65), (130, 68)])
+    assert viewer.text_tool.selected_text(), "sobre un resaltado, arrastrar selecciona texto"
+    assert viewer.annotations.selected is None
+
+
+def test_annotations_panel_and_context_menu(viewer, gui_app, monkeypatch):
+    session = viewer.session
+    style = viewer.annotations.style()
+    session.add_note(1, (100, 100), "en la segunda", style)
+    session.add_shape(0, "ellipse", (100, 100, 200, 200), style)
+    viewer.annotations.reset()
+    viewer.side_tabs.set("Notas")
+    viewer._show_side("Notas")
+    pump(gui_app, timeout=0.2)
+    panel = viewer.annotations.panel
+    items = [panel.list.listbox.get(i) for i in range(panel.list.listbox.size())]
+    assert items == ["p. 1  ·  Elipse", "p. 2  ·  Nota: en la segunda"]
+    panel._selected(1)
+    assert viewer.annotations.selected.content == "en la segunda" and viewer.view.current_page == 1
+    assert panel.edit_button.cget("state") == "normal"
+    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "editada")
+    viewer.annotations.edit_text()
+    assert session.annotations(1)[0].content == "editada"
+    assert panel.list.listbox.get(1) == "p. 2  ·  Nota: editada"
+    menu = viewer._page_menu(from_view=True, annotation=viewer.annotations.selected)
+    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) in ("command", "cascade")]
+    assert labels[:3] == ["Editar texto de la nota...", "Color", "Eliminar nota"]
+    menu.destroy()
+    viewer.side_tabs.set("Paginas")
+    viewer._show_side("Paginas", log=False)
+
+
+def test_escape_ends_annotation_tool(viewer):
+    viewer.annotations.select_tool("ink")
+    assert viewer.view.tool is not viewer.text_tool
+    viewer.clear_marks()
+    assert viewer.annotations.active is None and viewer.view.tool is viewer.text_tool
+    viewer.toggle_annotation_bar()
+    assert not viewer.annotations.bar.winfo_ismapped() or not viewer.annotation_bar_visible
+    viewer.toggle_annotation_bar()
+    assert viewer.annotation_bar_visible
+
+
+def test_sidebar_collapses_to_icons(gui_app):
+    assert not gui_app.settings.sidebar_collapsed
+    gui_app.toggle_sidebar()
+    pump(gui_app, timeout=0.2)
+    assert gui_app.settings.sidebar_collapsed
+    assert gui_app.sidebar.cget("width") == 64
+    assert all(button.cget("text") == "" for button in gui_app.nav_buttons.values())
+    assert not gui_app._brand.winfo_ismapped()
+    # Contraido, el tooltip dice el nombre de la seccion.
+    assert _tooltips(gui_app.nav_buttons["Firmar"]) == ["Firmar  (Ctrl+5)"]
+    gui_app.toggle_sidebar()
+    pump(gui_app, timeout=0.2)
+    assert gui_app.nav_buttons["Firmar"].cget("text") == "  Firmar"
+    assert gui_app.sidebar.cget("width") == 220
+    from pdfmanagement.gui.pages.registry import PAGES
+
+    title = next(page.title for page in PAGES if page.name == "Firmar")
+    assert _tooltips(gui_app.nav_buttons["Firmar"]) == [f"{title}  (Ctrl+5)"]
+
+
+def _tooltips(widget):
+    """Textos de los ToolTip enlazados al widget (se buscan entre los objetos vivos)."""
+    import gc
+
+    from pdfmanagement.gui.widgets import ToolTip
+
+    found = [obj for obj in gc.get_objects() if isinstance(obj, ToolTip) and obj.widget is widget]
+    return [tip.text() if callable(tip.text) else tip.text for tip in found]

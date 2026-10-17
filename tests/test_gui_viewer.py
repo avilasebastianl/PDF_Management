@@ -129,11 +129,11 @@ def test_protected_pdf_asks_for_password(gui_app, manual_pdf, tmp_path, monkeypa
 
 def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
     gui_app.show_page("Unir")
-    viewer.side_tabs.set("Miniaturas")
-    viewer._show_side("Miniaturas", log=False)
+    viewer.side_tabs.set("Paginas")
+    viewer._show_side("Paginas", log=False)
     event = type("E", (), {"keysym": "f"})()
     assert viewer._shortcut(event, viewer.open_search) is None
-    assert viewer.side_tabs.get() == "Miniaturas"
+    assert viewer.side_tabs.get() == "Paginas"
     gui_app.show_page("Visor")
     assert viewer._shortcut(event, viewer.open_search) == "break"
     assert viewer.side_tabs.get() == "Buscar"

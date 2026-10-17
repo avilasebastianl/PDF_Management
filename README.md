@@ -35,7 +35,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 
 | Seccion | Que hace | Detalles |
 |---|---|---|
-| **Visor** | Abre, lee y **organiza** PDFs | Desplazamiento continuo virtualizado, miniaturas, marcadores, busqueda incremental (mayusculas / palabras completas), seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco, con deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
+| **Visor** | Abre, lee, **anota** y **organiza** PDFs | Desplazamiento continuo virtualizado, miniaturas, marcadores, busqueda incremental (mayusculas / palabras completas), seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco. Anotar: resaltar, subrayar y tachar texto, notas, texto libre, rectangulos, elipses, lineas, flechas y dibujo a mano, con 5 colores y 3 grosores; seleccionar, mover, recolorear, editar y eliminar anotaciones, y panel **Notas** con todas. Deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
@@ -43,7 +43,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Proteger** | Cifra o descifra un PDF | AES-256, deteccion automatica del estado, confirmacion de contrasena |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, pagina inicial, carpeta de salida |
 
-Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir**, **Mostrar en carpeta** y **Ver en el visor**), atajos `Ctrl+1..7` y `F1`, y una CLI con las mismas operaciones.
+Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir**, **Mostrar en carpeta** y **Ver en el visor**), menu lateral contraible a solo iconos (con el nombre de cada seccion al pasar el cursor), atajos `Ctrl+1..7` y `F1`, y una CLI con las mismas operaciones.
 
 ## Inicio rapido
 
@@ -172,6 +172,7 @@ PDFManagement/
 │   │       ├── history.py      # History: deshacer/rehacer con el journal de PyMuPDF
 │   │       ├── pages.py        # Rotar, eliminar, mover e insertar paginas (compatibles con el journal)
 │   │       ├── text.py         # Texto en coordenadas visibles sin modificar la pagina
+│   │       ├── annotations.py  # Crear, mover, recolorear, editar y eliminar anotaciones
 │   │       └── search.py       # iter_search: busqueda incremental por paginas
 │   └── gui/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
@@ -190,10 +191,12 @@ PDFManagement/
 │       │   ├── toolbar.py      # ViewerToolbar: navegacion y zoom
 │       │   ├── thumbnails.py   # ThumbnailStrip: miniaturas perezosas
 │       │   ├── tools.py        # HandTool, TextSelectTool
-│       │   └── panels.py       # OutlinePanel (marcadores), SearchPanel (busqueda)
+│       │   ├── annotation_tools.py  # Gestos de anotacion: marcar texto, arrastrar formas, trazo, nota, seleccionar/mover
+│       │   └── panels.py       # OutlinePanel (marcadores), SearchPanel (busqueda), AnnotationsPanel (notas)
 │       └── pages/
 │           ├── registry.py     # Lista ordenada de paginas
 │           ├── base.py         # BasePage
+│           ├── viewer_annotations.py  # ViewerAnnotations: barra, colores, seleccion y panel de anotaciones
 │           └── viewer.py · merge.py · extract.py · convert.py · sign.py · security.py · settings.py
 └── tests/                      # Pruebas automatizadas (pytest)
 ```
@@ -234,6 +237,8 @@ Todas las funciones validan sus entradas, escriben el resultado de forma atomica
 | `DocumentSession.save_as(output, keep_encryption=True)` | **Siempre Guardar como**: rechaza escribir sobre el original, guarda una copia compacta (`garbage=3`, `deflate`) de forma atomica y conserva el cifrado AES-256 con la misma contrasena si se pide; el historial de deshacer sigue disponible |
 | `DocumentSession.rotate(pages, angle)`, `delete(pages)`, `move(pages, target)`, `insert_pdf(path, at, password=None)`, `insert_blank(at, size=None)` | Organizar paginas (indices desde 0). Cada llamada es **un paso deshacible** con etiqueta legible ("Mover 3 paginas"); `delete` nunca deja el documento vacio; `move` devuelve los nuevos indices y no registra nada si el orden no cambia; `insert_pdf` pide contrasena con los errores tipados y copia contenido, rotacion y anotaciones |
 | `DocumentSession.undo()`, `redo()` | Deshacer/rehacer y descartar la cache de texto |
+| `DocumentSession.add_markup(page, kind, rects, style)`, `add_note()`, `add_free_text()`, `add_shape()`, `add_line(..., arrow)`, `add_ink()` | Anotaciones en coordenadas de la pagina **tal como se ve** (tambien giradas); cada una es un paso deshacible ("Resaltar texto (pagina 3)"). `AnnotationStyle(color, width, opacity)` |
+| `DocumentSession.annotations(page=None)`, `move_annotation()`, `delete_annotation()`, `set_annotation_color()`, `set_annotation_text()` | Listar (`AnnotationInfo`: tipo, etiqueta en espanol, rectangulo visible, contenido, color, `movable`, `has_text`) y editar anotaciones existentes; mover devuelve el xref nuevo si hubo que recrearla |
 | `History(document, on_change)` | Deshacer/rehacer sobre el *journal* de PyMuPDF: `with history.operation("Rotar"):` agrupa cambios y, si algo falla, revierte la operacion; `undo()`, `redo()`, `undo_label`, `redo_label`, `undo_depth`, `modified` (vuelve a "sin cambios" al deshacer hasta lo guardado), `mark_saved()` |
 | `pages.insert_document()`, `pages.insert_blank_page()` | Insertan con las primitivas de MuPDF (`pdf_graft_mapped_page`, `pdf_add_page`), las unicas que funcionan dentro de una operacion del journal |
 | `text.page_words(page, sort=False)`, `text.page_search(page, query)` | Texto y busqueda en coordenadas de la pagina **tal como se ve**, sin tocar el documento (ver Decisiones de diseno) |
@@ -271,8 +276,8 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 
 | Elemento | Responsabilidad |
 |---|---|
-| `MainWindow` (`app.py`) | Crea la ventana (CustomTkinter + tkdnd), barra lateral, precarga y apilado de paginas, barra de estado, `notify_success()`, `show_error()`, apariencia, reinicio, recordar tamano |
-| `BasePage` (`pages/base.py`) | Encabezado, `run_task()` (hilo + reintento con contrasena), `resolve_output()` (politica de sobrescritura), `default_output()`, `guard()` |
+| `MainWindow` (`app.py`) | Crea la ventana (CustomTkinter + tkdnd), barra lateral contraible (`toggle_sidebar()`, se recuerda en `sidebar_collapsed`), precarga y apilado de paginas, barra de estado, `notify_success()`, `show_error()`, apariencia, reinicio, recordar tamano |
+| `BasePage` (`pages/base.py`) | Encabezado (`show_header = False` para secciones que necesitan todo el espacio, como el Visor), `run_task()` (hilo + reintento con contrasena), `resolve_output()` (politica de sobrescritura), `default_output()`, `guard()` |
 | `TaskRunner` (`tasks.py`) | Pool de 2 hilos; el hilo de la GUI sondea cada 80 ms y ejecuta los callbacks |
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
 | `AppearanceScheduler` (`appearance.py`) | Al cambiar de tema redibuja primero lo que se ve, con el pintado congelado, y difiere por lotes las secciones ocultas y las filas fuera de vista; `flush_page()` actualiza una seccion pendiente antes de mostrarla |
@@ -280,9 +285,11 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
-| `ViewerPage` (`pages/viewer.py`) | Seccion Visor (la primera): barra de archivo (Abrir, Recientes, deshacer/rehacer, Propiedades, Guardar como, Enviar a...), panel lateral plegable (Miniaturas con barra de organizacion / Marcadores / Buscar), menu contextual de paginas, aviso de cambios sin guardar (abrir otro, Enviar a, cerrar la ventana) y de firmas digitales, atajos activos solo en esta seccion |
+| `ViewerPage` (`pages/viewer.py`) | Seccion Visor (la primera): barra de archivo (Abrir, Recientes, deshacer/rehacer, Propiedades, Guardar como, Enviar a...), barra de anotacion (se oculta con el boton del lapiz), panel lateral plegable (Paginas con barra de organizacion / Marcadores / Buscar / Notas), menu contextual de paginas y anotaciones, aviso de cambios sin guardar (abrir otro, Enviar a, cerrar la ventana) y de firmas digitales, atajos activos solo en esta seccion |
 | `PageView` (`viewer/page_view.py`) | Lienzo de paginas continuo o de pagina unica: solo dibuja las paginas visibles (+-1) y libera las lejanas, zoom por pasos o ajustado (`FIT_WIDTH`, `FIT_PAGE`) anclado al cursor, mosaicos con zoom alto, conversion `canvas_to_page` / `page_to_canvas`, resaltados de busqueda y herramientas enchufables (`Tool`) |
 | `RenderScheduler` (`viewer/render.py`) | Dibuja una imagen por ciclo de eventos en el hilo de la interfaz, por prioridad, con cache LRU de 200 MB; los pedidos obsoletos se descartan (`cancel_where` por solicitante) |
+| `ViewerAnnotations` (`pages/viewer_annotations.py`) | Herramientas de anotacion (resaltar/subrayar/tachar se aplican al instante si ya hay texto seleccionado), 5 colores, 3 grosores, seleccion con contorno discontinuo, mover arrastrando, doble clic para editar texto, Supr para eliminar, menu contextual y panel Notas; tras cada cambio solo se redibuja esa pagina y su miniatura |
+| `SelectTool`, `MarkupTool`, `DragTool`, `InkTool`, `NoteTool` (`viewer/annotation_tools.py`) | Gestos con vista previa en el lienzo; sobre un resaltado, arrastrar sigue seleccionando el texto de debajo |
 | `ViewerToolbar`, `ThumbnailStrip`, `HandTool`, `TextSelectTool`, `OutlinePanel`, `SearchPanel` (`viewer/`) | Navegacion y zoom; miniaturas perezosas con seleccion multiple (clic, Ctrl, Mayus), arrastre para reordenar con linea de destino y desplazamiento automatico; mano; seleccion de texto por palabras entre paginas; marcadores; busqueda incremental con presupuesto de 15 ms por ciclo |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
 
@@ -436,9 +443,10 @@ Ejemplo de `settings.ini`:
 
 ```ini
 [Window]
-window_width = 1180
-window_height = 760
+window_width = 1360
+window_height = 860
 window_maximized = no
+sidebar_collapsed = no
 
 [Appearance]
 appearance_mode = System
@@ -501,6 +509,10 @@ Las **contrasenas nunca se registran**: los valores cuya clave parece una contra
 - **Historial con el journal de PyMuPDF y Guardar como desde una copia.** Guardar con `garbage` sobre el documento vivo borra el historial; por eso `save_as` guarda una copia (`tobytes()`) y el usuario puede seguir deshaciendo tras guardar. Nunca se sobrescribe el original.
 - **Primitivas de MuPDF para insertar.** `insert_pdf` y `new_page` de PyMuPDF 1.28 consultan el journal de una forma que MuPDF rechaza dentro de una operacion, asi que no se pueden deshacer. `core/editing/pages.py` usa `pdf_graft_mapped_page` y `pdf_add_page`, y copia las anotaciones a mano (sin `/P` hacia la pagina de origen y sin enlaces internos del otro documento, que arrastrarian paginas ajenas).
 - **Texto sin girar la pagina.** `Page.get_text` y `search_for` ponen la rotacion a 0 mientras extraen: con el journal activo eso lanza un error y, ademas, devuelve coordenadas sin rotar. `core/editing/text.py` extrae sin tocar la pagina y obtiene directamente las coordenadas visibles (verificado en 0/90/180/270).
+- **Anotaciones en coordenadas visibles.** `core/editing/annotations.py` recibe y devuelve coordenadas de la pagina tal como se ve y convierte con `derotation_matrix`; el texto libre se escribe con `rotate=page.rotation` para que quede derecho. `Annot` guarda una referencia debil a su `Page`, asi que la pagina se mantiene viva mientras se usa.
+- **Mover anotaciones.** `set_rect` sirve para texto libre, rectangulos y elipses (descontando el borde, que `annot.rect` incluye y `set_rect` vuelve a sumar: si no, crecian en cada movimiento). Notas, lineas y dibujos se recrean desplazados con sus propiedades (color, grosor, opacidad, puntas de flecha, texto).
+- **Operaciones vacias del historial.** MuPDF descarta las operaciones que no cambian nada; `History` compara la posicion del journal antes y despues para no registrarlas y, si una operacion falla antes de modificar, para no deshacer por error la anterior.
+- **El visor ocupa todo el espacio libre.** El Visor no muestra el titulo grande (`show_header = False`) y su columna lateral no tiene peso en la cuadricula: antes el espacio sobrante se repartia y quedaba un hueco entre el panel y las paginas. Con el menu contraido el area de las paginas pasa de 735 a 956 px de ancho en una ventana de 1360 px.
 - **No leer `needs_pass` despues de autenticar.** MuPDF reintenta con contrasena vacia y reemplaza la clave buena: el PDF protegido se leia en blanco. El estado de cifrado se toma de `metadata["encryption"]`.
 - **Un solo visor.** Firmar usa el mismo `PageView` que el Visor (en modo pagina unica) con la firma como herramienta (`Tool`); las mejoras de rendimiento benefician a ambas secciones.
 - **Sin redibujos innecesarios.** CustomTkinter redibuja en cada `configure`, por eso los widgets se crean con su estado final y la barra lateral y Ajustes solo actualizan lo que cambio.
@@ -527,6 +539,8 @@ venv\Scripts\python.exe -m pytest
 | `tests/test_logging.py` | Formato del registro, modo detallado en caliente y por variable de entorno, contrasenas ocultas, una linea por evento, eventos de navegacion, ajustes, archivos y tareas |
 | `tests/test_gui_dropdown.py` | Desplegables: tamano segun la cantidad de opciones, barra de desplazamiento, resaltado, seleccion, clics reales (abrir, cerrar, clic fuera), controles destruidos al cerrar (requiere pantalla) |
 | `tests/test_editing.py` | `DocumentSession` (indice, propiedades, contrasena), deshacer/rehacer y reversion de operaciones fallidas, Guardar como (nunca sobre el original, historial conservado, cifrado conservado o quitado), modos de busqueda, archivos recientes |
+| `tests/test_annotations.py` | Cada tipo de anotacion en paginas normales y giradas (posicion visible exacta, cuadrilateros del resaltado), mover sin deriva (ida y vuelta) conservando propiedades, recolorear, editar texto, eliminar, marcas que no se mueven, guardar y reabrir, anotaciones que viajan con su pagina, operaciones fallidas que no deshacen la anterior |
+| `tests/test_gui_annotations.py` | Resaltar texto seleccionado con un clic, marcar arrastrando, formas, flechas y dibujo con gestos reales, notas y texto con dialogo (y cancelar), seleccionar, mover, recolorear, Supr y doble clic para editar, arrastrar sobre un resaltado, panel Notas y menu contextual, Esc, menu lateral contraible con sus tooltips (requiere pantalla) |
 | `tests/test_page_editing.py` | Rotar, eliminar (nunca todas), mover (al principio, al final, bloques, paginas sueltas), insertar otro PDF (imagenes, rotacion, anotaciones, enlaces) y paginas en blanco, PDF de origen protegido, estado "modificado" respecto de lo guardado, edicion de PDFs cifrados, texto y busqueda en paginas rotadas con historial |
 | `tests/test_gui_viewer.py` | Visor: apertura con miniaturas y marcadores, dibujo virtualizado, navegacion, busqueda con resaltado y ciclo de resultados, seleccionar y copiar, mosaicos y modos de ajuste, Enviar a Unir, PDF protegido (texto legible), atajos solo en el Visor; organizar: rotar y deshacer, arrastrar miniaturas, seleccion multiple y eliminar, insertar PDF protegido y pagina en blanco, Guardar como y avisos de cambios sin guardar (abrir otro, cerrar la ventana), aviso de firmas digitales, menu contextual y Ctrl+Z en campos de texto (requiere pantalla) |
 
@@ -585,7 +599,8 @@ flowchart LR
 - [x] Visor/editor, fase 0: nucleo de edicion (`DocumentSession`, `History`, `iter_search`) y visor reutilizable; Firmar migrado al visor compartido.
 - [x] Visor/editor, fase 1: seccion **Visor** (primera seccion) con miniaturas, marcadores, busqueda, seleccion de texto, zoom por mosaicos y Enviar a...
 - [x] Visor/editor, fase 2: organizar paginas en el Visor (rotar, eliminar, reordenar arrastrando miniaturas, insertar otro PDF o una pagina en blanco) con deshacer/rehacer y **Guardar como**.
-- [ ] Fase 3: anotaciones (resaltar, subrayar, notas, formas, texto libre, dibujo a mano).
+- [x] Visor/editor, fase 3: anotaciones (resaltar, subrayar, tachar, notas, texto libre, formas, lineas, flechas, dibujo a mano) con seleccion, movimiento, color, edicion y panel Notas.
+- [ ] Anotaciones: redimensionar formas y cuadros de texto con asas, y elegir tamano de letra del texto libre.
 - [ ] Fase 4: edicion de contenido (agregar texto e imagenes, **reemplazar texto**, tapar/redactar).
 - [ ] Fase 5: formularios (rellenar campos y aplanar).
 - [ ] Fase 6: seccion **Crear**, en este orden: documento nuevo, desde plantilla, desde imagenes.

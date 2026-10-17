@@ -13,7 +13,6 @@ from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
-from PIL import Image
 from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
@@ -50,6 +49,7 @@ SETTING_LABELS = {
     "open_after_save": "Abrir el archivo al terminar",
     "output_dir": "Carpeta de salida",
     "debug_logging": "Registro detallado",
+    "sidebar_collapsed": "Menu lateral contraido",
 }
 
 
@@ -128,29 +128,35 @@ class MainWindow:
     # * Construccion ----------------------------------------------------------
 
     def _initial_geometry(self) -> str:
-        width, height = self.settings.window_width, self.settings.window_height
+        # Nunca mas grande que la pantalla (deja sitio para la barra de tareas).
+        width = min(self.settings.window_width, self.root.winfo_screenwidth() - 40)
+        height = min(self.settings.window_height, self.root.winfo_screenheight() - 80)
         x = max((self.root.winfo_screenwidth() - width) // 2, 0)
         y = max((self.root.winfo_screenheight() - height) // 3, 0)
         return f"{width}x{height}+{x}+{y}"
 
     def _build_sidebar(self) -> None:
-        sidebar = ctk.CTkFrame(self.root, width=style.SIDEBAR_WIDTH, corner_radius=0, fg_color=style.SIDEBAR_BG)
+        collapsed = self.settings.sidebar_collapsed
+        width = style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH
+        self.sidebar = sidebar = ctk.CTkFrame(self.root, width=width, corner_radius=0, fg_color=style.SIDEBAR_BG)
         sidebar.grid(row=0, column=0, rowspan=2, sticky="nsw")
         sidebar.grid_propagate(False)
         sidebar.grid_columnconfigure(0, weight=1)
         sidebar.grid_rowconfigure(len(PAGES) + 2, weight=1)
 
-        brand = ctk.CTkFrame(sidebar, fg_color="transparent")
-        brand.grid(row=0, column=0, sticky="ew", padx=18, pady=(22, 18))
-        if paths.APP_ICON.exists():
-            logo = Image.open(paths.APP_ICON).convert("RGBA")
-            self._logo = ctk.CTkImage(logo, logo, size=(30, 30))
-            ctk.CTkLabel(brand, text="", image=self._logo).pack(side="left", padx=(0, 10))
-        titles = ctk.CTkFrame(brand, fg_color="transparent")
-        titles.pack(side="left")
-        ctk.CTkLabel(titles, text=__app_name__, font=style.fonts().brand, anchor="w").pack(anchor="w")
+        # Cabecera: boton para contraer/expandir el menu y nombre de la aplicacion.
+        header = ctk.CTkFrame(sidebar, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=12, pady=(18, 14))
+        self.sidebar_toggle = ctk.CTkButton(
+            header, text="", image=icon("menu", 18), width=40, height=40, corner_radius=8,
+            fg_color="transparent", hover_color=style.HOVER, command=self.toggle_sidebar,
+        )
+        self.sidebar_toggle.pack(side="left")
+        ToolTip(self.sidebar_toggle, lambda: "Expandir el menu" if self.settings.sidebar_collapsed else "Contraer el menu")
+        self._brand = ctk.CTkFrame(header, fg_color="transparent")
+        ctk.CTkLabel(self._brand, text=__app_name__, font=style.fonts().brand, anchor="w").pack(anchor="w")
         ctk.CTkLabel(
-            titles, text=f"Version {__version__}", font=style.fonts().small, text_color=style.TEXT_MUTED, anchor="w"
+            self._brand, text=f"Version {__version__}", font=style.fonts().small, text_color=style.TEXT_MUTED, anchor="w"
         ).pack(anchor="w")
 
         for index, page_class in enumerate(PAGES, start=1):
@@ -164,7 +170,10 @@ class MainWindow:
                 command=lambda name=page_class.name: self.show_page(name),
             )
             button.grid(row=index, column=0, sticky="ew", padx=12, pady=2)
-            ToolTip(button, f"{page_class.title}  (Ctrl+{index})")
+            # Contraido solo se ven los iconos: el tooltip dice el nombre de la seccion.
+            ToolTip(button, lambda page=page_class, key=index: (
+                f"{page.name}  (Ctrl+{key})" if self.settings.sidebar_collapsed else f"{page.title}  (Ctrl+{key})"
+            ))
             self.nav_buttons[page_class.name] = button
 
         footer = ctk.CTkFrame(sidebar, fg_color="transparent")
@@ -181,11 +190,33 @@ class MainWindow:
         }
         self.theme_button = ctk.CTkButton(footer, text="", image=icon("moon", 18), command=self.toggle_appearance, **footer_style)
         self.theme_button.grid(row=0, column=0, sticky="ew")
-        help_button = ctk.CTkButton(footer, text="  Ayuda", image=icon("help", 18), command=self.open_help, **footer_style)
-        help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        ToolTip(help_button, "Guia de uso (F1)")
-        self._refresh_theme_button()
+        ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
+        self.help_button = ctk.CTkButton(footer, text="  Ayuda", image=icon("help", 18), command=self.open_help, **footer_style)
+        self.help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ToolTip(self.help_button, "Guia de uso (F1)")
+        self._apply_sidebar_mode()
         self._refresh_nav()
+
+    def toggle_sidebar(self) -> None:
+        """Contrae el menu lateral a solo iconos (o lo expande); se recuerda entre sesiones."""
+        self.settings.sidebar_collapsed = not self.settings.sidebar_collapsed
+        self._apply_sidebar_mode()
+        self.save_settings()
+
+    def _apply_sidebar_mode(self) -> None:
+        collapsed = self.settings.sidebar_collapsed
+        self.sidebar.configure(width=style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH)
+        if collapsed:
+            self._brand.pack_forget()
+        else:
+            self._brand.pack(side="left", padx=(8, 0))
+        for page_class in PAGES:
+            self.nav_buttons[page_class.name].configure(
+                text="" if collapsed else f"  {page_class.name}", anchor="center" if collapsed else "w",
+            )
+        self.help_button.configure(text="" if collapsed else "  Ayuda", anchor="center" if collapsed else "w")
+        self.theme_button.configure(anchor="center" if collapsed else "w")
+        self._refresh_theme_button()
 
     def _build_content(self) -> None:
         self.content = ctk.CTkFrame(self.root, fg_color="transparent", corner_radius=0)
@@ -330,10 +361,14 @@ class MainWindow:
         ctk.set_widget_scaling(scaling)
         self.save_settings()
 
+    def _theme_label(self) -> str:
+        return "Modo claro" if ctk.get_appearance_mode() == "Dark" else "Modo oscuro"
+
     def _refresh_theme_button(self) -> None:
         dark = ctk.get_appearance_mode() == "Dark"
         self.theme_button.configure(
-            text="  Modo claro" if dark else "  Modo oscuro", image=icon("sun" if dark else "moon", 18)
+            text="" if self.settings.sidebar_collapsed else f"  {self._theme_label()}",
+            image=icon("sun" if dark else "moon", 18),
         )
 
     def set_debug_logging(self, enabled: bool) -> None:

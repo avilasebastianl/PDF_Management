@@ -68,6 +68,7 @@ class Tool:
     def drag(self, view: PageView, event, hit: PageHit | None) -> None: ...
     def release(self, view: PageView, event, hit: PageHit | None) -> None: ...
     def motion(self, view: PageView, event, hit: PageHit | None) -> None: ...
+    def double(self, view: PageView, event, hit: PageHit | None) -> None: ...
     def draw(self, view: PageView) -> None: ...
 
 
@@ -101,6 +102,7 @@ class PageView(ctk.CTkFrame):
         # (pagina, mosaico o None) -> (item del lienzo, imagen, escala)
         self._displayed: dict[tuple[int, tuple[int, int] | None], tuple[int, ImageTk.PhotoImage, float]] = {}
         self._page_listeners: list[Callable[[int], None]] = []
+        self._painters: list[Callable[[PageView], None]] = []
         self._layout_listeners: list[Callable[[], None]] = []
         self._update_job: str | None = None
         self._resize_job: str | None = None
@@ -128,6 +130,7 @@ class PageView(ctk.CTkFrame):
         canvas.bind("<B1-Motion>", lambda e: self._dispatch("drag", e))
         canvas.bind("<ButtonRelease-1>", lambda e: self._dispatch("release", e))
         canvas.bind("<Motion>", lambda e: self._dispatch("motion", e))
+        canvas.bind("<Double-Button-1>", lambda e: self._dispatch("double", e))
         canvas.bind("<ButtonPress-2>", lambda e: canvas.scan_mark(e.x, e.y))
         canvas.bind("<B2-Motion>", lambda e: (canvas.scan_dragto(e.x, e.y, gain=1), self._schedule_update()))
         for key, action in (
@@ -381,9 +384,15 @@ class PageView(ctk.CTkFrame):
             if page in visible:
                 for rect in rects:
                     self._draw_rect(page, rect, fill=selection, stipple="gray50")
+        for painter in self._painters:
+            painter(self)
         if self.tool is not None:
             self.tool.draw(self)
         canvas.tag_raise("overlay")
+
+    def add_overlay_painter(self, painter: Callable[[PageView], None]) -> None:
+        """Dibujo extra sobre las paginas (con la etiqueta "overlay"), sea cual sea la herramienta."""
+        self._painters.append(painter)
 
     def _draw_rect(self, page: int, rect: pymupdf.Rect, pad: float = 0, **options) -> None:
         x0, y0 = self.page_to_canvas(page, rect.x0, rect.y0)

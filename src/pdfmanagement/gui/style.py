@@ -14,9 +14,11 @@ FONT_FAMILY = "Segoe UI"
 
 # * Espaciado
 PAD = 20          # margen externo de las paginas
+COMPACT_PAD = 12  # margen de las paginas sin titulo (Visor)
 CARD_PAD = 16     # margen interno de las tarjetas
 GAP = 10          # separacion entre elementos
 SIDEBAR_WIDTH = 220
+SIDEBAR_COLLAPSED_WIDTH = 64  # solo iconos
 CORNER = 10
 
 # * Colores semanticos

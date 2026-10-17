@@ -2,6 +2,8 @@
 
 Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+7**. Pulse **F1** para abrir esta guia.
 
+El boton **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la seccion. Vuelva a pulsarlo para expandirla. La aplicacion recuerda su eleccion.
+
 En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
 
 La **barra de estado** (parte inferior) indica que esta haciendo la aplicacion: un punto gris significa *listo*, la barra animada una operacion *en curso* (con las que esperan en cola), el punto verde el *ultimo archivo generado* con los botones **Mostrar en carpeta**, **Abrir** y **Ver en el visor**, y el rojo que la ultima operacion *no se completo*. Pase el cursor sobre ella para ver el detalle. Puede seguir trabajando mientras una operacion esta en curso.
@@ -14,7 +16,7 @@ Lea cualquier PDF sin salir de la aplicacion. Es la primera seccion y la que se 
 
 - **Abrir**: boton **Abrir**, **Ctrl+O**, clic en el area vacia o arrastre un PDF. Si esta protegido se pide la contrasena. **Recientes** muestra los ultimos 10 archivos.
 - **Panel lateral** (boton de lista para mostrarlo u ocultarlo):
-  - **Miniaturas**: haga clic en una para ir a esa pagina.
+  - **Paginas**: miniaturas; haga clic en una para ir a esa pagina.
   - **Marcadores**: el indice del documento, si lo tiene.
   - **Buscar** (**Ctrl+F**): escriba y pulse Enter. Puede distinguir mayusculas o buscar solo palabras completas. **F3** / **Mayus+F3** van al resultado siguiente / anterior; cada resultado muestra su contexto y se resalta en la pagina.
 - **Herramientas**: **Texto** (arrastre sobre el texto; **Ctrl+C** copia y **Ctrl+A** selecciona la pagina) o **Mano** para mover la pagina. El boton central del raton tambien desplaza.
@@ -28,7 +30,7 @@ El visor solo dibuja las paginas que se ven, asi que los documentos de cientos d
 
 ### Organizar paginas
 
-En el panel **Miniaturas**:
+En el panel **Paginas**:
 
 - **Seleccionar**: clic en una miniatura. **Ctrl+clic** agrega o quita paginas y **Mayus+clic** selecciona un rango.
 - **Reordenar**: arrastre las miniaturas seleccionadas; una linea azul indica donde quedaran. Cerca del borde el panel se desplaza solo.
@@ -42,6 +44,25 @@ Todo se puede deshacer sin limite; pase el cursor por los botones de deshacer/re
 Los cambios se guardan siempre con **Guardar como** en un archivo nuevo: el original nunca se modifica. Si el PDF estaba protegido, la copia conserva la misma contrasena. Si intenta abrir otro archivo, enviarlo a otra seccion o cerrar la aplicacion con cambios sin guardar, se le pregunta si desea guardarlos.
 
 Si el documento tiene **firmas digitales**, se le avisa antes del primer cambio: cualquier modificacion hace que las firmas dejen de ser validas en la copia.
+
+### Anotar
+
+La **barra de anotacion** esta debajo de la navegacion del visor (el boton del lapiz la muestra u oculta):
+
+- **Resaltar, subrayar y tachar**: elija la herramienta y arrastre sobre el texto. Si ya tiene texto seleccionado con la herramienta **Texto**, un clic en el boton lo marca al instante.
+- **Nota**: haga clic donde quiere el icono y escriba el comentario.
+- **Texto**: arrastre para dibujar el cuadro (o haga clic) y escriba el texto que aparecera en la pagina.
+- **Rectangulo, elipse, linea y flecha**: arrastre de una esquina a otra.
+- **Dibujo a mano**: arrastre para trazar.
+- **Color** (amarillo, verde, azul, rojo o negro) y **grosor** (fino, medio o grueso) a la derecha de la barra.
+
+Pulse **Esc** o vuelva a pulsar la herramienta para terminar.
+
+Para **editar** una anotacion use la herramienta **Texto**: haga clic sobre ella para seleccionarla (aparece un contorno discontinuo). Despues puede arrastrarla para moverla, elegir otro color, hacer doble clic en una nota o un texto para cambiarlo, o pulsar **Supr** para eliminarla. El clic derecho sobre una anotacion ofrece las mismas opciones.
+
+El panel **Notas** lista todas las anotaciones del documento: haga clic en una para ir a ella; los botones permiten editar su texto o eliminarla.
+
+Como el resto de cambios, las anotaciones se deshacen con **Ctrl+Z** y se guardan con **Guardar como**.
 
 ## Unir
 

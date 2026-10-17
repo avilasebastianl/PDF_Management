@@ -18,7 +18,9 @@ import pymupdf
 from ..documents import open_document
 from ..errors import InvalidInputError
 from ..files import PDF_EXTENSIONS, atomic_output, prepare_output, require_file
+from . import annotations as annots
 from . import pages as page_ops
+from .annotations import AnnotationInfo, AnnotationStyle
 from .history import History
 from .text import page_words
 
@@ -204,6 +206,69 @@ class DocumentSession:
             neighbor = self.document[min(at, self.page_count - 1)]
             size = (neighbor.mediabox.width, neighbor.mediabox.height)
         return self._edit("Insertar pagina en blanco", page_ops.insert_blank_page, at, *size)
+
+    # * Anotaciones -----------------------------------------------------------
+    # Coordenadas de la pagina tal como se ve; cada metodo es un paso deshacible.
+
+    def annotations(self, page: int | None = None) -> list[AnnotationInfo]:
+        """Anotaciones de una pagina (indice desde 0) o de todo el documento."""
+        pages = range(self.page_count) if page is None else [page]
+        result: list[AnnotationInfo] = []
+        for index in pages:
+            current = self.document[index]
+            result.extend(annots.list_annotations(current, index))
+        return result
+
+    def add_markup(self, page: int, kind: str, rects, style: AnnotationStyle) -> int:
+        verb = {"highlight": "Resaltar", "underline": "Subrayar", "strikeout": "Tachar"}.get(kind, "Marcar")
+        return self._annotate(f"{verb} texto (pagina {page + 1})", page, annots.add_markup, kind, rects, style)
+
+    def add_note(self, page: int, point, text: str, style: AnnotationStyle) -> int:
+        return self._annotate(f"Agregar nota (pagina {page + 1})", page, annots.add_note, point, text, style)
+
+    def add_free_text(self, page: int, rect, text: str, style: AnnotationStyle,
+                      fontsize: float = annots.DEFAULT_FONT_SIZE) -> int:
+        return self._annotate(f"Agregar texto (pagina {page + 1})", page, annots.add_free_text, rect, text, style,
+                              fontsize)
+
+    def add_shape(self, page: int, shape: str, rect, style: AnnotationStyle) -> int:
+        name = "rectangulo" if shape == "rect" else "elipse"
+        return self._annotate(f"Agregar {name} (pagina {page + 1})", page, annots.add_shape, shape, rect, style)
+
+    def add_line(self, page: int, start, end, style: AnnotationStyle, arrow: bool = False) -> int:
+        name = "flecha" if arrow else "linea"
+        return self._annotate(f"Agregar {name} (pagina {page + 1})", page, annots.add_line, start, end, style, arrow)
+
+    def add_ink(self, page: int, strokes, style: AnnotationStyle) -> int:
+        return self._annotate(f"Dibujar a mano (pagina {page + 1})", page, annots.add_ink, strokes, style)
+
+    def move_annotation(self, page: int, xref: int, dx: float, dy: float) -> int:
+        """Devuelve el xref de la anotacion movida (cambia si hubo que recrearla)."""
+        return self._annotate(f"Mover {self._annotation_label(page, xref)}", page, annots.move, xref, dx, dy)
+
+    def delete_annotation(self, page: int, xref: int) -> None:
+        self._annotate(f"Eliminar {self._annotation_label(page, xref)}", page, annots.delete, xref)
+
+    def set_annotation_color(self, page: int, xref: int, color) -> None:
+        self._annotate(f"Cambiar color de {self._annotation_label(page, xref)}", page, annots.set_color, xref, color)
+
+    def set_annotation_text(self, page: int, xref: int, text: str) -> None:
+        self._annotate(f"Editar texto de {self._annotation_label(page, xref)}", page, annots.set_text, xref, text)
+
+    def _annotation_label(self, page: int, xref: int) -> str:
+        current = self.document[page]
+        kind = annots.find(current, xref).type[1]
+        return annots.LABELS.get(kind, "anotacion").lower()
+
+    def _annotate(self, label: str, page: int, operation: Callable, *args):
+        if not 0 <= page < self.page_count:
+            raise InvalidInputError("La pagina no existe.")
+        result = None
+        with self.history.operation(label):
+            current = self.document[page]  # debe seguir viva mientras se usa la anotacion
+            result = operation(current, *args)
+        logger.info("Anotacion: %s (%s)", label, self.name)
+        return result
 
     def undo(self) -> str | None:
         label = self.history.undo()
