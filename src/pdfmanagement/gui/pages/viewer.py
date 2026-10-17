@@ -27,68 +27,49 @@ seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
 terminar la herramienta de anotacion y limpiar la seleccion.
 """
 
-import tkinter as tk
-from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
-from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from ... import core, recent
-from ...core.editing import DocumentSession
+from ... import recent
 from .. import style
-from ..dialogs import DocumentPropertiesWindow, ask_password
-from ..dropdown import dropdown_menu, set_dropdown_values
-from ..icons import icon
+from ..dropdown import dropdown_menu
 from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
 from ..viewer.annotation_tools import SelectTool
 from ..viewer.find_bar import FindBar
 from ..viewer.panels import OutlinePanel, SearchPanel
-from ..viewer.tab_strip import TabInfo, TabStrip
+from ..viewer.tab_strip import TabStrip
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
 from .viewer_annotations import ViewerAnnotations
+from .viewer_files import RECENT_PLACEHOLDER, SEND_PLACEHOLDER, SEND_TARGETS, FilesMixin
+from .viewer_modes import NORMAL, WINDOW, ModesMixin
+from .viewer_organize import OrganizeMixin
+from .viewer_tabs import DocumentTab, TabsMixin
 
 SIDE_TABS = ("Paginas", "Marcadores", "Buscar", "Notas")
 TOOLS = ("Texto", "Mano")
-SEND_TARGETS = ("Unir", "Extraer", "Firmar", "Proteger")
-RECENT_PLACEHOLDER = "Recientes"
-SEND_PLACEHOLDER = "Enviar a..."
 PLACEHOLDER = (
     "Haga clic aqui o arrastre un PDF para abrirlo",
     'Tambien puede usar el boton "Abrir" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las paginas.',
 )
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
-MAX_TABS = 12
-NORMAL, WINDOW, FULLSCREEN = "normal", "ventana", "pantalla completa"
 
 
-@dataclass
-class DocumentTab:
-    """Un documento abierto en el visor y como se estaba viendo."""
-
-    session: DocumentSession
-    saved_path: Path | None = None  # ultimo "Guardar como"
-    signatures_confirmed: bool = False  # ya se aviso que editar invalida sus firmas
-    page: int = 0
-    zoom: str | float = FIT_WIDTH
-    scroll: float | None = None  # posicion vertical (0-1) al dejar la pestana
-    selection: list[int] = field(default_factory=list)
-
-    @property
-    def path(self) -> Path:
-        return self.saved_path or self.session.path
-
-
-class ViewerPage(BasePage):
+class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, BasePage):
     name = "Visor"
     title = "Visor de PDF"
     subtitle = "Lea, busque, anote y organice las paginas de cualquier PDF."
     icon_name = "pdf"
     scrollable = False
     show_header = False  # el visor aprovecha todo el alto; el titulo ya lo indica el menu lateral
+
+    # Estado compartido por los mixins (se asigna en build).
+    tabs: list[DocumentTab]
+    active: int
+    view_mode: str
+    edit_mode: bool
 
     def build(self) -> None:
         self.tabs: list[DocumentTab] = []
@@ -105,34 +86,6 @@ class ViewerPage(BasePage):
         self._build_viewer()
         self._bind_shortcuts()
         self._refresh_file_state()
-
-    # * Pestana activa ---------------------------------------------------------
-
-    @property
-    def tab(self) -> DocumentTab | None:
-        return self.tabs[self.active] if 0 <= self.active < len(self.tabs) else None
-
-    @property
-    def session(self) -> DocumentSession | None:
-        return self.tab.session if self.tab is not None else None
-
-    @property
-    def saved_path(self) -> Path | None:
-        return self.tab.saved_path if self.tab is not None else None
-
-    @saved_path.setter
-    def saved_path(self, value: Path | None) -> None:
-        if self.tab is not None:
-            self.tab.saved_path = value
-
-    @property
-    def _signatures_confirmed(self) -> bool:
-        return self.tab.signatures_confirmed if self.tab is not None else False
-
-    @_signatures_confirmed.setter
-    def _signatures_confirmed(self, value: bool) -> None:
-        if self.tab is not None:
-            self.tab.signatures_confirmed = value
 
     # * Construccion ----------------------------------------------------------
 
@@ -357,494 +310,7 @@ class ViewerPage(BasePage):
         action()
         return "break"
 
-    # * Abrir ---------------------------------------------------------------
-
-    def browse(self) -> None:
-        chosen = filedialog.askopenfilename(title="Abrir PDF", filetypes=(("Archivos PDF", "*.pdf"),))
-        if chosen:
-            self.open_file(Path(chosen), source="dialogo")
-        else:
-            self.log_debug("Abrir: dialogo cancelado")
-
-    def receive_file(self, path: Path) -> None:
-        self.open_file(path, source="enviado desde otra seccion")
-
-    def _on_drop(self, files: list) -> None:
-        if files:
-            self.open_file(Path(files[0]), source="arrastrado")
-
-    def _open_recent(self, label: str) -> None:
-        self.recent_menu.set(RECENT_PLACEHOLDER)
-        labels = self._recent_labels()
-        if label in labels and self._recent:
-            self.open_file(self._recent[labels.index(label)], source="recientes")
-
-    def open_file(self, path: Path, source: str = "dialogo") -> bool:
-        """
-        Abre ``path`` en una pestana nueva (pide la contrasena si hace falta).
-        Si ya esta abierto, muestra su pestana.
-        """
-        path = Path(path)
-        existing = self._find_tab(path)
-        if existing is not None:
-            self.switch_to(existing)
-            self.log("Documento ya abierto: se muestra su pestana", archivo=path.name, origen=source)
-            return True
-        if len(self.tabs) >= MAX_TABS:
-            self.app.show_error(
-                core.InvalidInputError(
-                    f"Puede tener hasta {MAX_TABS} documentos abiertos. Cierre alguna pestana (Ctrl+W) para abrir otro."
-                )
-            )
-            return False
-        password = self._ask_password_until_valid(path)
-        if password is False or password is True:
-            return False
-        try:
-            session = DocumentSession.open(path, password)
-        except core.PdfManagementError as error:
-            self.app.show_error(error)
-            return False
-        self.tabs.append(DocumentTab(session))
-        self.switch_to(len(self.tabs) - 1)
-        self._recent = recent.add_recent(session.path)
-        set_dropdown_values(self.recent_menu, self._recent_labels())
-        self.recent_menu.set(RECENT_PLACEHOLDER)
-        self._refresh_file_state()
-        self.log(
-            "Documento abierto: %s",
-            session.name,
-            origen=source,
-            paginas=session.page_count,
-            protegido=session.encrypted,
-            firmas_digitales=session.has_signatures(),
-            marcadores=len(session.table_of_contents()),
-            pestanas=len(self.tabs),
-        )
-        return True
-
-    def _find_tab(self, path: Path) -> int | None:
-        target = path.resolve()
-        for index, tab in enumerate(self.tabs):
-            if target in (tab.session.path.resolve(), tab.path.resolve()):
-                return index
-        return None
-
-    # * Pestanas --------------------------------------------------------------
-
-    def switch_to(self, index: int) -> None:
-        """Muestra la pestana ``index`` recordando como se estaba viendo la actual."""
-        if not 0 <= index < len(self.tabs):
-            return
-        if index != self.active:
-            self._remember_view()
-            self.active = index
-            self._load_tab()
-            self.log_debug("Pestana: %s", self.tabs[index].path.name, posicion=index + 1, total=len(self.tabs))
-        self._render_tabs()
-
-    def cycle_tab(self, step: int) -> None:
-        if len(self.tabs) > 1:
-            self.switch_to((self.active + step) % len(self.tabs))
-
-    def _close_tab_clicked(self, index: int) -> None:
-        self.close_tab(index)
-
-    def close_current_tab(self) -> None:
-        if self.tab is not None:
-            self.close_tab(self.active)
-
-    def close_tab(self, index: int, confirm: bool = True) -> bool:
-        """Cierra una pestana; con cambios sin guardar pregunta antes (si ``confirm``)."""
-        if not 0 <= index < len(self.tabs):
-            return False
-        if confirm and self.tabs[index].session.modified:
-            self.switch_to(index)  # que se vea cual es
-            if not self._confirm_discard("cerrar la pestana"):
-                return False
-        was_active = index == self.active
-        if was_active:
-            self.search.set_document(None)
-            self.view.set_document(None)
-        tab = self.tabs.pop(index)
-        tab.session.close()
-        if was_active:
-            self.active = min(index, len(self.tabs) - 1)
-            self._load_tab()
-        elif index < self.active:
-            self.active -= 1
-        self._render_tabs()
-        self.log("Pestana cerrada", archivo=tab.path.name, quedan=len(self.tabs))
-        return True
-
-    def close_all_documents(self, confirm: bool = False) -> bool:
-        while self.tabs:
-            if not self.close_tab(len(self.tabs) - 1, confirm=confirm):
-                return False
-        return True
-
-    def _remember_view(self) -> None:
-        tab = self.tab
-        if tab is None or not self.view.sizes:
-            return
-        tab.page = self.view.current_page
-        tab.zoom = self.view.zoom_mode
-        tab.scroll = self.view.canvas.yview()[0]
-        tab.selection = sorted(self.thumbnails.selected)
-
-    def _load_tab(self) -> None:
-        """Pone en el visor el documento de la pestana activa (o ninguno)."""
-        tab = self.tab
-        self.annotations.cancel_tool()
-        self.annotations.selected = None
-        self.find_bar.hide()
-        self.text_tool.clear(self.view)
-        self.selection_label.configure(text="")
-        self.thumbnails.set_selection([])
-        if tab is None:
-            self.search.set_document(None)
-            self.view.set_document(None)
-            self.thumbnails.rebuild()
-            self.outline.set_entries([])
-        else:
-            session = tab.session
-            self.view.set_document(session.document, page=tab.page)
-            if tab.zoom != self.view.zoom_mode:
-                self.view.set_zoom(tab.zoom)
-            if tab.scroll is not None and self.view.continuous:
-                self.view.canvas.yview_moveto(tab.scroll)  # vuelve exactamente a donde estaba
-                self.view._schedule_update()  # noqa: SLF001
-            self.thumbnails.rebuild()
-            self.thumbnails.set_selection(tab.selection)
-            self.outline.set_entries(session.table_of_contents())
-            self.search.set_document(session.document)
-        self.annotations.reset()
-        self._refresh_file_state()
-
-    def _render_tabs(self) -> None:
-        """Vuelve a dibujar la barra de pestanas (al abrir, cerrar o cambiar de pestana)."""
-        if not self.tabs:
-            self.tab_bar.set_tabs([], -1)
-            self.tab_bar.grid_remove()
-            return
-        if self.view_mode != FULLSCREEN:
-            self.tab_bar.grid()
-        self.tab_bar.set_tabs([self._tab_info(tab) for tab in self.tabs], self.active)
-
-    @staticmethod
-    def _tab_info(tab: DocumentTab) -> TabInfo:
-        return TabInfo(title=tab.path.name, tooltip=str(tab.path), modified=tab.session.modified)
-
-    def _update_tab_title(self) -> None:
-        if self.tab is not None:
-            self.tab_bar.update_tab(self.active, self._tab_info(self.tab))
-
-    # * Pantalla completa -------------------------------------------------------
-
-    @property
-    def fullscreen(self) -> bool:
-        return self.view_mode == FULLSCREEN
-
-    def toggle_fullscreen(self) -> None:
-        """Solo el visor en toda la pantalla (sin menu, barras, pestanas ni panel)."""
-        self.set_view_mode(NORMAL if self.view_mode == FULLSCREEN else FULLSCREEN)
-
-    def toggle_window_mode(self) -> None:
-        """El visor ocupa toda la ventana (con las pestanas), sin pasar a pantalla completa."""
-        self.set_view_mode(NORMAL if self.view_mode == WINDOW else WINDOW)
-
-    def set_view_mode(self, mode: str) -> None:
-        if mode == self.view_mode:
-            return
-        self.view_mode = mode
-        reading = mode != NORMAL
-        self.app.set_chrome_visible(not reading)
-        if reading:
-            self.file_bar.grid_remove()
-            self.side.grid_remove()
-        else:
-            self.file_bar.grid()
-            if self.side_visible:
-                self.side.grid()
-        if self.tabs and mode != FULLSCREEN:
-            self.tab_bar.grid()
-        else:
-            self.tab_bar.grid_remove()
-        self.app.root.attributes("-fullscreen", mode == FULLSCREEN)
-        for button, name, active in (
-            (self.window_button, "window_mode", mode == WINDOW),
-            (self.fullscreen_button, "fullscreen", mode == FULLSCREEN),
-        ):
-            icon_name = f"exit_{name}" if active else name
-            button.icon_key = icon_name
-            button.configure(image=icon(icon_name, 16, style.TEXT))
-        self.log("Modo de vista: %s", mode)
-
-    def on_hide(self) -> None:
-        self.set_view_mode(NORMAL)
-
-    def _ask_password_until_valid(self, path: Path) -> str | bool | None:
-        """
-        Comprueba si ``path`` necesita contrasena y la pide hasta que sea
-        correcta. Devuelve la contrasena (``None`` si no hace falta) o
-        ``False`` si el usuario cancela o el archivo no se puede leer.
-        """
-        password, retry = None, False
-        while True:
-            try:
-                core.open_document(path, password).close()
-                return password
-            except core.PasswordRequiredError as error:
-                self.log("%s pide contrasena%s", path.name, " (la anterior no era correcta)" if retry else "")
-                password = ask_password(self, path.name, retry=retry or isinstance(error, core.WrongPasswordError))
-                retry = True
-                if not password:
-                    self.log("Cancelado: no se ingreso la contrasena", archivo=path.name)
-                    return False
-            except core.PdfManagementError as error:
-                self.app.show_error(error)
-                return False
-
-    def _close_session(self) -> None:
-        """Cierra la pestana activa sin preguntar."""
-        if self.tab is not None:
-            self.close_tab(self.active, confirm=False)
-
-    def can_close(self) -> bool:
-        """Al cerrar la aplicacion pregunta por cada pestana con cambios sin guardar."""
-        for index, tab in enumerate(self.tabs):
-            if tab.session.modified:
-                self.switch_to(index)
-                if not self._confirm_discard("cerrar la aplicacion"):
-                    return False
-        return True
-
-    def on_close(self) -> None:
-        self.search.set_document(None)
-        self.view.set_document(None)
-        for tab in self.tabs:
-            tab.session.close()
-        self.tabs.clear()
-        self.active = -1
-
-    # * Organizar paginas -----------------------------------------------------
-
-    def rotate_pages(self, angle: int, pages: list[int] | None = None) -> bool:
-        pages = pages or self.thumbnails.selection()
-        return self._edit(lambda session: session.rotate(pages, angle), select=pages, page=self.view.current_page)
-
-    def delete_pages(self, pages: list[int] | None = None) -> bool:
-        if self.session is None:
-            return False
-        pages = pages or self.thumbnails.selection()
-        if len(pages) > 1 and not messagebox.askyesno(
-            "Eliminar paginas",
-            f"Se eliminaran {len(pages)} paginas. Puede deshacerlo con Ctrl+Z.\n\nContinuar?",
-            parent=self,
-        ):
-            self.log_debug("Eliminar paginas cancelado", paginas=len(pages))
-            return False
-        after = max(0, min(min(pages), self.session.page_count - len(pages) - 1))
-        return self._edit(lambda session: session.delete(pages), select=[after], page=after)
-
-    def _move_dragged_pages(self, pages: list[int], target: int) -> None:
-        self.move_pages(pages, target)
-
-    def move_pages(self, pages: list[int], target: int) -> bool:
-        """Mueve ``pages`` delante de la pagina que hoy esta en ``target`` (arrastre de miniaturas)."""
-        moved: list[int] = []
-        return self._edit(
-            lambda session: moved.extend(session.move(pages, target)), select=lambda: moved, page=lambda: moved[0]
-        )
-
-    def insert_pdf(self, at: int | None = None) -> bool:
-        """Pide un PDF y lo inserta despues de la seleccion (o antes de ``at``)."""
-        if self.session is None:
-            return False
-        chosen = filedialog.askopenfilename(title="Insertar PDF", filetypes=(("Archivos PDF", "*.pdf"),))
-        if not chosen:
-            self.log_debug("Insertar PDF: dialogo cancelado")
-            return False
-        return self.insert_pdf_file(Path(chosen), at)
-
-    def insert_pdf_file(self, source: Path, at: int | None = None) -> bool:
-        if self.session is None:
-            return False
-        at = self._insert_position() if at is None else at
-        password = self._ask_password_until_valid(Path(source))
-        if password is False or password is True:
-            return False
-        count: list[int] = []
-        return self._edit(
-            lambda session: count.append(session.insert_pdf(source, at, password)),
-            select=lambda: list(range(at, at + count[0])),
-            page=at,
-        )
-
-    def insert_blank(self, at: int | None = None) -> bool:
-        if self.session is None:
-            return False
-        at = self._insert_position() if at is None else at
-        return self._edit(lambda session: session.insert_blank(at), select=[at], page=at)
-
-    def undo(self) -> None:
-        self._step_history(redo=False)
-
-    def redo(self) -> None:
-        self._step_history(redo=True)
-
-    def _step_history(self, redo: bool) -> None:
-        session = self.session
-        if session is None or not (session.history.can_redo if redo else session.history.can_undo):
-            return
-        label = session.redo() if redo else session.undo()
-        page = min(self.view.current_page, session.page_count - 1)
-        self._after_edit([page], page)
-        verb = "Rehecho" if redo else "Deshecho"
-        self.selection_label.configure(text=f"{verb}: {label}")
-        self.log("%s: %s", verb, label, archivo=session.name, paginas=session.page_count)
-
-    def _insert_position(self) -> int:
-        return max(self.thumbnails.selection()) + 1
-
-    def _edit(self, operation: Callable[[DocumentSession], object], *, select, page) -> bool:
-        """
-        Ejecuta una edicion de paginas y actualiza la vista. ``select`` y
-        ``page`` pueden ser valores o funciones evaluadas despues de editar.
-        """
-        session = self.session
-        if session is None or not self._confirm_signed_edit():
-            return False
-        steps = session.history.undo_depth
-        try:
-            operation(session)
-        except core.PdfManagementError as error:
-            self.app.show_error(error)
-            return False
-        if session.history.undo_depth == steps:
-            return False  # nada cambio (p. ej. soltar las paginas en su mismo lugar)
-        selected = select() if callable(select) else select
-        self._after_edit(selected, page() if callable(page) else page)
-        label = session.history.undo_label
-        self.selection_label.configure(text=f"{label}  ·  Ctrl+Z para deshacer")
-        self.log("Edicion: %s", label, archivo=session.name, paginas=session.page_count)
-        return True
-
-    def _after_edit(self, select: list[int], page: int) -> None:
-        """Tras cambiar la estructura: visor, miniaturas, marcadores y busqueda al dia."""
-        session = self.session
-        if session is None:
-            return
-        self.view.refresh(page=page)
-        self.thumbnails.rebuild(keep_scroll=True)
-        self.thumbnails.set_selection(select, anchor=select[0] if select else None)
-        self.outline.set_entries(session.table_of_contents())
-        self.search.invalidate()
-        self.text_tool.clear(self.view)
-        self.annotations.reset()
-        self._refresh_file_state()
-
-    def _confirm_signed_edit(self) -> bool:
-        """Editar un PDF con firmas digitales las invalida: se avisa una vez por documento."""
-        if self._signatures_confirmed or self.session is None or not self.session.has_signatures():
-            return True
-        confirmed = messagebox.askyesno(
-            "Documento firmado",
-            "Este PDF tiene firmas digitales. Cualquier cambio en las paginas hara que las firmas "
-            "dejen de ser validas en la copia que guarde (el original no se modifica).\n\nDesea continuar?",
-            icon="warning",
-            parent=self,
-        )
-        self.log("Aviso de firmas digitales: %s", "continuar" if confirmed else "cancelado", archivo=self.session.name)
-        self._signatures_confirmed = confirmed
-        return confirmed
-
-    # * Guardar ---------------------------------------------------------------
-
-    def save_as(self) -> bool:
-        """Guarda una copia con el dialogo "Guardar como" (nunca sobre el original)."""
-        if self.session is None:
-            return False
-        suggested = self.saved_path or self.default_output(self.session.path, "editado")
-        chosen = filedialog.asksaveasfilename(
-            title="Guardar como",
-            defaultextension=".pdf",
-            filetypes=(("Archivos PDF", "*.pdf"),),
-            initialdir=str(suggested.parent),
-            initialfile=suggested.name,
-            parent=self,
-        )
-        if not chosen:
-            self.log_debug("Guardar como: dialogo cancelado")
-            return False
-        return self.save_to(Path(chosen))
-
-    def save_to(self, output: Path) -> bool:
-        session = self.session
-        if session is None:
-            return False
-        try:
-            saved = session.save_as(output)
-        except core.PdfManagementError as error:
-            self.app.show_error(error)
-            return False
-        self.saved_path = saved
-        self._refresh_file_state()
-        self.log(
-            "Documento guardado como: %s",
-            saved.name,
-            carpeta=saved.parent,
-            paginas=session.page_count,
-            protegido=bool(session.password),
-        )
-        self.app.notify_success("Documento guardado", saved)
-        return True
-
-    def _confirm_discard(self, action: str) -> bool:
-        """Si hay cambios sin guardar pregunta: guardar como, descartar o cancelar."""
-        session = self.session
-        if session is None or not session.modified:
-            return True
-        answer = messagebox.askyesnocancel(
-            "Cambios sin guardar",
-            f"{session.name} tiene cambios sin guardar.\n\n"
-            f"Desea guardarlos en un archivo nuevo antes de {action}?\n\n"
-            "Si: Guardar como...\nNo: descartar los cambios\nCancelar: seguir editando",
-            icon="warning",
-            parent=self,
-        )
-        decision = {True: "guardar", False: "descartar", None: "cancelar"}[answer]
-        self.log("Cambios sin guardar antes de %s: %s", action, decision, archivo=session.name)
-        if answer is None:
-            return False
-        return self.save_as() if answer else True
-
     # * Acciones --------------------------------------------------------------
-
-    def show_properties(self) -> None:
-        if self.session is None:
-            return
-        self.log("Propiedades abiertas", archivo=self.session.name)
-        size = self.view.sizes[self.view.current_page] if self.view.sizes else None
-        DocumentPropertiesWindow(self, self.session.properties(), size)
-
-    def _send_to(self, target: str) -> None:
-        self.send_menu.set(SEND_PLACEHOLDER)
-        session = self.session
-        if session is None:
-            return
-        if session.modified:
-            answer = messagebox.askyesnocancel(
-                "Cambios sin guardar",
-                f"Para enviar a {target} la version editada hay que guardarla primero.\n\n"
-                "Si: Guardar como... y enviar la copia\nNo: enviar el ultimo archivo guardado\nCancelar: no enviar",
-                parent=self,
-            )
-            if answer is None or (answer and not self.save_as()):
-                return
-        path = self.saved_path or session.path
-        self.log("Documento enviado a %s", target, archivo=path.name)
-        self.app.open_in(target, path)
 
     def open_search(self) -> None:
         """Muestra la barra de busqueda flotante (Ctrl+F)."""
@@ -894,42 +360,6 @@ class ViewerPage(BasePage):
         self.text_tool.clear(self.view)
         self.search.clear()
 
-    def _on_delete_key(self) -> None:
-        """Supr elimina la anotacion seleccionada; si no hay, las paginas seleccionadas."""
-        if not self.annotations.delete_selected():
-            self.delete_pages()
-
-    def toggle_edit_mode(self) -> None:
-        self.set_edit_mode(not self.edit_mode)
-
-    def set_edit_mode(self, enabled: bool) -> None:
-        """
-        Modo edicion: muestra la barra de anotacion y la de organizar paginas
-        y permite reordenar arrastrando miniaturas. Fuera de el, el visor es
-        solo para leer (menos botones y sin cambios accidentales).
-        """
-        if enabled == self.edit_mode:
-            return
-        self.edit_mode = enabled
-        if enabled:
-            self.annotations.bar.grid()
-            self.page_tools.pack(fill="x", padx=6, pady=(0, 2), before=self.pages_hint)
-        else:
-            self.annotations.cancel_tool()
-            self.annotations.select(None)
-            self.annotations.bar.grid_remove()
-            self.page_tools.pack_forget()
-        self.thumbnails.on_move = self._move_dragged_pages if enabled else None
-        accent = style.accent_color()
-        self.edit_button.configure(
-            text="Listo" if enabled else "Editar",
-            fg_color=accent if enabled else "transparent",
-            hover_color=style.accent_hover_color() if enabled else style.HOVER,
-            text_color=style.WHITE if enabled else style.TEXT,
-        )
-        self._on_pages_selected(sorted(self.thumbnails.selected))
-        self.log("Modo edicion %s", "activado" if enabled else "desactivado")
-
     def restore_tool(self) -> None:
         """Vuelve a la herramienta Texto (al terminar una herramienta de anotacion)."""
         self.tool_selector.set(TOOLS[0])
@@ -961,54 +391,6 @@ class ViewerPage(BasePage):
         self.view.set_tool(self.text_tool if name == TOOLS[0] else self.hand_tool)
         if log:
             self.log("Herramienta: %s", name)
-
-    # * Menu contextual -------------------------------------------------------
-
-    def _on_view_right_click(self, event) -> None:
-        hit = self.view.event_to_page(event)
-        if hit is None or self.session is None:
-            return
-        if hit.page not in self.thumbnails.selected:
-            self.thumbnails.set_selection([hit.page], anchor=hit.page)
-        annotation = self.annotations.hit(hit)
-        if annotation is not None:
-            self.annotations.select(annotation)
-        self._show_page_menu(hit.page, event, from_view=True, annotation=annotation)
-
-    def _page_menu(self, from_view: bool = False, annotation=None) -> tk.Menu:
-        """Menu de las paginas seleccionadas (miniaturas o clic derecho en el visor)."""
-        pages = self.thumbnails.selection()
-        subject = f"pagina {pages[0] + 1}" if len(pages) == 1 else f"{len(pages)} paginas"
-        menu = tk.Menu(self, tearoff=0)
-        if annotation is not None:
-            self.annotations.add_menu_items(menu, annotation)
-        if from_view and self.text_tool.selected_text():
-            menu.add_command(label="Copiar texto", accelerator="Ctrl+C", command=self.copy_selection)
-            menu.add_separator()
-        menu.add_command(
-            label=f"Rotar {subject} a la derecha", accelerator="Ctrl+R", command=lambda: self.rotate_pages(90, pages)
-        )
-        menu.add_command(
-            label=f"Rotar {subject} a la izquierda",
-            accelerator="Ctrl+Mayus+R",
-            command=lambda: self.rotate_pages(-90, pages),
-        )
-        menu.add_command(label=f"Eliminar {subject}", accelerator="Supr", command=lambda: self.delete_pages(pages))
-        menu.add_separator()
-        menu.add_command(label="Insertar PDF antes...", command=lambda: self.insert_pdf(min(pages)))
-        menu.add_command(label="Insertar PDF despues...", command=lambda: self.insert_pdf(max(pages) + 1))
-        menu.add_command(label="Insertar pagina en blanco despues", command=lambda: self.insert_blank(max(pages) + 1))
-        return menu
-
-    def _show_page_menu(self, page: int, event, from_view: bool = False, annotation=None) -> None:
-        if self.session is None:
-            return
-        menu = self._page_menu(from_view, annotation)
-        self.log_debug("Menu de paginas abierto", pagina=page + 1, origen="visor" if from_view else "miniaturas")
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
 
     # * Estado --------------------------------------------------------------
 
@@ -1070,12 +452,3 @@ class ViewerPage(BasePage):
         for button in (*self.page_buttons, *self.annotations.tool_buttons.values()):
             set_enabled(button, session is not None)
         self._on_pages_selected(sorted(self.thumbnails.selected))
-
-    def _recent_labels(self) -> list[str]:
-        labels = [entry.name for entry in self._recent]
-        seen: dict[str, int] = {}
-        for index, label in enumerate(labels):  # nombres repetidos: se agrega la carpeta
-            if label in seen:
-                labels[index] = f"{label}  ({self._recent[index].parent.name})"
-            seen[label] = index
-        return labels or ["(sin recientes)"]

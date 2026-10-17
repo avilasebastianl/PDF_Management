@@ -116,11 +116,12 @@ def test_send_to_other_sections(viewer, gui_app, manual_pdf):
 
 
 def test_protected_pdf_asks_for_password(gui_app, manual_pdf, tmp_path, monkeypatch):
-    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    from pdfmanagement.gui.pages import viewer_files
 
     locked = core.lock_pdf(manual_pdf, tmp_path / "protegido.pdf", "clave123")
     answers = iter(["mala", "clave123"])
-    monkeypatch.setattr(viewer_module, "ask_password", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(viewer_files, "ask_password", lambda *args, **kwargs: next(answers))
     gui_app.show_page("Visor")
     page = gui_app.pages["Visor"]
     assert page.open_file(locked)
@@ -191,7 +192,7 @@ def test_drag_thumbnails_to_reorder(viewer, gui_app):
 
 
 def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
-    from pdfmanagement.gui.pages import viewer as viewer_module
+    from tkinter import messagebox
 
     strip = viewer.thumbnails
     strip._select_click(2, 0)
@@ -200,7 +201,7 @@ def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
     assert strip.selection() == [2, 3, 4, 7]
     assert viewer.pages_hint.cget("text") == "4 paginas seleccionadas"
     asked = []
-    monkeypatch.setattr(viewer_module.messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
     viewer.delete_pages()
     assert asked, "eliminar varias paginas pide confirmacion"
     assert viewer.session.page_count == 36
@@ -209,10 +210,11 @@ def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
 
 
 def test_insert_pdf_and_blank_page(viewer, gui_app, tmp_path, monkeypatch):
-    from pdfmanagement.gui.pages import viewer as viewer_module
+
+    from pdfmanagement.gui.pages import viewer_files
 
     other = core.lock_pdf(make_pdf(tmp_path / "anexo.pdf", 2), tmp_path / "anexo_protegido.pdf", "clave")
-    monkeypatch.setattr(viewer_module, "ask_password", lambda *a, **k: "clave")
+    monkeypatch.setattr(viewer_files, "ask_password", lambda *a, **k: "clave")
     viewer.thumbnails._select_click(0, 0)
     assert viewer.insert_pdf_file(other)  # despues de la seleccion
     assert page_titles(viewer, 4)[1:3] == ["Pagina 1", "Pagina 2"]
@@ -224,7 +226,7 @@ def test_insert_pdf_and_blank_page(viewer, gui_app, tmp_path, monkeypatch):
 
 
 def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_pdf, monkeypatch):
-    from pdfmanagement.gui.pages import viewer as viewer_module
+    from tkinter import messagebox
 
     viewer.rotate_pages(90)
     output = tmp_path / "manual_editado.pdf"
@@ -240,20 +242,20 @@ def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_p
     assert isinstance(errors[0], core.InvalidInputError)
 
     viewer.rotate_pages(90)
-    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: None)
+    monkeypatch.setattr(messagebox, "askyesnocancel", lambda *a, **k: None)
     assert not viewer.close_current_tab() and viewer.session is not None, "Cancelar mantiene la pestana editada"
     assert viewer.session.modified
     closed = []
     monkeypatch.setattr(gui_app, "close", lambda *a, **k: closed.append(1))
     gui_app.request_close()
     assert not closed and gui_app.current_page == "Visor", "cerrar con cambios sin guardar se puede cancelar"
-    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: False)
+    monkeypatch.setattr(messagebox, "askyesnocancel", lambda *a, **k: False)
     assert viewer.close_tab(viewer.active), "No descarta los cambios y cierra la pestana"
     assert viewer.session is None and not viewer.tab_bar.winfo_manager()
 
 
 def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificate, monkeypatch):
-    from pdfmanagement.gui.pages import viewer as viewer_module
+    from tkinter import messagebox
 
     signed = core.sign_pdf_with_certificate(
         make_pdf(tmp_path / "contrato.pdf", 2), tmp_path / "firmado.pdf", certificate[0], CERTIFICATE_PASSWORD
@@ -262,7 +264,7 @@ def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificat
     page = gui_app.pages["Visor"]
     assert page.open_file(signed)
     answers = []
-    monkeypatch.setattr(viewer_module.messagebox, "askyesno", lambda *a, **k: answers.append(1) or len(answers) > 1)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: answers.append(1) or len(answers) > 1)
     assert not page.rotate_pages(90), "si no confirma, no se edita"
     assert not page.session.modified
     assert page.rotate_pages(90) and page.rotate_pages(90)

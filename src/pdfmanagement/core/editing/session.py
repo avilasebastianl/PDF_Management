@@ -19,8 +19,10 @@ from ..documents import open_document
 from ..errors import InvalidInputError
 from ..files import PDF_EXTENSIONS, atomic_output, prepare_output, require_file
 from . import annotations as annots
+from . import engine
 from . import pages as page_ops
 from .annotations import AnnotationInfo, AnnotationStyle
+from .changes import CONTENT, SAVED, STRUCTURE, ChangeNotifier, DocumentChange
 from .history import History
 from .text import page_words
 
@@ -62,9 +64,10 @@ class DocumentSession:
         self.password = password
         # No usar ``needs_pass`` aqui: MuPDF vuelve a autenticar con contrasena
         # vacia y reemplaza la clave buena; el documento se leeria en blanco.
-        self.encrypted = password is not None or bool((document.metadata or {}).get("encryption"))
-        _prepare_font_cache(document)  # antes del historial: ver la funcion
+        self.encrypted = password is not None or engine.was_encrypted(document)
+        engine.prepare_font_cache(document)  # antes del historial (ver engine, punto 5)
         self.history = History(document, on_change=on_change)
+        self.changes = ChangeNotifier()  # avisa de cada cambio a quien muestra el documento
         self._words: dict[int, list[tuple]] = {}
 
     @classmethod
@@ -279,27 +282,37 @@ class DocumentSession:
         if not 0 <= page < self.page_count:
             raise InvalidInputError("La pagina no existe.")
         result = None
+        steps = self.history.undo_depth
         with self.history.operation(label):
             current = self.document[page]  # debe seguir viva mientras se usa la anotacion
             result = operation(current, *args)
-        logger.info("Anotacion: %s (%s)", label, self.name)
+        if self.history.undo_depth != steps:
+            logger.info("Anotacion: %s (%s)", label, self.name)
+            self.changes.emit(DocumentChange(CONTENT, label, frozenset({page})))
         return result
 
     def undo(self) -> str | None:
         label = self.history.undo()
-        self.invalidate()
+        if label is not None:
+            self.invalidate()
+            self.changes.emit(DocumentChange(STRUCTURE, label))
         return label
 
     def redo(self) -> str | None:
         label = self.history.redo()
-        self.invalidate()
+        if label is not None:
+            self.invalidate()
+            self.changes.emit(DocumentChange(STRUCTURE, label))
         return label
 
     def _edit(self, label: str, operation: Callable, *args) -> str:
+        steps = self.history.undo_depth
         with self.history.operation(label):
             operation(self.document, *args)
-        self.invalidate()
-        logger.info("Edicion: %s (%s)", label, self.name)
+        if self.history.undo_depth != steps:
+            self.invalidate()
+            logger.info("Edicion: %s (%s)", label, self.name)
+            self.changes.emit(DocumentChange(STRUCTURE, label))
         return label
 
     def _valid_pages(self, pages: Iterable[int]) -> list[int]:
@@ -337,34 +350,11 @@ class DocumentSession:
             copy.close()
         self.history.mark_saved()
         logger.info("Documento guardado como: %s", output)
+        self.changes.emit(DocumentChange(SAVED, str(output)))
         return output
 
     def close(self) -> None:
         self.document.close()
-
-
-def _prepare_font_cache(document: pymupdf.Document) -> None:
-    """
-    Crea la fuente Helvetica de los textos libres antes de activar el historial.
-
-    MuPDF guarda en una cache el objeto de cada fuente que agrega. Si se crea
-    dentro de una operacion y esa operacion se deshace, el objeto desaparece
-    pero la cache lo sigue usando: el siguiente texto queda apuntando a un
-    objeto inexistente ("cannot find object in xref"). Creada aqui, fuera del
-    historial, ningun deshacer la borra. No cambia nada visible: la anotacion
-    temporal se elimina y la fuente, si no se usa, no se guarda (``garbage``).
-    """
-    if not document.page_count:
-        return
-    page = document[0]
-    had_annots = document.xref_get_key(page.xref, "Annots")[0] != "null"
-    try:
-        page.delete_annot(page.add_freetext_annot((0, 0, 50, 20), "x", fontname="helv"))
-    except (RuntimeError, ValueError) as error:  # PDF raro: los textos funcionan igual, con el aviso
-        logger.warning("No se pudo preparar la fuente de los textos: %s", error)
-        return
-    if not had_annots:
-        document.xref_set_key(page.xref, "Annots", "null")
 
 
 def _plural(count: int, word: str) -> str:

@@ -135,3 +135,28 @@ def test_recent_files(tmp_path, monkeypatch, text_pdf):
     assert recent.load_recent() == [text_pdf.resolve(), other.resolve()]
     other.unlink()
     assert recent.load_recent() == [text_pdf.resolve()], "los archivos borrados desaparecen"
+
+
+def test_session_announces_each_change(text_pdf, tmp_path):
+    """La vista se actualiza desde un unico aviso por cambio (estructura, contenido, guardado)."""
+    from pdfmanagement.core.editing import CONTENT, SAVED, STRUCTURE, AnnotationStyle
+
+    session = DocumentSession.open(text_pdf)
+    changes = []
+    unsubscribe = session.changes.subscribe(changes.append)
+    session.rotate([0], 90)
+    session.move([1], 1)  # mismo lugar: no cambia nada, no avisa
+    session.add_note(2, (50, 50), "nota", AnnotationStyle())
+    session.undo()
+    session.save_as(tmp_path / "copia.pdf")
+    assert [(change.kind, change.pages) for change in changes] == [
+        (STRUCTURE, frozenset()),
+        (CONTENT, frozenset({2})),
+        (STRUCTURE, frozenset()),
+        (SAVED, frozenset()),
+    ]
+    assert changes[0].label == "Rotar pagina 1 a la derecha"
+    unsubscribe()
+    session.rotate([0], 90)
+    assert len(changes) == 4, "dado de baja: ya no recibe avisos"
+    session.close()

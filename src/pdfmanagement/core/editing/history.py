@@ -23,6 +23,8 @@ from contextlib import contextmanager
 
 import pymupdf
 
+from . import engine
+
 logger = logging.getLogger(__name__)
 
 
@@ -107,7 +109,7 @@ class History:
 
     def _position(self) -> int:
         """Paso actual del journal (cuantas operaciones hay aplicadas)."""
-        return self._document.journal_position()[0]
+        return engine.journal_step(self._document)
 
     def undo(self) -> str | None:
         """Deshace la ultima operacion; devuelve su etiqueta."""
@@ -137,6 +139,6 @@ class History:
     def _changed(self) -> None:
         # Las paginas cambian de lugar o desaparecen: los objetos Page en cache
         # de PyMuPDF quedarian apuntando a otra pagina.
-        self._document._reset_page_refs()  # noqa: SLF001
+        engine.reset_page_refs(self._document)
         if self._on_change:
             self._on_change()

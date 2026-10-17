@@ -169,8 +169,3 @@ def test_edits_on_protected_document_keep_encryption(tmp_path):
     assert page_texts(output, "clave123") == ["Pagina 3", "Pagina 1"]
     with core.open_document(output, "clave123") as document:
         assert document[1].rotation == 90
-
-
-def test_visible_text_helper_uses_internal_api():
-    """``text.visible_textpage`` usa una API interna de PyMuPDF: avisar si desaparece."""
-    assert hasattr(pymupdf.Page, "_get_textpage")

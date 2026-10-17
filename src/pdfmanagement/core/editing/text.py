@@ -15,17 +15,15 @@ documento no se modifica.
 
 import pymupdf
 
+from . import engine
+
 WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS
 SEARCH_FLAGS = pymupdf.TEXTFLAGS_SEARCH
 
 
 def visible_textpage(page: pymupdf.Page, flags: int = WORD_FLAGS) -> pymupdf.TextPage:
-    """``TextPage`` de la pagina visible, sin modificar el documento."""
-    # API interna de PyMuPDF (la misma que usa get_textpage, sin el cambio de
-    # rotacion); tests/test_editing.py comprueba que siga existiendo.
-    textpage = pymupdf.TextPage(page._get_textpage(None, flags=flags, matrix=pymupdf.Matrix(1, 1)))  # noqa: SLF001
-    textpage.parent = page
-    return textpage
+    """``TextPage`` de la pagina visible, sin modificar el documento (ver ``engine``)."""
+    return engine.visible_textpage(page, flags)
 
 
 def page_words(page: pymupdf.Page, *, sort: bool = False) -> list[tuple]:

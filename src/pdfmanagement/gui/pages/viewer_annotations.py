@@ -378,17 +378,21 @@ class ViewerAnnotations:
             return False
         if session.history.undo_depth == steps:
             return False
-        self._cache.pop(page_index, None)
+        # La pagina ya se redibujo con el aviso de cambios (content_changed); aqui solo la seleccion.
         xref = select() if callable(select) else select
         self.selected = next((info for info in self.annotations_on(page_index) if info.xref == xref), None)
-        self.view.refresh({page_index})
-        page.thumbnails.refresh_pages([page_index])
-        self.refresh_panel()
-        page._refresh_file_state()  # noqa: SLF001
+        self.panel.show_selected(self.selected)
+        self.view.redraw_overlays()
         label = session.history.undo_label
         page.selection_label.configure(text=f"{label}  ·  Ctrl+Z para deshacer")
         page.log("Anotacion: %s", label, archivo=session.name)
         return True
+
+    def content_changed(self, pages) -> None:
+        """Cambiaron las anotaciones de ``pages`` (aviso de la sesion)."""
+        for page in pages:
+            self._cache.pop(page, None)
+        self.refresh_panel()
 
     def reset(self) -> None:
         """El documento cambio por completo (abrir, deshacer, editar paginas)."""
