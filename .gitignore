@@ -1,14 +1,23 @@
-env
-venv
+# Entornos virtuales
+env/
+venv/
+.venv/
 
-__pycache__
-*/__pycache__
-*/*/__pycache__
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
+# Editores
 .vscode/
+.idea/
+
+# Datos del usuario (se crean automaticamente al iniciar la aplicacion)
 config/
-export/
-signs/
 log/
+signs/
+export/
+
+# Archivos de prueba locales
 pdf/
 origin/

@@ -1,0 +1,3 @@
+# Herramientas de desarrollo. Instalar con: python -m pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1

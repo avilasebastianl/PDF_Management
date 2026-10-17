@@ -1,0 +1,13 @@
+[project]
+name = "pdfmanagement"
+version = "4.0.0"
+description = "Herramienta de escritorio, local y gratuita, para trabajar con PDFs."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+authors = [{ name = "Sebastian Avila" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-q"

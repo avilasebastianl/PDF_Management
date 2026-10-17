@@ -1,91 +1,79 @@
 # PDF Management - Guia de uso
 
+Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+6**. Pulse **F1** para abrir esta guia.
+
+En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador. Al terminar una operacion, la barra inferior muestra el resultado con los botones **Mostrar en carpeta** y **Abrir**.
+
+La aplicacion nunca sobrescribe un archivo sin preguntar: si el nombre de salida sugerido ya existe, elige automaticamente uno libre, por ejemplo `informe_firmado (2).pdf`.
+
 ## Unir
 
-Use esta seccion para crear un solo PDF a partir de varios archivos.
+Combine varios PDFs en uno solo.
 
-1. Presione **Agregar PDFs** o arrastre archivos PDF a la lista.
-2. Ordene los archivos con los botones **^** y **v**.
-3. Elija el archivo de salida.
-4. Presione **Unir PDFs**.
+1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista.
+2. Ordenelos con las flechas de cada fila o con **Ordenar A-Z**.
+3. Opcional: active **Crear un marcador por cada archivo** para navegar el resultado por documento.
+4. Revise **Guardar como** y presione **Unir PDFs**.
 
-Ejemplo: si agrega `parte_1.pdf`, `parte_2.pdf` y `parte_3.pdf`, el PDF final conserva el orden visible en la lista.
+Si algun PDF esta protegido, la aplicacion pedira su contrasena.
 
 ## Extraer
 
-Use esta seccion para crear un nuevo PDF con paginas especificas de un archivo existente.
+Genere un PDF nuevo con solo algunas paginas, en el orden que indique.
 
-1. Seleccione el PDF origen.
-2. Escriba las paginas que desea extraer.
-3. Si el PDF origen tiene contrasena, escribala en **Clave PDF origen**. Si no la escribe, la aplicacion la pedira cuando sea necesaria.
-4. Si desea proteger el PDF generado, escriba una nueva contrasena en **Clave PDF final**.
-5. Elija el archivo de salida.
-6. Presione **Crear PDF**.
+1. Seleccione el **PDF** de origen. Vera su numero de paginas.
+2. Escriba la **Seleccion** (las paginas empiezan en 1). Debajo vera cuantas paginas se extraeran.
+3. Opcional: contrasena del PDF de origen y contrasena para proteger el resultado.
+4. Presione **Extraer paginas**.
 
-Ejemplos de paginas:
+Ejemplos de seleccion:
 
-- `2,4,7,9`: extrae solo esas paginas.
-- `1-3,8,10`: extrae un rango y paginas individuales.
-- `all`: extrae todas las paginas.
-- `odd`: extrae paginas impares.
-- `even`: extrae paginas pares.
+- `2,4,7`: solo esas paginas.
+- `1-3, 8, 10`: un rango y paginas sueltas.
+- `8-`: desde la pagina 8 hasta el final.
+- `-3`: de la primera a la tercera.
+- `todo`, `impar`, `par` (tambien `all`, `odd`, `even`).
 
 ## Convertir
 
-Use esta seccion para convertir archivos de Office a PDF.
-
-Formatos admitidos:
-
-- `.docx`
-- `.xlsx`
-
-Seleccione el archivo de origen, el destino del PDF y presione **Convertir**.
+Convierta documentos de Word (`.docx`, `.doc`, `.rtf`) y Excel (`.xlsx`, `.xls`) a PDF. Requiere Microsoft Office instalado.
 
 ## Firmar
 
-Use esta seccion para agregar una firma visual desde una imagen.
+Estampe una imagen de su firma sobre el documento.
 
-1. Seleccione el PDF a firmar.
-2. Seleccione o cree una imagen de firma.
-3. Use el visor para ubicar la firma. Puede ir a la primera, anterior, siguiente o ultima pagina.
-4. Haga clic sobre el punto donde desea colocarla.
-5. Ajuste el zoom con **-**, **+** o **Reiniciar vista** si necesita precision.
-6. Active **Firmar todas las hojas** si desea poner la firma en la misma posicion en todo el documento.
-7. Presione **Firmar**.
+1. Seleccione el **PDF a firmar**. Se abre en la ultima pagina.
+2. Elija una firma guardada, **dibuje** una nueva (icono de lapiz) o **importe** una imagen PNG/JPG.
+3. Haga clic en la vista previa para ubicar la firma y arrastrela para ajustarla. Tambien puede escribir **Pagina**, **X**, **Y** y **Ancho** (en puntos: 72 pt = 1 pulgada).
+4. Opcional: **Firmar todas las paginas** en la misma posicion.
+5. Presione **Firmar PDF**.
 
-Las firmas creadas o adjuntadas se guardan en la carpeta `signs`. Puede seleccionar **Sin imagen** para limpiar la seleccion o borrar una firma guardada desde el boton **Borrar**.
+Navegue con los botones de pagina, acerque o aleje con **Ctrl + rueda del mouse** y use **Ajustar pagina** para volver a ver la hoja completa.
+
+Las imagenes importadas con fondo blanco se vuelven transparentes y se recortan sus margenes automaticamente. Lo que ve en la vista previa es exactamente lo que queda en el PDF.
+
+Importante: esta es una firma **visual**, no una firma digital con certificado.
 
 ## Proteger
 
-Use esta seccion para bloquear o desbloquear PDFs.
+- **Proteger con contrasena**: genera una copia cifrada (AES-256). Escriba y confirme la contrasena (minimo 4 caracteres).
+- **Quitar contrasena**: genera una copia sin proteccion, siempre que conozca la contrasena actual.
 
-- **Bloquear**: genera un PDF protegido con la contrasena indicada.
-- **Desbloquear**: genera una copia sin proteccion, siempre que conozca la contrasena actual.
+Al seleccionar un PDF, la aplicacion detecta si esta protegido y elige la accion adecuada.
 
 ## Ajustes
 
-Use esta seccion para cambiar:
+Los cambios se guardan automaticamente:
 
-- Ancho de ventana.
-- Alto de ventana.
-- Tema visual.
-- Color de tema.
-- Escala de la interfaz.
-- Pestaña inicial.
-- Abrir automaticamente el archivo generado al guardar.
+- **Modo**: Sistema, Claro u Oscuro (tambien desde la barra lateral).
+- **Color de acento**: se aplica al reiniciar.
+- **Tamano de la interfaz**.
+- **Pagina inicial** al abrir la aplicacion.
+- **Abrir el archivo al terminar**.
+- **Carpeta de salida** por defecto.
 
-Al aplicar cambios, la aplicacion preguntara si desea reiniciar para tomarlos inmediatamente.
+El tamano y la posicion de la ventana se recuerdan al cerrar.
 
-## Ayuda
+## Privacidad y seguridad
 
-El boton **Ayuda** abre esta guia dentro de la aplicacion con formato legible.
-
-## Procesamiento
-
-Las operaciones de unir, extraer, convertir, firmar y proteger se ejecutan en
-segundo plano. Puede seguir navegando por la aplicacion mientras el indicador
-de actividad de la parte inferior muestra que hay un archivo en proceso.
-
-## Seguridad
-
-La aplicacion no intenta descubrir contrasenas desconocidas. Para desbloquear o extraer contenido de PDFs protegidos debe conocer la contrasena.
+Todo se procesa en este equipo; la aplicacion no usa internet. Nunca intenta descubrir contrasenas: para abrir o desbloquear un PDF protegido debe conocer su clave.

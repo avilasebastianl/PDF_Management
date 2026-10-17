@@ -1,0 +1,18 @@
+# Dependencias de PDF Management (Python 3.14, Windows).
+# Instalar con: python -m pip install -r requirements.txt
+
+# Motor PDF: render, edicion grafica y firma visual. Se importa como ``pymupdf``.
+PyMuPDF==1.28.2
+
+# Union, extraccion y cifrado AES-256 (el extra [crypto] instala ``cryptography``).
+pypdf[crypto]==6.19.0
+
+# Interfaz grafica y arrastrar/soltar archivos.
+customtkinter==5.2.2
+tkinterdnd2==0.6.3
+
+# Imagenes de firmas, iconos y codigo QR.
+Pillow==12.3.0
+
+# Conversion Word/Excel -> PDF mediante Microsoft Office (solo Windows).
+comtypes==1.4.17; sys_platform == "win32"

@@ -1,11 +1,16 @@
 """
-    Archivo main, objeto de ejecucion
+Punto de entrada de PDF Management.
+
+Doble clic (pythonw) abre la interfaz grafica. Desde una terminal:
+``python main.pyw --help`` lista los comandos disponibles.
 """
 
-import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),'src'))
-from utils import * # type: ignore
+from pathlib import Path
 
-if __name__ == '__main__':
-    TheExecution.execution(action=sys.argv[1] if len(sys.argv) > 1 else '-h') # type: ignore
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from pdfmanagement.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())
