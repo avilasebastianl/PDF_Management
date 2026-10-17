@@ -28,6 +28,21 @@ def format_size(size_bytes: int) -> str:
     return f"{size:.1f} GB"
 
 
+def set_label_image(label: ctk.CTkLabel, image: ctk.CTkImage | None, text: str = "") -> None:
+    """
+    Cambia (o quita) la imagen de un ``CTkLabel`` de forma segura.
+
+    CustomTkinter no borra la imagen al recibir ``image=None`` y, si la imagen
+    anterior ya fue liberada, cualquier ``configure`` posterior falla con
+    ``image "pyimageN" does not exist``. Por eso primero se desvincula la
+    imagen del widget Tk interno y luego se asigna la nueva.
+
+    Quien llama debe conservar una referencia a ``image`` mientras se muestre.
+    """
+    label._label.configure(image="")  # noqa: SLF001 - CTkLabel no expone su etiqueta Tk
+    label.configure(image=image, text=text)
+
+
 def hide(widget) -> None:
     """
     Oculta un widget ubicado con ``grid`` recordando sus opciones.

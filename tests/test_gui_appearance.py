@@ -6,35 +6,23 @@ Requiere una pantalla (se omite si Tk no puede crear ventanas).
 """
 
 import time
-import tkinter
 
 import customtkinter as ctk
 import pytest
 
-from pdfmanagement import paths
-from pdfmanagement.config import Settings
-
 
 @pytest.fixture
-def window(tmp_path, monkeypatch, pdf_factory):
-    monkeypatch.setattr(paths, "LOG_DIR", tmp_path / "log")
-    monkeypatch.setattr(paths, "SIGNATURES_DIR", tmp_path / "signs")
-    try:
-        from pdfmanagement.gui.app import MainWindow
-
-        settings = Settings(appearance_mode="Dark", output_dir=str(tmp_path / "out"), open_after_save=False)
-        main = MainWindow(settings)
-    except tkinter.TclError as error:
-        pytest.skip(f"Sin pantalla disponible: {error}")
-    main.save_settings = lambda: None
-    main.show_page("Unir")
+def window(gui_app, pdf_factory):
+    gui_app.set_appearance_mode("Dark")
+    _pump(gui_app, lambda: not gui_app.appearance._pending)
+    gui_app.show_page("Unir")
     for page in ("Extraer", "Convertir", "Firmar", "Proteger", "Ajustes"):
-        main._ensure_page(page)
-    merge = main.pages["Unir"]
-    merge._add_files([pdf_factory(f"doc_{index}.pdf", 1) for index in range(15)])
-    _pump(main, lambda: not merge._rows_to_build and not main.runner.busy)
-    yield main
-    main.close(exit_process=False)
+        gui_app._ensure_page(page)
+    merge = gui_app.pages["Unir"]
+    if len(merge.entries) < 15:
+        merge._add_files([pdf_factory(f"doc_{index}.pdf", 1) for index in range(15)])
+    _pump(gui_app, lambda: not merge._rows_to_build and not gui_app.runner.busy)
+    return gui_app
 
 
 def _pump(main, done, timeout=20.0):

@@ -13,6 +13,7 @@ from PIL import Image
 from ... import __app_name__, __version__, paths
 from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_themes
 from .. import style
+from ..dropdown import dropdown_menu
 from ..system import open_path
 from ..widgets import Card, field_label, hide, muted_label, primary_button, secondary_button, show
 from .base import BasePage
@@ -40,12 +41,11 @@ class SettingsPage(BasePage):
         )
         self._row(appearance, 0, "Modo", self.mode)
 
-        self.color = ctk.CTkOptionMenu(appearance, values=available_color_themes(), command=self._on_color_changed, width=180)
+        self.color = dropdown_menu(appearance, available_color_themes(), self._on_color_changed)
         self._row(appearance, 1, "Color de acento", self.color)
 
-        self.scaling = ctk.CTkOptionMenu(
-            appearance, values=[f"{int(value * 100)}%" for value in UI_SCALING_OPTIONS],
-            command=self._on_scaling_changed, width=180,
+        self.scaling = dropdown_menu(
+            appearance, [f"{int(value * 100)}%" for value in UI_SCALING_OPTIONS], self._on_scaling_changed
         )
         self._row(appearance, 2, "Tamano de la interfaz", self.scaling)
 
@@ -58,7 +58,7 @@ class SettingsPage(BasePage):
         # * General
         general = Card(self.body, "General")
         general.grid(row=1, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
-        self.initial_page = ctk.CTkOptionMenu(general, values=list(self.app.nav_buttons), command=self._on_initial_page, width=180)
+        self.initial_page = dropdown_menu(general, list(self.app.nav_buttons), self._on_initial_page)
         self._row(general, 0, "Pagina inicial", self.initial_page)
 
         self.open_after = ctk.CTkSwitch(general, text="", command=self._on_open_after)

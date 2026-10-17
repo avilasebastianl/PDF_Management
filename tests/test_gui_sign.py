@@ -5,35 +5,25 @@ Requiere una pantalla (se omite si Tk no puede crear ventanas).
 """
 
 import time
-import tkinter
 
 import pytest
 
-from pdfmanagement import core, paths
-from pdfmanagement.config import Settings
+from pdfmanagement import core
 
 
 @pytest.fixture
-def window(tmp_path, monkeypatch):
-    monkeypatch.setattr(paths, "LOG_DIR", tmp_path / "log")
-    monkeypatch.setattr(paths, "SIGNATURES_DIR", tmp_path / "signs")
-    try:
-        from pdfmanagement.gui.app import MainWindow
-
-        main = MainWindow(Settings(output_dir=str(tmp_path / "out"), open_after_save=False))
-    except tkinter.TclError as error:
-        pytest.skip(f"Sin pantalla disponible: {error}")
-    main.save_settings = lambda: None
-    yield main
-    main.close(exit_process=False)
+def window(gui_app):
+    gui_app.show_page("Firmar")
+    return gui_app
 
 
 @pytest.fixture
 def sign_page(window, pdf_factory, signature_png):
     from pdfmanagement import signatures
 
-    window.show_page("Firmar")
     page = window.pages["Firmar"]
+    page.mode.set("Firma visual")
+    page._apply_mode()
     page._refresh_signatures(select=signatures.import_signature(signature_png, "firma"))
     page.source_field.set(pdf_factory("doc.pdf", 2))
     _pump(window)
@@ -106,7 +96,7 @@ def test_resized_signature_matches_the_pdf(sign_page, tmp_path):
     rect = sign_page._current_rect()
     output = tmp_path / "firmado.pdf"
     core.sign_pdf_with_image(
-        sign_page.document_path, output, sign_page.signature_paths[sign_page.signature_combo.get()],
+        sign_page.document_path, output, sign_page.signature_paths[sign_page.signature_menu.get()],
         sign_page._placement(),
     )
     with pymupdf.open(output) as document:
@@ -120,3 +110,59 @@ def test_certificate_guide_link_opens_its_section(window):
     window.open_help(CERTIFICATE_GUIDE_SECTION)
     _pump(window, 0.3)
     assert CERTIFICATE_GUIDE_SECTION in window._help._sections, "el titulo de la guia debe coincidir con el enlace"
+
+
+# * Biblioteca de firmas y vista previa -----------------------------------------
+
+def _preview_tk_image(page) -> str:
+    """Imagen que muestra realmente la etiqueta Tk interna de la vista previa."""
+    return str(page.signature_preview._label.cget("image"))
+
+
+def test_choosing_no_signature_clears_the_preview(sign_page):
+    assert _preview_tk_image(sign_page), "con una firma elegida debe verse su imagen"
+    sign_page._select_signature(NO_SIGNATURE_LABEL)
+    assert _preview_tk_image(sign_page) == ""
+    assert sign_page.signature_preview.cget("text") == "Sin firma seleccionada"
+
+
+def test_creating_importing_and_deleting_signatures_in_a_row(sign_page, signature_png, signature_jpg, tmp_path):
+    import gc
+
+    from pdfmanagement import signatures
+    from pdfmanagement.gui.dialogs import SignaturePad
+
+    window = sign_page.app
+    # Dibujar una firma nueva con el lienzo (simulando trazos del mouse).
+    pad = SignaturePad(sign_page, on_saved=lambda path: sign_page._refresh_signatures(select=path))
+    _pump(window, 0.2)
+    pad.name.set("nueva")
+    pad.strokes = [[(40, 150, 3), (200, 120, 3), (420, 180, 3)]]
+    pad._save()
+    gc.collect()
+    _pump(window, 0.2)
+    assert sign_page.signature_menu.get().startswith("nueva")
+    assert _preview_tk_image(sign_page)
+
+    # Importar otra y volver a elegir: antes fallaba con 'image "pyimageN" does not exist'.
+    sign_page._refresh_signatures(select=signatures.import_signature(signature_jpg, "escaneada"))
+    gc.collect()
+    sign_page._select_signature(NO_SIGNATURE_LABEL)
+    sign_page._select_signature(sign_page.signature_menu.cget("values")[1])
+    gc.collect()
+    assert _preview_tk_image(sign_page)
+
+    # Borrar la seleccionada.
+    window_messagebox = __import__("tkinter").messagebox
+    original = window_messagebox.askyesno
+    window_messagebox.askyesno = lambda *args, **kwargs: True
+    try:
+        sign_page._delete_signature()
+    finally:
+        window_messagebox.askyesno = original
+    gc.collect()
+    _pump(window, 0.1)
+    assert sign_page.signature_menu.get() in sign_page.signature_menu.cget("values")
+
+
+NO_SIGNATURE_LABEL = "Sin firma"

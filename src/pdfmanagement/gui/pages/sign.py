@@ -19,6 +19,7 @@ from ... import core, signatures
 from ...core.signing import MIN_SIGNATURE_WIDTH
 from .. import style
 from ..dialogs import SignaturePad, ask_certificate_password, ask_password
+from ..dropdown import dropdown_menu, set_dropdown_values
 from ..icons import GLYPHS, icon, render_glyph
 from ..widgets import (
     Card,
@@ -31,6 +32,7 @@ from ..widgets import (
     muted_label,
     primary_button,
     set_enabled,
+    set_label_image,
     show,
 )
 from .base import BasePage
@@ -134,10 +136,11 @@ class SignPage(BasePage):
         selector = ctk.CTkFrame(signature, fg_color="transparent")
         selector.grid(row=signature.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 6))
         selector.grid_columnconfigure(0, weight=1)
-        self.signature_combo = ctk.CTkComboBox(
-            selector, values=[NO_SIGNATURE], state="readonly", height=34, command=self._on_signature_selected
+        # Lista de la biblioteca de firmas: muestra 6 y se desplaza si hay mas.
+        self.signature_menu = dropdown_menu(
+            selector, [NO_SIGNATURE], self._on_signature_selected, max_visible=6, width=160, height=34,
         )
-        self.signature_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.signature_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         icon_button(selector, "edit", self._draw_signature, "Dibujar firma nueva").grid(row=0, column=1)
         icon_button(selector, "image", self._import_signature, "Importar imagen (PNG/JPG)").grid(row=0, column=2)
         icon_button(selector, "delete", self._delete_signature, "Borrar firma seleccionada").grid(row=0, column=3)
@@ -403,14 +406,19 @@ class SignPage(BasePage):
     def _refresh_signatures(self, select: Path | None = None) -> None:
         files = signatures.list_signatures()
         self.signature_paths = {file.name: file for file in files}
-        self.signature_combo.configure(values=[NO_SIGNATURE, *self.signature_paths])
+        set_dropdown_values(self.signature_menu, [NO_SIGNATURE, *self.signature_paths])
         if select is not None:
             name = select.name
-        elif self.signature_combo.get() in self.signature_paths:
-            name = self.signature_combo.get()
+        elif self.signature_menu.get() in self.signature_paths:
+            name = self.signature_menu.get()
         else:
             name = files[0].name if files else NO_SIGNATURE
-        self.signature_combo.set(name)
+        self.signature_menu.set(name)
+        self._on_signature_selected(name)
+
+    def _select_signature(self, name: str) -> None:
+        """Elige una firma de la biblioteca (o "Sin firma") y actualiza la vista previa."""
+        self.signature_menu.set(name)
         self._on_signature_selected(name)
 
     def _on_signature_selected(self, name: str) -> None:
@@ -418,7 +426,7 @@ class SignPage(BasePage):
         if path is None:
             self.signature_image = None
             self.image_aspect = None
-            self.signature_preview.configure(image=None, text="Sin firma seleccionada")
+            self._show_preview(None, "Sin firma seleccionada")
             self._schedule_overlay()
             return
         try:
@@ -427,14 +435,19 @@ class SignPage(BasePage):
         except (OSError, core.PdfManagementError):
             self.signature_image = None
             self.image_aspect = None
-            self.signature_preview.configure(image=None, text="No se pudo cargar la imagen")
+            self._show_preview(None, "No se pudo cargar la imagen")
             self._schedule_overlay()
             return
         thumbnail = self.signature_image.copy()
         thumbnail.thumbnail((280, 84))
-        self._preview_image = ctk.CTkImage(thumbnail, thumbnail, size=thumbnail.size)
-        self.signature_preview.configure(image=self._preview_image, text="")
+        self._show_preview(ctk.CTkImage(thumbnail, thumbnail, size=thumbnail.size), "")
         self._schedule_overlay()
+
+    def _show_preview(self, image: ctk.CTkImage | None, text: str) -> None:
+        """Actualiza la miniatura sin dejar imagenes pegadas ni referencias liberadas."""
+        set_label_image(self.signature_preview, image, text)
+        # La referencia se reemplaza despues de desvincular la anterior del widget.
+        self._preview_image = image
 
     def _draw_signature(self) -> None:
         SignaturePad(self, on_saved=lambda path: self._refresh_signatures(select=path))
@@ -448,13 +461,13 @@ class SignPage(BasePage):
             self.guard(lambda: self._refresh_signatures(select=signatures.import_signature(chosen)))
 
     def _delete_signature(self) -> None:
-        name = self.signature_combo.get()
+        name = self.signature_menu.get()
         path = self.signature_paths.get(name)
         if path is None:
             return
         if messagebox.askyesno("Borrar firma", f"Desea borrar la firma '{name}'?", parent=self):
             signatures.delete_signature(path)
-            self.signature_combo.set(NO_SIGNATURE)
+            self.signature_menu.set(NO_SIGNATURE)
             self._refresh_signatures()
 
     # * Colocacion ------------------------------------------------------------
@@ -820,7 +833,7 @@ class SignPage(BasePage):
         def start() -> None:
             if self.document_path is None:
                 raise core.InvalidInputError("Seleccione el PDF a firmar.")
-            signature = self.signature_paths.get(self.signature_combo.get())
+            signature = self.signature_paths.get(self.signature_menu.get())
             if self.digital:
                 self._sign_digital(signature)
                 return

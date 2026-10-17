@@ -115,3 +115,54 @@ def make_certificate(
 def certificate(tmp_path_factory) -> tuple[Path, bytes]:
     """Certificado autofirmado vigente protegido con ``CERTIFICATE_PASSWORD``."""
     return make_certificate(tmp_path_factory.mktemp("cert") / "firmante.p12")
+
+
+@pytest.fixture(scope="session")
+def gui_app(tmp_path_factory):
+    """
+    Ventana principal compartida por las pruebas de interfaz.
+
+    La aplicacion real crea una sola ventana; crear muchas en el mismo proceso
+    hace que tkdnd falle al cargar de forma intermitente, por eso se reutiliza.
+    Se omite si no hay pantalla disponible.
+    """
+    import tkinter
+
+    from pdfmanagement import paths
+    from pdfmanagement.config import Settings
+
+    base = tmp_path_factory.mktemp("gui")
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(paths, "LOG_DIR", base / "log")
+    patcher.setattr(paths, "SIGNATURES_DIR", base / "signs")
+    main = None
+    for attempt in range(3):
+        try:
+            from pdfmanagement.gui.app import MainWindow
+
+            settings = Settings(appearance_mode="Dark", output_dir=str(base / "out"), open_after_save=False)
+            main = MainWindow(settings)
+            break
+        except tkinter.TclError as error:
+            patcher.undo()
+            pytest.skip(f"Sin pantalla disponible: {error}")
+        except RuntimeError:  # tkdnd no cargo: se reintenta
+            if attempt == 2:
+                raise
+    main.save_settings = lambda: None
+    main.show_page("Unir")
+    pump(main, timeout=0.5)  # la ventana debe estar visible, como cuando el usuario interactua
+    yield main
+    main.close(exit_process=False)
+    patcher.undo()
+
+
+def pump(window, done=None, timeout: float = 0.3) -> None:
+    """Procesa eventos de la interfaz durante ``timeout`` o hasta que ``done()`` sea verdadero."""
+    import time
+
+    end = time.time() + (timeout if done is None else max(timeout, 20.0))
+    while time.time() < end and not (done and done()):
+        window.root.update()
+        time.sleep(0.01)
+    window.root.update()
