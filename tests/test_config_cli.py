@@ -4,7 +4,7 @@ Pruebas de preferencias (incluida la migracion del formato anterior) y de la CLI
 
 import pytest
 
-from conftest import page_texts
+from conftest import CERTIFICATE_PASSWORD, page_texts
 from pdfmanagement import cli, config, core, paths
 
 
@@ -73,3 +73,23 @@ def test_cli_reports_errors(isolated_paths, pdf_factory, tmp_path, capsys):
     source = pdf_factory("a.pdf", 2)
     assert cli.main(["extract", str(source), "-p", "9", "-o", str(tmp_path / "out.pdf")]) == 1
     assert "fuera de rango" in capsys.readouterr().err
+
+
+def test_cli_sign_cert(isolated_paths, pdf_factory, tmp_path, certificate, signature_png, capsys):
+    from pyhanko.pdf_utils.reader import PdfFileReader
+
+    source = pdf_factory("a.pdf", 2)
+    output = tmp_path / "firmado.pdf"
+    arguments = ["sign-cert", str(source), "--cert", str(certificate[0]), "-o", str(output)]
+    assert cli.main([*arguments, "--cert-password", "mala"]) == 1
+    assert "no es correcta" in capsys.readouterr().err
+
+    assert cli.main([
+        *arguments, "--cert-password", CERTIFICATE_PASSWORD, "--image", str(signature_png),
+        "--x", "100", "--y", "600", "--reason", "Aprobado",
+    ]) == 0
+    with open(output, "rb") as stream:
+        [signature] = PdfFileReader(stream, strict=False).embedded_signatures
+        assert signature.sig_object["/Reason"] == "Aprobado"
+        assert signature.sig_object.get_object()["/Contents"]
+    assert "Archivo generado" in capsys.readouterr().out

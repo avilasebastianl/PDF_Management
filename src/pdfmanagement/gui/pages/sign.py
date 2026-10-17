@@ -1,6 +1,8 @@
 """
 Pagina "Firmar": ubica visualmente una imagen de firma sobre el PDF.
 
+Dos modos: firma visual (estampa la imagen) y firma digital con certificado
+.pfx/.p12 (PAdES), cuya apariencia combina la imagen opcional con una leyenda.
 El visor y el nucleo comparten ``core.signature_rect``, por lo que la posicion
 y el tamano que se ven en pantalla son exactamente los del PDF resultante.
 """
@@ -15,11 +17,26 @@ from PIL import Image, ImageTk
 
 from ... import core, signatures
 from .. import style
-from ..dialogs import SignaturePad, ask_password
-from ..widgets import Card, FileField, enable_file_drop, field_label, icon_button, muted_label, primary_button
+from ..dialogs import SignaturePad, ask_certificate_password, ask_password
+from ..widgets import (
+    Card,
+    FileField,
+    enable_file_drop,
+    field_label,
+    hide,
+    icon_button,
+    muted_label,
+    primary_button,
+    show,
+)
 from .base import BasePage
 
 NO_SIGNATURE = "Sin firma"
+VISUAL = "Firma visual"
+DIGITAL = "Firma digital"
+CERTIFICATE_FILETYPES = (("Certificados digitales", "*.pfx *.p12"),)
+DEFAULT_ASPECT = 0.4
+CERTIFICATE_HOLDER = "Titular del certificado"
 VIEWER_MARGIN = 24
 ZOOM_STEP = 1.25
 ZOOM_LIMITS = (0.3, 5.0)
@@ -42,7 +59,8 @@ class SignPage(BasePage):
         self.page_rect = pymupdf.Rect(0, 0, 0, 0)
         self.signature_paths: dict[str, Path] = {}
         self.signature_image: Image.Image | None = None
-        self.aspect_ratio = 0.4
+        self.image_aspect: float | None = None
+        self._certificate_holder = CERTIFICATE_HOLDER
         self._drag_offset: tuple[float, float] | None = None
         self._page_photo = None
         self._overlay_photo = None
@@ -56,6 +74,7 @@ class SignPage(BasePage):
         self._build_panel()
         self._build_viewer()
         self._refresh_signatures()
+        self._apply_mode()
 
     # * Construccion ----------------------------------------------------------
 
@@ -68,15 +87,22 @@ class SignPage(BasePage):
         panel.grid(row=0, column=0, sticky="ns")
         panel.grid_columnconfigure(0, weight=1)
 
+        self.mode = ctk.CTkSegmentedButton(
+            panel, values=[VISUAL, DIGITAL], command=lambda _value: self._apply_mode(), height=34,
+            font=style.fonts().body,
+        )
+        self.mode.set(VISUAL)
+        self.mode.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
+
         document = Card(panel, "Documento")
-        document.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
+        document.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
         self.source_field = FileField(
             document, document.row(0), "PDF a firmar", on_change=self._open_document,
             placeholder="Seleccione o arrastre un PDF", stacked=True,
         )
 
         signature = Card(panel, "Firma")
-        signature.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
+        signature.grid(row=2, column=0, sticky="ew", pady=(0, style.GAP))
         selector = ctk.CTkFrame(signature, fg_color="transparent")
         selector.grid(row=signature.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 6))
         selector.grid_columnconfigure(0, weight=1)
@@ -92,9 +118,15 @@ class SignPage(BasePage):
             fg_color=("white", "gray92"), text_color="gray45",
         )
         self.signature_preview.grid(row=signature.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(0, 4))
+        self.signature_hint = muted_label(
+            signature, "Opcional: la imagen se muestra sobre la leyenda del certificado.", wraplength=290
+        )
+        self.signature_hint.grid(row=signature.row(2), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
+
+        self._build_certificate_card(panel, row=3)
 
         position = Card(panel, "Posicion")
-        position.grid(row=2, column=0, sticky="ew", pady=(0, style.GAP))
+        position.grid(row=4, column=0, sticky="ew", pady=(0, style.GAP))
         grid = ctk.CTkFrame(position, fg_color="transparent")
         grid.grid(row=position.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 0))
         grid.grid_columnconfigure((1, 3), weight=1)
@@ -114,10 +146,11 @@ class SignPage(BasePage):
                 row=row, column=column * 2 + 1, sticky="ew", pady=4
             )
         self.all_pages = tk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
+        self.all_pages_check = ctk.CTkCheckBox(
             position, text="Firmar todas las paginas", variable=self.all_pages, font=style.fonts().body,
             command=self._schedule_overlay,
-        ).grid(row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2))
+        )
+        self.all_pages_check.grid(row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2))
         muted_label(position, "Medidas en puntos (72 pt = 1 pulgada).").grid(
             row=position.row(2), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD
         )
@@ -126,12 +159,47 @@ class SignPage(BasePage):
         self.page_var.trace_add("write", lambda *_: self._on_page_typed())
 
         output = Card(panel, "Resultado")
-        output.grid(row=3, column=0, sticky="ew", pady=(0, style.GAP))
+        output.grid(row=5, column=0, sticky="ew", pady=(0, style.GAP))
         self.output_field = FileField(output, output.row(0), "Guardar como", mode="save", stacked=True,
                                       initial_dir=lambda: self.app.settings.output_path)
 
         self.run_button = primary_button(sidebar, "Firmar PDF", self._sign, "sign")
         self.run_button.grid(row=1, column=0, sticky="ew", pady=(style.GAP, 0), padx=(0, 14))
+
+    def _build_certificate_card(self, panel, row: int) -> None:
+        self.certificate_card = Card(panel, "Certificado digital")
+        self.certificate_card.grid(row=row, column=0, sticky="ew", pady=(0, style.GAP))
+        card = self.certificate_card
+        warning = muted_label(
+            card,
+            "La firma digital debe ser el ultimo cambio: unir, extraer, proteger o "
+            "estampar una firma visual despues de firmar la invalida.",
+            wraplength=290,
+        )
+        warning.configure(text_color=style.WARNING)
+        warning.grid(row=card.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(4, 0))
+        self.certificate_field = FileField(
+            card, card.row(1), "Archivo .pfx / .p12", filetypes=CERTIFICATE_FILETYPES,
+            placeholder="Seleccione su certificado", stacked=True,
+        )
+        details = ctk.CTkFrame(card, fg_color="transparent")
+        details.grid(row=card.row(3), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 0))
+        details.grid_columnconfigure(1, weight=1)
+        self.reason_var = tk.StringVar()
+        self.location_var = tk.StringVar()
+        for index, (label, variable) in enumerate((("Motivo", self.reason_var), ("Lugar", self.location_var))):
+            field_label(details, label).grid(row=index, column=0, sticky="w", padx=(0, 8), pady=4)
+            ctk.CTkEntry(details, textvariable=variable, placeholder_text="Opcional", height=30).grid(
+                row=index, column=1, sticky="ew", pady=4
+            )
+        self.visible = tk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            card, text="Mostrar la firma en el documento", variable=self.visible, font=style.fonts().body,
+            command=self._schedule_overlay,
+        ).grid(row=card.row(4), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 6))
+        muted_label(
+            card, "La contrasena del certificado se pide al firmar y nunca se guarda.", wraplength=290
+        ).grid(row=card.row(5), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
 
     def _build_viewer(self) -> None:
         viewer = Card(self.body)
@@ -170,6 +238,38 @@ class SignPage(BasePage):
         ctk.AppearanceModeTracker.add(self._on_appearance_change, self.canvas)
         enable_file_drop(self.canvas, lambda files: files and self.source_field.set(files[0]), recursive=False)
         self._draw_placeholder()
+
+    # * Modo ------------------------------------------------------------------
+
+    @property
+    def digital(self) -> bool:
+        return self.mode.get() == DIGITAL
+
+    @property
+    def aspect_ratio(self) -> float:
+        """Relacion alto/ancho del recuadro de firma segun el modo."""
+        if self.digital:
+            return core.digital_aspect_ratio(self.image_aspect)
+        return self.image_aspect or DEFAULT_ASPECT
+
+    def _apply_mode(self) -> None:
+        if self.digital:
+            show(self.certificate_card)
+            show(self.signature_hint)
+            self.all_pages.set(False)
+            self.all_pages_check.configure(state="disabled")
+            self.run_button.configure(text="Firmar digitalmente")
+        else:
+            hide(self.certificate_card)
+            hide(self.signature_hint)
+            self.all_pages_check.configure(state="normal")
+            self.run_button.configure(text="Firmar PDF")
+        self._schedule_overlay()
+
+    def _overlay_visible(self) -> bool:
+        if self.digital:
+            return self.visible.get()
+        return self.signature_image is not None
 
     # * Documento -------------------------------------------------------------
 
@@ -234,15 +334,18 @@ class SignPage(BasePage):
         path = self.signature_paths.get(name)
         if path is None:
             self.signature_image = None
+            self.image_aspect = None
             self.signature_preview.configure(image=None, text="Sin firma seleccionada")
             self._schedule_overlay()
             return
         try:
             self.signature_image = core.load_signature(path)
-            self.aspect_ratio = core.image_aspect_ratio(self.signature_image)
+            self.image_aspect = core.image_aspect_ratio(self.signature_image)
         except (OSError, core.PdfManagementError):
             self.signature_image = None
+            self.image_aspect = None
             self.signature_preview.configure(image=None, text="No se pudo cargar la imagen")
+            self._schedule_overlay()
             return
         thumbnail = self.signature_image.copy()
         thumbnail.thumbnail((280, 84))
@@ -318,8 +421,13 @@ class SignPage(BasePage):
         if self.document is None:
             self.source_field.browse()
             return
-        if self.signature_image is None:
-            messagebox.showinfo("Firma", "Seleccione, dibuje o importe una firma primero.", parent=self)
+        if not self._overlay_visible():
+            message = (
+                "Active 'Mostrar la firma en el documento' para ubicarla."
+                if self.digital
+                else "Seleccione, dibuje o importe una firma primero."
+            )
+            messagebox.showinfo("Firma", message, parent=self)
             return
         x, y = self._to_page_point(event)
         rect = self._current_rect()
@@ -432,17 +540,37 @@ class SignPage(BasePage):
         self._redraw_pending = False
         self.canvas.delete("overlay")
         rect = self._current_rect()
-        if rect is None or self.signature_image is None:
+        if rect is None or not self._overlay_visible():
             return
         x0 = self.offset[0] + rect.x0 * self.scale
         y0 = self.offset[1] + rect.y0 * self.scale
         width = max(int(rect.width * self.scale), 1)
         height = max(int(rect.height * self.scale), 1)
-        self._overlay_photo = ImageTk.PhotoImage(self.signature_image.resize((width, height), Image.LANCZOS))
-        self.canvas.create_image(x0, y0, anchor="nw", image=self._overlay_photo, tags="overlay")
+        image_height = height
+        if self.digital:
+            caption_height = rect.width * core.CAPTION_RATIO * self.scale
+            image_height = int(round(height - caption_height))
+            self._draw_caption(x0, y0 + height, width, caption_height)
+        if self.signature_image is not None and image_height > 0:
+            self._overlay_photo = ImageTk.PhotoImage(self.signature_image.resize((width, image_height), Image.LANCZOS))
+            self.canvas.create_image(x0, y0, anchor="nw", image=self._overlay_photo, tags="overlay")
         self.canvas.create_rectangle(
             x0 - 2, y0 - 2, x0 + width + 2, y0 + height + 2,
             outline=style.themed(style.accent_color()), dash=(4, 3), width=1.5, tags="overlay",
+        )
+
+    def _draw_caption(self, x0: float, bottom: float, width: int, height: float) -> None:
+        """Vista previa de la leyenda de la firma digital (misma proporcion que en el PDF)."""
+        lines = ("Firmado digitalmente por:", self._certificate_holder, "Fecha: dd/mm/aaaa hh:mm:ss")
+        padding = height * 0.08
+        longest = max(len(line) for line in lines)
+        # Courier: cada caracter mide 0.6 veces el tamano de la fuente.
+        size = min((height - 2 * padding) / (len(lines) * 1.2), (width - 2 * padding) / (longest * 0.6))
+        if size < 3:
+            return
+        self.canvas.create_text(
+            x0 + padding, bottom - padding, text="\n".join(lines), anchor="sw", justify="left",
+            fill="#26263A", font=("Courier New", -int(size)), tags="overlay",
         )
 
     # * Accion ----------------------------------------------------------------
@@ -452,6 +580,9 @@ class SignPage(BasePage):
             if self.document_path is None:
                 raise core.InvalidInputError("Seleccione el PDF a firmar.")
             signature = self.signature_paths.get(self.signature_combo.get())
+            if self.digital:
+                self._sign_digital(signature)
+                return
             if signature is None:
                 raise core.InvalidInputError("Seleccione, dibuje o importe una firma.")
             placement = self._placement()
@@ -473,3 +604,56 @@ class SignPage(BasePage):
 
         self.guard(start)
 
+    def _sign_digital(self, signature: Path | None) -> None:
+        certificate = self.resolved(self.certificate_field.path)
+        if certificate is None:
+            raise core.InvalidInputError("Seleccione el certificado digital (.pfx o .p12).")
+        placement = None
+        if self.visible.get():
+            placement = self._placement()
+            if placement is None:
+                raise core.InvalidInputError("Haga clic en la vista previa para ubicar la firma.")
+        else:
+            signature = None
+        output = self.resolve_output(self.output_field)
+        if output is None:
+            return
+        unlocked = self._unlock_certificate(certificate)
+        if unlocked is None:
+            return
+        info, pfx_password = unlocked
+        self._certificate_holder = info.subject
+        self._schedule_overlay()
+        if info.self_signed and not messagebox.askyesno(
+            "Certificado autofirmado",
+            f"El certificado de '{info.subject}' es autofirmado.\n\n"
+            "La firma sera valida, pero programas como Adobe Acrobat mostraran la "
+            "identidad del firmante como desconocida.\n\nDesea continuar?",
+            parent=self,
+        ):
+            return
+        source = self.document_path
+        reason = self.reason_var.get().strip() or None
+        location = self.location_var.get().strip() or None
+        self.run_task(
+            f"Firmando digitalmente como {info.subject}",
+            "PDF firmado digitalmente",
+            lambda passwords: core.sign_pdf_with_certificate(
+                source, output, certificate, pfx_password,
+                placement=placement, signature_image=signature, reason=reason, location=location,
+                password=passwords.get(source),
+            ),
+            button=self.run_button,
+        )
+
+    def _unlock_certificate(self, certificate: Path) -> tuple[core.CertificateInfo, str] | None:
+        """Pide la contrasena del certificado hasta que sea correcta. ``None`` si se cancela."""
+        retry = False
+        while True:
+            pfx_password = ask_certificate_password(self, certificate.name, retry=retry)
+            if pfx_password is None:
+                return None
+            try:
+                return core.load_certificate(certificate, pfx_password), pfx_password
+            except core.WrongCertificatePasswordError:
+                retry = True

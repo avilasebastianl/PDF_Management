@@ -37,3 +37,19 @@ class WrongPasswordError(PasswordRequiredError):
 
 class ConversionError(PdfManagementError):
     """Fallo la conversion de un documento de Office a PDF."""
+
+
+class DigitalSignatureError(PdfManagementError):
+    """Fallo la firma digital con certificado."""
+
+
+class CertificateError(DigitalSignatureError):
+    """El certificado no es valido, esta vencido o no contiene la clave privada."""
+
+
+class WrongCertificatePasswordError(CertificateError):
+    """La contrasena indicada no abre el certificado .pfx/.p12."""
+
+    def __init__(self, certificate_path: Path) -> None:
+        self.certificate_path = Path(certificate_path)
+        super().__init__(f"La contrasena del certificado '{self.certificate_path.name}' no es correcta.")

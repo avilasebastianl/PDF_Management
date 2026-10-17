@@ -36,16 +36,34 @@ def _prepare_toplevel(window: ctk.CTkToplevel, parent, title: str, width: int, h
 
 def ask_password(parent, file_name: str, retry: bool = False) -> str | None:
     """Solicita la contrasena de un PDF en un dialogo modal. ``None`` si se cancela."""
-    window = ctk.CTkToplevel(parent)
-    _prepare_toplevel(window, parent, "Contrasena requerida", 420, 210, modal=True)
-    window.resizable(False, False)
-    result: dict[str, str | None] = {"value": None}
-
     message = (
         f"La contrasena de '{file_name}' no es correcta. Intente de nuevo:"
         if retry
         else f"'{file_name}' esta protegido. Ingrese su contrasena:"
     )
+    return _password_dialog(parent, "Contrasena requerida", message) or None
+
+
+def ask_certificate_password(parent, file_name: str, retry: bool = False) -> str | None:
+    """
+    Solicita la contrasena del certificado .pfx/.p12. Devuelve ``None`` si se
+    cancela y ``""`` si se acepta vacia (certificados sin contrasena). Nunca se
+    guarda: solo vive en memoria durante la firma.
+    """
+    message = (
+        f"La contrasena del certificado '{file_name}' no es correcta. Intente de nuevo:"
+        if retry
+        else f"Ingrese la contrasena del certificado '{file_name}'.\nNo se guarda en ningun lugar."
+    )
+    return _password_dialog(parent, "Contrasena del certificado", message)
+
+
+def _password_dialog(parent, title: str, message: str) -> str | None:
+    window = ctk.CTkToplevel(parent)
+    _prepare_toplevel(window, parent, title, 420, 220, modal=True)
+    window.resizable(False, False)
+    result: dict[str, str | None] = {"value": None}
+
     ctk.CTkLabel(window, text=message, font=style.fonts().body, wraplength=380, justify="left").pack(
         fill="x", padx=20, pady=(20, 10)
     )
@@ -63,7 +81,7 @@ def ask_password(parent, file_name: str, retry: bool = False) -> str | None:
     entry.bind("<Return>", accept)
     window.after(100, entry.focus_force)
     parent.wait_window(window)
-    return result["value"] or None
+    return result["value"]
 
 
 # * Ayuda -------------------------------------------------------------------

@@ -8,6 +8,7 @@ operacion directamente usando el mismo nucleo que la GUI:
     python main.pyw extract informe.pdf -p "1-3,8" -o resumen.pdf
     python main.pyw lock contrato.pdf -o protegido.pdf
     python main.pyw sign contrato.pdf --image firma.png --page 2 --x 400 --y 700
+    python main.pyw sign-cert contrato.pdf --cert firma.pfx --x 400 --y 700
 
 Las contrasenas se piden de forma oculta si no se pasan como argumento.
 """
@@ -64,6 +65,23 @@ def build_parser() -> argparse.ArgumentParser:
     sign.add_argument("--width", type=float, default=core.DEFAULT_SIGNATURE_WIDTH, help="ancho en puntos")
     sign.add_argument("--all-pages", action="store_true", help="firma todas las paginas")
     sign.add_argument("--password", help="contrasena del PDF de origen")
+
+    sign_cert = commands.add_parser(
+        "sign-cert", help="firma digital con certificado .pfx/.p12 (PAdES)",
+        description="Firma digital PAdES B-B sin conexion. Sin --x/--y la firma es invisible.",
+    )
+    sign_cert.add_argument("input", type=Path)
+    sign_cert.add_argument("--cert", type=Path, required=True, help="certificado .pfx o .p12")
+    sign_cert.add_argument("-o", "--output", type=Path)
+    sign_cert.add_argument("--cert-password", help="contrasena del certificado (si se omite se pide oculta)")
+    sign_cert.add_argument("--image", type=Path, help="imagen de firma para la apariencia visible")
+    sign_cert.add_argument("--page", type=int, help="pagina desde 1 (por defecto la ultima)")
+    sign_cert.add_argument("--x", type=float, help="borde izquierdo en puntos (activa la firma visible)")
+    sign_cert.add_argument("--y", type=float, help="borde superior en puntos (activa la firma visible)")
+    sign_cert.add_argument("--width", type=float, default=core.DEFAULT_SIGNATURE_WIDTH, help="ancho en puntos")
+    sign_cert.add_argument("--reason", help="motivo de la firma")
+    sign_cert.add_argument("--location", help="lugar de la firma")
+    sign_cert.add_argument("--password", help="contrasena del PDF de origen")
 
     for name, help_text in (("lock", "protege un PDF con contrasena"), ("unlock", "quita la contrasena")):
         command = commands.add_parser(name, help=help_text)
@@ -139,6 +157,28 @@ def _sign(args: argparse.Namespace) -> Path:
     )
 
 
+def _sign_cert(args: argparse.Namespace) -> Path:
+    if (args.x is None) != (args.y is None):
+        raise core.InvalidInputError("Indique --x y --y juntos para ubicar la firma visible.")
+    placement = None
+    if args.x is not None:
+        placement = core.SignaturePlacement(x=args.x, y=args.y, width=args.width, page_number=args.page)
+    elif args.image is not None:
+        raise core.InvalidInputError("Para usar --image indique tambien la posicion con --x y --y.")
+    cert_password = args.cert_password
+    if cert_password is None:
+        cert_password = getpass.getpass(f"Contrasena del certificado '{args.cert.name}': ")
+    output = args.output or _default_output(args.input, "firmado")
+    return _with_password_prompt(
+        lambda password: core.sign_pdf_with_certificate(
+            args.input, output, args.cert, cert_password,
+            placement=placement, signature_image=args.image, reason=args.reason, location=args.location,
+            password=password,
+        ),
+        args.password,
+    )
+
+
 def _lock(args: argparse.Namespace) -> Path:
     password = args.password
     if password is None:
@@ -158,6 +198,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], Path]] = {
     "extract": _extract,
     "convert": _convert,
     "sign": _sign,
+    "sign-cert": _sign_cert,
     "lock": _lock,
     "unlock": _unlock,
 }

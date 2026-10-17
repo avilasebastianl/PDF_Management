@@ -42,6 +42,10 @@ Convierta documentos de Word (`.docx`, `.doc`, `.rtf`) y Excel (`.xlsx`, `.xls`)
 
 ## Firmar
 
+Arriba del panel elija el tipo de firma: **Firma visual** o **Firma digital**.
+
+### Firma visual
+
 Estampe una imagen de su firma sobre el documento.
 
 1. Seleccione el **PDF a firmar**. Se abre en la ultima pagina.
@@ -54,7 +58,28 @@ Navegue con los botones de pagina, acerque o aleje con **Ctrl + rueda del mouse*
 
 Las imagenes importadas con fondo blanco se vuelven transparentes y se recortan sus margenes automaticamente. Lo que ve en la vista previa es exactamente lo que queda en el PDF.
 
-Importante: esta es una firma **visual**, no una firma digital con certificado.
+La firma visual no tiene validez criptografica: cualquiera podria copiar la imagen. Para eso use la firma digital.
+
+### Firma digital con certificado
+
+Firma el PDF con su certificado digital (archivo `.pfx` o `.p12`). Cualquier programa de PDF (por ejemplo Adobe Acrobat) puede comprobar quien firmo y si el documento cambio despues de la firma.
+
+1. Seleccione el **PDF a firmar**.
+2. En **Certificado digital**, elija su archivo `.pfx` / `.p12`.
+3. Opcional: escriba el **Motivo** (por ejemplo "Aprobado") y el **Lugar**.
+4. Con **Mostrar la firma en el documento** activado, ubique el recuadro en la vista previa como en la firma visual. El recuadro muestra su imagen de firma (opcional, elijala en **Firma**) y debajo la leyenda "Firmado digitalmente por" con el titular del certificado y la fecha. Si desactiva la opcion, la firma es invisible y solo aparece en el panel de firmas del lector de PDF.
+5. Presione **Firmar digitalmente** e ingrese la **contrasena del certificado**. Si es incorrecta, se vuelve a pedir.
+
+Tenga en cuenta:
+
+- **La firma digital debe ser el ultimo cambio.** Unir, extraer, proteger o estampar una firma visual sobre el PDF despues de firmarlo invalida la firma. Haga primero todos los cambios y firme al final.
+- **Varias personas pueden firmar el mismo PDF**: firme el archivo ya firmado y cada firma sigue siendo valida.
+- La contrasena del certificado **nunca se guarda**: se pide en cada firma.
+- Si el certificado esta vencido, no contiene la clave privada o el archivo esta danado, la aplicacion lo indica antes de firmar.
+- Con un certificado **autofirmado** la firma es valida, pero Adobe mostrara la identidad del firmante como desconocida. Para que aparezca como confiable, use un certificado emitido por una entidad de certificacion reconocida.
+- La firma digital se ubica en una sola pagina.
+
+Desde la linea de comandos: `python main.pyw sign-cert contrato.pdf --cert firma.pfx --x 400 --y 700` (sin `--x`/`--y` la firma es invisible).
 
 ## Proteger
 
@@ -78,4 +103,4 @@ El tamano y la posicion de la ventana se recuerdan al cerrar.
 
 ## Privacidad y seguridad
 
-Todo se procesa en este equipo; la aplicacion no usa internet. Nunca intenta descubrir contrasenas: para abrir o desbloquear un PDF protegido debe conocer su clave.
+Todo se procesa en este equipo; la aplicacion no usa internet, tampoco al firmar digitalmente. Nunca intenta descubrir contrasenas: para abrir o desbloquear un PDF protegido debe conocer su clave.

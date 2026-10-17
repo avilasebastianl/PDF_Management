@@ -11,6 +11,10 @@ pypdf[crypto]==6.19.0
 customtkinter==5.2.2
 tkinterdnd2==0.6.3
 
+# Firma digital con certificado (PAdES) a partir de archivos .pfx/.p12.
+pyHanko==0.37.0
+pyhanko-certvalidator==0.32.1
+
 # Imagenes de firmas, iconos y codigo QR.
 Pillow==12.3.0
 

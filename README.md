@@ -21,7 +21,7 @@
 10. [Decisiones de diseno](#decisiones-de-diseno)
 11. [Pruebas](#pruebas)
 12. [Como agregar una funcionalidad](#como-agregar-una-funcionalidad)
-13. [Propuesta: firma digital con certificado](#propuesta-firma-digital-con-certificado)
+13. [Firma digital con certificado](#firma-digital-con-certificado)
 14. [Hoja de ruta](#hoja-de-ruta)
 15. [Creditos](#creditos)
 
@@ -38,7 +38,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
-| **Firmar** | Estampa una imagen de firma | Visor con zoom, clic y arrastre, paginas rotadas, todas las paginas, dibujar o importar firmas |
+| **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
 | **Proteger** | Cifra o descifra un PDF | AES-256, deteccion automatica del estado, confirmacion de contrasena |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, pagina inicial, carpeta de salida |
 
@@ -76,10 +76,11 @@ venv\Scripts\python.exe main.pyw --help
 | `extract` | `python main.pyw extract informe.pdf -p "1-3,8" -o resumen.pdf` |
 | `convert` | `python main.pyw convert carta.docx -o carta.pdf` |
 | `sign` | `python main.pyw sign contrato.pdf --image firma.png --page 2 --x 400 --y 700 --width 150` |
+| `sign-cert` | `python main.pyw sign-cert contrato.pdf --cert firma.pfx --image firma.png --x 400 --y 700 --reason "Aprobado"` |
 | `lock` | `python main.pyw lock contrato.pdf -o protegido.pdf` |
 | `unlock` | `python main.pyw unlock protegido.pdf -o libre.pdf` |
 
-Si no se pasa `--password`, la contrasena se solicita de forma oculta. Codigos de salida: `0` exito, `1` error de la operacion, `2` argumentos invalidos.
+Si no se pasa `--password` (o `--cert-password` en `sign-cert`), la contrasena se solicita de forma oculta. En `sign-cert`, sin `--x`/`--y` la firma digital es invisible. Codigos de salida: `0` exito, `1` error de la operacion, `2` argumentos invalidos.
 
 ---
 
@@ -93,7 +94,7 @@ flowchart TD
         MAIN[main.pyw] --> CLI[cli.py<br/>argparse]
     end
     CLI -->|sin subcomando| GUI
-    CLI -->|merge, extract, sign...| CORE
+    CLI -->|merge, extract, sign, sign-cert...| CORE
 
     subgraph GUI[gui/ - Presentacion]
         APP[app.py<br/>MainWindow] --> PAGES[pages/*<br/>una pagina por funcion]
@@ -110,7 +111,7 @@ flowchart TD
     end
 
     subgraph CORE[core/ - Logica de negocio]
-        OPS[merge · extract · security · signing · convert]
+        OPS[merge · extract · security · signing · digital_signing · convert]
         OPS --> DOCS[documents.py<br/>apertura y contrasenas]
         OPS --> FILES[files.py<br/>validacion y escritura atomica]
         OPS --> PAGESEL[pages.py<br/>seleccion de paginas]
@@ -120,7 +121,7 @@ flowchart TD
     GUI --> Servicios
     GUI --> CORE
     SIGS --> FILES
-    CORE --> LIBS[(pypdf · PyMuPDF · Pillow · comtypes/Office)]
+    CORE --> LIBS[(pypdf · PyMuPDF · pyHanko · Pillow · comtypes/Office)]
 ```
 
 | Capa | Responsabilidad | Regla |
@@ -159,7 +160,8 @@ PDFManagement/
 │   │   ├── merge.py            # Unir
 │   │   ├── extract.py          # Extraer
 │   │   ├── security.py         # Proteger / desproteger
-│   │   ├── signing.py          # Firma visual
+│   │   ├── signing.py          # Firma visual (SignaturePlacement, signature_rect)
+│   │   ├── digital_signing.py  # Firma digital con certificado (PAdES)
 │   │   └── convert.py          # Office -> PDF
 │   └── gui/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
@@ -192,6 +194,9 @@ Todas las funciones validan sus entradas, escriben el resultado de forma atomica
 | `lock_pdf(input_file, output_file, password, *, owner_password=None)` | Cifra con AES-256 conservando marcadores, formularios y metadatos |
 | `unlock_pdf(input_file, output_file, password)` | Copia sin cifrado; exige la contrasena correcta |
 | `sign_pdf_with_image(input_file, output_file, signature_image, placement, *, password=None)` | Estampa la firma segun un `SignaturePlacement`; conserva el cifrado del original |
+| `sign_pdf_with_certificate(input_file, output_file, pfx_path, pfx_password, *, placement=None, signature_image=None, reason=None, location=None, password=None)` | Firma digital PAdES B-B (SHA-256) con un `.pfx`/`.p12` mediante actualizacion incremental; `placement=None` crea una firma invisible |
+| `load_certificate(pfx_file, pfx_password)` | Verifica contrasena, clave privada y vigencia; devuelve `CertificateInfo(subject, issuer, valid_from, valid_until, self_signed)` |
+| `digital_aspect_ratio(image_aspect)` | Proporcion del recuadro de la firma digital: imagen (opcional) + leyenda de alto `CAPTION_RATIO` x ancho |
 | `convert_to_pdf(input_file, output_file)` | Word/Excel a PDF via COM |
 | `parse_page_selection(selection, total_pages)` | Texto a indices base cero (`"3,1-2"` -> `[2, 0, 1]`) |
 | `get_pdf_info(pdf_file)` | `PdfInfo(path, page_count, size_bytes, encrypted)` sin pedir contrasena |
@@ -209,8 +214,11 @@ PdfManagementError            # base: su mensaje se muestra al usuario
 ├── InvalidInputError         # rutas, extensiones, selecciones, validaciones
 ├── OutputError               # no se pudo escribir (p. ej. archivo abierto en otro programa)
 ├── ConversionError           # Office no disponible o fallo la exportacion
-└── PasswordRequiredError     # .file_path indica que PDF necesita contrasena
-    └── WrongPasswordError    # la contrasena indicada no es valida
+├── PasswordRequiredError     # .file_path indica que PDF necesita contrasena
+│   └── WrongPasswordError    # la contrasena indicada no es valida
+└── DigitalSignatureError     # pyHanko no pudo firmar el documento
+    └── CertificateError      # certificado danado, sin clave privada, vencido o aun no vigente
+        └── WrongCertificatePasswordError  # .certificate_path: contrasena del .pfx incorrecta
 ```
 
 Cualquier otra excepcion se considera un **error inesperado**: se registra con traza completa en `log/error.log` y se informa al usuario.
@@ -234,7 +242,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `TaskRunner` (`tasks.py`) | Pool de 2 hilos; el hilo de la GUI sondea cada 80 ms y ejecuta los callbacks |
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
-| `ask_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias |
+| `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
 
 ## Flujos principales
@@ -314,6 +322,22 @@ flowchart TD
     I --> J[PDF firmado, cifrado conservado]
 ```
 
+### Firma digital
+
+```mermaid
+flowchart TD
+    A[Modo Firma digital<br/>PDF + certificado .pfx/.p12] --> B[Ubicar el recuadro en el visor<br/>signature_rect con digital_aspect_ratio]
+    B --> C[ask_certificate_password<br/>solo en memoria]
+    C --> D{load_certificate}
+    D -- contrasena incorrecta --> C
+    D -- vencido / sin clave --> X[CertificateError]
+    D -- ok --> E[run_task: sign_pdf_with_certificate]
+    E --> F[Recuadro visible -> coordenadas PDF<br/>derotation_matrix + transformation_matrix]
+    F --> G[pyHanko PdfSigner<br/>PAdES B-B, SHA-256, campo FirmaDigitalN]
+    G --> H[Apariencia: imagen arriba + leyenda<br/>contra-rotada si la pagina esta girada]
+    H --> I[Actualizacion incremental<br/>escritura atomica]
+```
+
 ### Politica de sobrescritura (`BasePage.resolve_output`)
 
 | Origen de la ruta de salida | Si el archivo ya existe |
@@ -358,6 +382,7 @@ Para mover todos los datos del usuario (por ejemplo a `%APPDATA%` al distribuir 
 
 - **Nucleo sin GUI.** Facilita las pruebas, la CLI y futuras interfaces.
 - **pypdf + PyMuPDF.** pypdf para operaciones estructurales y cifrado AES-256 (conserva marcadores y formularios); PyMuPDF para renderizar y estampar imagenes con precision.
+- **pyHanko para la firma digital.** Python puro, mantenido y con soporte PAdES; firma con actualizaciones incrementales, asi varias personas pueden firmar el mismo PDF. Todo es local: no consulta TSA, OCSP ni CRL.
 - **Coordenadas "como se ve".** El usuario trabaja sobre la pagina visible; el nucleo convierte con `derotation_matrix`, asi las paginas rotadas funcionan sin casos especiales.
 - **Errores tipados.** La GUI decide que hacer segun el tipo (`PasswordRequiredError` -> pedir clave) en lugar de comparar textos.
 - **Hilos sin tocar widgets.** Tkinter no es seguro entre hilos; los trabajadores solo calculan y el hilo principal sondea los resultados.
@@ -379,7 +404,8 @@ venv\Scripts\python.exe -m pytest
 |---|---|
 | `tests/test_pages.py` | Selecciones validas e invalidas |
 | `tests/test_operations.py` | Unir, extraer, proteger, firmar (incluye paginas rotadas 0/90/180/270, limites de pagina, cifrado conservado), escritura atomica |
-| `tests/test_config_cli.py` | Valores por defecto, validacion, migracion de `default.ini`, CLI |
+| `tests/test_digital_signing.py` | Firma digital con un certificado autofirmado generado al vuelo: validacion con pyHanko, recuadro igual al del visor (0/90/180/270), varias firmas, PDF cifrado, deteccion de cambios posteriores, contrasena incorrecta, certificado vencido o invalido |
+| `tests/test_config_cli.py` | Valores por defecto, validacion, migracion de `default.ini`, CLI (incluye `sign-cert`) |
 | `tests/test_convert.py` | Conversion real con Word y Excel (se omite si Office no esta instalado) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -397,9 +423,9 @@ Ejemplo: "Comprimir PDF".
 
 ---
 
-## Propuesta: firma digital con certificado
+## Firma digital con certificado
 
-La firma actual es **visual**: demuestra intencion, pero cualquiera podria copiar la imagen y no detecta cambios posteriores en el documento. Una **firma digital** (PAdES, estandar europeo e internacional) agrega una prueba criptografica de **autoria** e **integridad**: si alguien modifica el PDF despues de firmarlo, los lectores (Adobe Acrobat, etc.) muestran la firma como invalida.
+La firma **visual** demuestra intencion, pero cualquiera podria copiar la imagen y no detecta cambios posteriores en el documento. La **firma digital** (PAdES, estandar europeo e internacional) agrega una prueba criptografica de **autoria** e **integridad**: si alguien modifica el PDF despues de firmarlo, los lectores (Adobe Acrobat, etc.) muestran la firma como invalida.
 
 ### Como funciona
 
@@ -413,28 +439,30 @@ flowchart LR
     F --> G[PDF firmado<br/>verificable por cualquiera]
 ```
 
-### Propuesta de implementacion
+### Implementacion
 
-| Aspecto | Propuesta |
+| Aspecto | Detalle |
 |---|---|
-| **Libreria** | [`pyHanko`](https://github.com/MatthiasValvekens/pyHanko) (Python puro, MIT, mantenida, soporta PAdES B-B/B-T/B-LT y firmas visibles) |
-| **Certificado** | Archivo `.pfx` / `.p12` emitido por una entidad de certificacion reconocida (por ejemplo, en Colombia: Certicamara, GSE, Andes SCD). Para pruebas internas se puede generar uno autofirmado |
-| **Contrasena del certificado** | Se pide en cada firma y nunca se guarda en disco |
-| **Apariencia** | Reutiliza el visor actual: el usuario ubica el recuadro y se combina la imagen de su firma con "Firmado digitalmente por *Nombre*, *fecha*" |
-| **Nivel** | PAdES **B-B** por defecto (100% sin internet). Opcional **B-T** con sello de tiempo de una TSA; requiere conexion, por eso seria una opcion explicita y desactivada por defecto |
-| **Arquitectura** | Nuevo `core/digital_signing.py` con `sign_pdf_with_certificate(input, output, pfx_path, pfx_password, placement=None, reason=None, location=None)`; `SignPage` agrega un selector "Firma visual / Firma digital" |
-| **Orden de operaciones** | La firma digital debe ser el **ultimo** cambio: unir, extraer o proteger despues de firmar invalida la firma. La GUI lo advertira |
-| **Varias firmas** | pyHanko usa actualizaciones incrementales, asi varias personas pueden firmar el mismo PDF sin invalidar las firmas previas |
-| **Verificacion** (fase 2) | Pagina para validar firmas existentes: firmante, fecha, integridad y confianza del certificado |
-| **Fuera de alcance inicial** | Tokens USB / tarjetas (PKCS#11) y el almacen de certificados de Windows; se pueden agregar despues sobre la misma funcion |
+| **Libreria** | [`pyHanko`](https://github.com/MatthiasValvekens/pyHanko) (Python puro, MIT) y `pyhanko-certvalidator` |
+| **Certificado** | Archivo `.pfx` / `.p12` emitido por una entidad de certificacion reconocida (por ejemplo, en Colombia: Certicamara, GSE, Andes SCD). Para pruebas internas se puede usar uno autofirmado |
+| **Contrasena del certificado** | Se pide en cada firma (dialogo en la GUI, entrada oculta en la CLI) y **nunca se guarda en disco** |
+| **Validaciones previas** | `load_certificate` comprueba la contrasena, que exista la clave privada y que el certificado este vigente; la GUI advierte si es autofirmado |
+| **Apariencia** | Reutiliza el visor: el recuadro se ubica con clic/arrastre y combina la imagen de firma (opcional) con "Firmado digitalmente por *Titular* / Fecha". La imagen conserva el mismo tamano que en la firma visual y la leyenda se agrega debajo. Tambien puede ser invisible |
+| **Nivel** | PAdES **B-B** (`/ETSI.CAdES.detached`, SHA-256), 100% sin internet |
+| **Arquitectura** | `core/digital_signing.py` con `sign_pdf_with_certificate(...)`; `SignPage` tiene el selector "Firma visual / Firma digital"; subcomando `sign-cert` en la CLI |
+| **Orden de operaciones** | La firma digital debe ser el **ultimo** cambio: unir, extraer o proteger despues de firmar invalida la firma. La GUI lo advierte |
+| **Varias firmas** | pyHanko usa actualizaciones incrementales: varias personas pueden firmar el mismo PDF sin invalidar las firmas previas (campos `FirmaDigital1`, `FirmaDigital2`...) |
+| **PDFs protegidos** | Se pueden firmar indicando su contrasena; el resultado conserva el cifrado |
+| **Limitaciones** | La firma digital va en una sola pagina (la opcion "todas las paginas" solo aplica a la firma visual). La leyenda usa la fuente estandar Courier (alfabeto latino) |
 
 **Confianza**: con un certificado autofirmado la firma es valida criptograficamente, pero Adobe mostrara "identidad desconocida". Para que aparezca como confiable automaticamente, el certificado debe provenir de una entidad incluida en la lista AATL de Adobe o en la lista de confianza del pais.
 
-Esfuerzo estimado: 1 modulo de nucleo + pruebas con un certificado autofirmado generado en las pruebas + ajuste de `SignPage`. Nueva dependencia: `pyHanko` (y `pyhanko-certvalidator`).
-
 ## Hoja de ruta
 
-- [ ] Firma digital con certificado (ver propuesta).
+- [x] Firma digital con certificado (PAdES B-B).
+- [ ] Verificar firmas digitales existentes: firmante, fecha, integridad y confianza del certificado.
+- [ ] Sello de tiempo opcional (PAdES B-T) con una TSA; requiere conexion, por eso seria una opcion explicita y desactivada por defecto.
+- [ ] Firmar con tokens USB / tarjetas (PKCS#11) y con el almacen de certificados de Windows.
 - [ ] Conversion sin Microsoft Office (alternativa: LibreOffice en modo headless).
 - [ ] Comprimir PDF (optimizar imagenes y limpiar objetos).
 - [ ] Dividir un PDF en varios archivos (por rangos o cada N paginas).

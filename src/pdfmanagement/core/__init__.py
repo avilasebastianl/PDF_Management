@@ -7,13 +7,24 @@ esperados se lanzan como subclases de ``PdfManagementError``.
 """
 
 from .convert import OFFICE_EXTENSIONS, convert_to_pdf
+from .digital_signing import (
+    CAPTION_RATIO,
+    CERTIFICATE_EXTENSIONS,
+    CertificateInfo,
+    digital_aspect_ratio,
+    load_certificate,
+    sign_pdf_with_certificate,
+)
 from .documents import PdfInfo, get_pdf_info, open_document
 from .errors import (
+    CertificateError,
     ConversionError,
+    DigitalSignatureError,
     InvalidInputError,
     OutputError,
     PasswordRequiredError,
     PdfManagementError,
+    WrongCertificatePasswordError,
     WrongPasswordError,
 )
 from .extract import extract_pages
@@ -32,8 +43,13 @@ from .signing import (
 )
 
 __all__ = [
+    "CAPTION_RATIO",
+    "CERTIFICATE_EXTENSIONS",
+    "CertificateError",
+    "CertificateInfo",
     "ConversionError",
     "DEFAULT_SIGNATURE_WIDTH",
+    "DigitalSignatureError",
     "IMAGE_EXTENSIONS",
     "InvalidInputError",
     "MIN_PASSWORD_LENGTH",
@@ -44,17 +60,21 @@ __all__ = [
     "PdfInfo",
     "PdfManagementError",
     "SignaturePlacement",
+    "WrongCertificatePasswordError",
     "WrongPasswordError",
     "convert_to_pdf",
+    "digital_aspect_ratio",
     "extract_pages",
     "get_pdf_info",
     "image_aspect_ratio",
     "load_signature",
+    "load_certificate",
     "lock_pdf",
     "merge_pdfs",
     "open_document",
     "parse_page_selection",
     "resolve_page_index",
+    "sign_pdf_with_certificate",
     "sign_pdf_with_image",
     "signature_rect",
     "unique_path",
