@@ -39,7 +39,7 @@ def viewer(gui_app, manual_pdf):
     pump(gui_app, timeout=0.6)
     yield page
     page.clear_marks()
-    page._close_session()  # sin preguntar por cambios sin guardar en la siguiente prueba
+    page.close_all_documents()  # sin preguntar por cambios sin guardar en la siguiente prueba
 
 
 def test_open_shows_document_thumbnails_and_outline(viewer):
@@ -133,10 +133,11 @@ def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
     viewer._show_side("Paginas", log=False)
     event = type("E", (), {"keysym": "f"})()
     assert viewer._shortcut(event, viewer.open_search) is None
-    assert viewer.side_tabs.get() == "Paginas"
+    assert not viewer.find_bar.visible
     gui_app.show_page("Visor")
     assert viewer._shortcut(event, viewer.open_search) == "break"
-    assert viewer.side_tabs.get() == "Buscar"
+    assert viewer.find_bar.visible, "Ctrl+F abre la barra de busqueda flotante"
+    viewer.close_find()
 
 
 # * Organizar paginas (fase 2) ------------------------------------------------
@@ -163,6 +164,7 @@ def test_rotate_and_undo_update_the_whole_viewer(viewer, gui_app):
 
 
 def test_drag_thumbnails_to_reorder(viewer, gui_app):
+    viewer.set_edit_mode(True)  # fuera del modo edicion arrastrar no reordena
     strip = viewer.thumbnails
     strip.canvas.yview_moveto(0)
     pump(gui_app, timeout=0.2)
@@ -182,6 +184,7 @@ def test_drag_thumbnails_to_reorder(viewer, gui_app):
     assert viewer.session.history.undo_label == "Mover pagina 1"
     viewer.undo()
     assert page_titles(viewer, 2) == ["Capitulo 1 - Seccion 1", "Capitulo 1 - Seccion 2"]
+    viewer.set_edit_mode(False)
 
 
 def test_multi_select_and_delete(viewer, gui_app, monkeypatch):
@@ -234,18 +237,16 @@ def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_p
     assert isinstance(errors[0], core.InvalidInputError)
 
     viewer.rotate_pages(90)
-    answers = iter([None, False])
-    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: next(answers))
-    assert not viewer.open_file(manual_pdf), "Cancelar mantiene el documento editado"
+    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: None)
+    assert not viewer.close_current_tab() and viewer.session is not None, "Cancelar mantiene la pestana editada"
     assert viewer.session.modified
     closed = []
     monkeypatch.setattr(gui_app, "close", lambda *a, **k: closed.append(1))
-    monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: None)
     gui_app.request_close()
     assert not closed and gui_app.current_page == "Visor", "cerrar con cambios sin guardar se puede cancelar"
     monkeypatch.setattr(viewer_module.messagebox, "askyesnocancel", lambda *a, **k: False)
-    assert viewer.open_file(manual_pdf), "No descarta los cambios y abre el otro archivo"
-    assert not viewer.session.modified
+    assert viewer.close_tab(viewer.active), "No descarta los cambios y cierra la pestana"
+    assert viewer.session is None and not viewer.tab_bar.winfo_manager()
 
 
 def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificate, monkeypatch):
@@ -274,10 +275,70 @@ def test_page_menu_and_editing_shortcuts(viewer, gui_app):
     menu.destroy()
     undo = type("E", (), {"keysym": "z"})()
     viewer.rotate_pages(-90)
-    viewer.open_search()  # el foco pasa al campo de busqueda
+    viewer.open_search()
+    viewer.find_bar.entry._entry.focus_force()  # como si el usuario hiciera clic en el campo
     pump(gui_app, timeout=0.1)
     assert viewer._shortcut(undo, viewer.undo) is None, "Ctrl+Z dentro del campo de busqueda deshace el texto"
     viewer.view.canvas.focus_set()
     pump(gui_app, timeout=0.1)
     assert viewer._shortcut(undo, viewer.undo) == "break"
     assert not viewer.session.modified
+
+
+def test_tabs_keep_each_document_and_its_view(viewer, gui_app, tmp_path):
+    """Varios documentos a la vez, como pestanas de un navegador."""
+    viewer.view.go_to(12)
+    viewer.view.set_zoom(150)
+    pump(gui_app, timeout=0.3)
+    first = viewer.session
+    other = make_pdf(tmp_path / "otro.pdf", 3)
+    assert viewer.open_file(other)
+    assert len(viewer.tabs) == 2 and viewer.active == 1 and viewer.session.page_count == 3
+    assert [button.cget("text") for button in viewer._tab_buttons] == ["manual.pdf", "otro.pdf"]
+    viewer.rotate_pages(90)  # cada pestana tiene su propio historial
+    assert viewer._tab_buttons[1].cget("text") == "otro.pdf  •"
+    viewer.switch_to(0)
+    pump(gui_app, timeout=0.3)
+    assert viewer.session is first and not first.modified
+    assert viewer.view.current_page == 12 and viewer.view.zoom_percent == 150, "vuelve a donde estaba"
+    assert viewer.open_file(other) and viewer.active == 1, "un archivo ya abierto muestra su pestana"
+    viewer.cycle_tab(1)
+    assert viewer.active == 0
+    viewer.close_tab(1, confirm=False)
+    assert len(viewer.tabs) == 1 and viewer.session is first
+
+
+def test_fullscreen_hides_everything_but_the_viewer(viewer, gui_app):
+    viewer.toggle_fullscreen()
+    pump(gui_app, timeout=0.3)
+    assert viewer.fullscreen and gui_app.root.attributes("-fullscreen")
+    assert not gui_app.sidebar.winfo_ismapped() and not viewer.file_bar.winfo_ismapped()
+    assert not viewer.side.winfo_ismapped() and viewer.view.winfo_ismapped()
+    viewer.clear_marks()  # Esc
+    pump(gui_app, timeout=0.3)
+    assert not viewer.fullscreen and not gui_app.root.attributes("-fullscreen")
+    assert gui_app.sidebar.winfo_ismapped() and viewer.file_bar.winfo_ismapped() and viewer.side.winfo_ismapped()
+    viewer.toggle_fullscreen()
+    gui_app.show_page("Unir")  # cambiar de seccion sale de pantalla completa
+    pump(gui_app, timeout=0.3)
+    assert not viewer.fullscreen and gui_app.sidebar.winfo_ismapped()
+    gui_app.show_page("Visor")
+
+
+def test_find_bar_searches_with_enter(viewer, gui_app):
+    viewer.toggle_find()
+    pump(gui_app, timeout=0.2)
+    bar = viewer.find_bar
+    assert bar.visible and bar.winfo_ismapped()
+    viewer.search.query.set("vigencia")
+    bar._enter()
+    pump(gui_app, lambda: not viewer.search.searching)
+    assert bar.count.cget("text") == f"1 de {len(viewer.search.hits)}"
+    bar._enter()  # mismo texto: siguiente resultado
+    assert bar.count.cget("text").startswith("2 de")
+    bar._flip(viewer.search.match_case, bar.case_button)
+    pump(gui_app, lambda: not viewer.search.searching)
+    assert viewer.search.match_case.get() and bar.count.cget("text").startswith("1 de")
+    bar._flip(viewer.search.match_case, bar.case_button)
+    viewer.close_find()
+    assert not bar.visible and viewer.search.hits == []

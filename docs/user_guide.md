@@ -15,10 +15,13 @@ La aplicacion nunca sobrescribe un archivo sin preguntar: si el nombre de salida
 Lea cualquier PDF sin salir de la aplicacion. Es la primera seccion y la que se abre al iniciar (puede cambiarlo en Ajustes).
 
 - **Abrir**: boton **Abrir**, **Ctrl+O**, clic en el area vacia o arrastre un PDF. Si esta protegido se pide la contrasena. **Recientes** muestra los ultimos 10 archivos.
+- **Pestanas**: cada documento se abre en su propia pestana, como en un navegador, y conserva su pagina, zoom y cambios. Cambie con un clic o **Ctrl+Tab**, cierre con la **x** o **Ctrl+W** y abra otro con **+**. Si abre un archivo que ya esta abierto, se muestra su pestana.
+- **Buscar**: pulse el boton **Buscar** (o **Ctrl+F**), escriba y pulse **Enter**; cada **Enter** va al siguiente resultado (**Mayus+Enter** al anterior). La barra muestra cuantos hay; **Aa** distingue mayusculas, **ab** busca palabras completas y el boton de lista los muestra todos con su contexto en el panel lateral. **Esc** la cierra.
+- **Pantalla completa**: el boton de las flechas (o **F11**) deja solo el visor; **Esc** o **F11** vuelven.
 - **Panel lateral** (boton de lista para mostrarlo u ocultarlo):
   - **Paginas**: miniaturas; haga clic en una para ir a esa pagina.
   - **Marcadores**: el indice del documento, si lo tiene.
-  - **Buscar** (**Ctrl+F**): escriba y pulse Enter. Puede distinguir mayusculas o buscar solo palabras completas. **F3** / **Mayus+F3** van al resultado siguiente / anterior; cada resultado muestra su contexto y se resalta en la pagina.
+  - **Buscar**: la lista de resultados con su contexto (tambien puede buscar desde aqui). **F3** / **Mayus+F3** van al resultado siguiente / anterior.
 - **Herramientas**: **Texto** (arrastre sobre el texto; **Ctrl+C** copia y **Ctrl+A** selecciona la pagina) o **Mano** para mover la pagina. El boton central del raton tambien desplaza.
 - **Zoom**: **Ctrl + rueda** (centrado en el cursor), **Ctrl++** / **Ctrl+-**, **Ctrl+0** para ajustar al ancho, o la lista de zoom (ajustar ancho, ajustar pagina, 50-400 %).
 - **Navegar**: rueda, **Re Pag** / **Av Pag**, **Inicio** / **Fin**, o escriba el numero de pagina.
@@ -30,7 +33,7 @@ El visor solo dibuja las paginas que se ven, asi que los documentos de cientos d
 
 ### Organizar paginas
 
-En el panel **Paginas**:
+Pulse **Editar** (o **Ctrl+E**) para mostrar las herramientas; **Listo** las oculta. En el panel **Paginas**:
 
 - **Seleccionar**: clic en una miniatura. **Ctrl+clic** agrega o quita paginas y **Mayus+clic** selecciona un rango.
 - **Reordenar**: arrastre las miniaturas seleccionadas; una linea azul indica donde quedaran. Cerca del borde el panel se desplaza solo.
@@ -47,14 +50,15 @@ Si el documento tiene **firmas digitales**, se le avisa antes del primer cambio:
 
 ### Anotar
 
-La **barra de anotacion** esta debajo de la navegacion del visor (el boton del lapiz la muestra u oculta):
+La **barra de anotacion** aparece debajo de la navegacion del visor al pulsar **Editar**:
 
 - **Resaltar, subrayar y tachar**: elija la herramienta y arrastre sobre el texto. Si ya tiene texto seleccionado con la herramienta **Texto**, un clic en el boton lo marca al instante.
 - **Nota**: haga clic donde quiere el icono y escriba el comentario.
 - **Texto**: arrastre para dibujar el cuadro (o haga clic) y escriba el texto que aparecera en la pagina.
 - **Rectangulo, elipse, linea y flecha**: arrastre de una esquina a otra.
 - **Dibujo a mano**: arrastre para trazar.
-- **Color** (amarillo, verde, azul, rojo o negro) y **grosor** (fino, medio o grueso) a la derecha de la barra.
+- **Color** (amarillo, verde, azul, rojo o negro), **grosor** (fino, medio o grueso) y **Letra** (tamano del texto) a la derecha de la barra.
+- **Tamano de un texto**: seleccionelo con un clic y elija el tamano en **Letra**; el cuadro se ajusta solo. Al escribir un texto nuevo, el cuadro tambien se ajusta a lo escrito.
 
 Pulse **Esc** o vuelva a pulsar la herramienta para terminar.
 
@@ -187,6 +191,8 @@ Los cambios se guardan automaticamente:
 - **Carpeta de salida** por defecto.
 
 El tamano y la posicion de la ventana se recuerdan al cerrar.
+
+En **Acerca de** encontrara para que sirve la aplicacion, en que se destaca, como se hizo y quien la desarrollo, con enlaces a su GitHub, su LinkedIn y el codigo fuente.
 
 En **Datos locales** puede activar el **Registro detallado (para depurar)**: guarda en `log/app.log` cada accion con mas detalle, util si necesita reportar un problema. Se aplica al instante y las contrasenas nunca se registran. El boton **Ver registro** abre ese archivo.
 

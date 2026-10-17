@@ -39,7 +39,7 @@ def viewer(gui_app, tmp_path):
     pump(gui_app, timeout=0.4)
     yield page
     page.clear_marks()
-    page._close_session()
+    page.close_all_documents()
 
 
 def kinds(viewer, page=0):
@@ -158,24 +158,28 @@ def test_escape_ends_annotation_tool(viewer):
     assert viewer.view.tool is not viewer.text_tool
     viewer.clear_marks()
     assert viewer.annotations.active is None and viewer.view.tool is viewer.text_tool
-    viewer.toggle_annotation_bar()
-    assert not viewer.annotations.bar.winfo_ismapped() or not viewer.annotation_bar_visible
-    viewer.toggle_annotation_bar()
-    assert viewer.annotation_bar_visible
+    assert viewer.edit_mode, "elegir una herramienta activa el modo edicion"
+    viewer.toggle_edit_mode()
+    assert not viewer.edit_mode and viewer.annotations.bar.winfo_manager() == ""
+    assert viewer.thumbnails.on_move is None, "fuera del modo edicion no se reordena arrastrando"
+    viewer.toggle_edit_mode()
+    assert viewer.edit_mode and viewer.edit_button.cget("text") == "Listo"
+    viewer.set_edit_mode(False)
 
 
 def test_sidebar_collapses_to_icons(gui_app):
     assert not gui_app.settings.sidebar_collapsed
     gui_app.toggle_sidebar()
-    pump(gui_app, timeout=0.2)
+    pump(gui_app, lambda: gui_app._sidebar_animation is None, timeout=0.3)
     assert gui_app.settings.sidebar_collapsed
     assert gui_app.sidebar.cget("width") == 64
+    assert gui_app.main.winfo_manager() == "grid", "al terminar la animacion el contenido vuelve a su celda"
     assert all(button.cget("text") == "" for button in gui_app.nav_buttons.values())
     assert not gui_app._brand.winfo_ismapped()
     # Contraido, el tooltip dice el nombre de la seccion.
     assert _tooltips(gui_app.nav_buttons["Firmar"]) == ["Firmar  (Ctrl+5)"]
     gui_app.toggle_sidebar()
-    pump(gui_app, timeout=0.2)
+    pump(gui_app, lambda: gui_app._sidebar_animation is None, timeout=0.3)
     assert gui_app.nav_buttons["Firmar"].cget("text") == "  Firmar"
     assert gui_app.sidebar.cget("width") == 220
     from pdfmanagement.gui.pages.registry import PAGES
@@ -192,3 +196,33 @@ def _tooltips(widget):
 
     found = [obj for obj in gc.get_objects() if isinstance(obj, ToolTip) and obj.widget is widget]
     return [tip.text() if callable(tip.text) else tip.text for tip in found]
+
+
+def test_adding_text_keeps_the_scroll_position(viewer, gui_app, monkeypatch):
+    """Antes, al agregar un texto el visor saltaba al principio de la pagina."""
+    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "Comentario")
+    viewer.view.go_to(1)
+    viewer.view._scroll_units(12)  # a mitad de la pagina 2
+    pump(gui_app, timeout=0.3)
+    before = viewer.view.canvas.yview()[0]
+    viewer.annotations.select_tool("free_text")
+    gesture(viewer, [(100, 300)], page=1)
+    pump(gui_app, timeout=0.3)
+    assert [info.content for info in viewer.session.annotations(1)] == ["Comentario"]
+    assert viewer.view.canvas.yview()[0] == pytest.approx(before, abs=1e-6)
+
+
+def test_font_size_menu_changes_selected_text(viewer, monkeypatch):
+    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "Titulo")
+    annotations = viewer.annotations
+    annotations._set_font_size("18")  # tamano para el texto nuevo
+    annotations.select_tool("free_text")
+    gesture(viewer, [(100, 200)])
+    info = viewer.session.annotations(0)[0]
+    assert info.font_size == 18
+    annotations.cancel_tool()
+    gesture(viewer, [(info.rect.x0 + 5, info.rect.y0 + 5)])  # seleccionarlo
+    assert annotations.selected is not None and annotations.size_menu.get() == "18"
+    annotations._set_font_size("32")
+    assert viewer.session.annotations(0)[0].font_size == 32
+    assert viewer.session.history.undo_label == "Cambiar tamano de texto"

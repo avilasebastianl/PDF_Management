@@ -9,15 +9,15 @@ que lo adapta a la aplicacion:
   construccion.
 - Aparece al instante (sin el fundido que bloqueaba la interfaz ~100 ms) y sin
   mostrar la barra de titulo la primera vez.
-- Alto exacto para ``max_visible`` opciones; la barra de desplazamiento solo
-  aparece si hay mas. Mide lo mismo que el control con cualquier escala de
+- Alto exacto para ``max_visible`` opciones (como mucho ``MAX_VISIBLE`` = 5);
+  la barra de desplazamiento, con colores visibles, aparece si hay mas. Mide lo mismo que el control con cualquier escala de
   interfaz y se abre hacia arriba si no cabe debajo.
 - Resalta la opcion actual y se desplaza hasta ella.
 - Colores de la aplicacion en modo claro y oscuro.
 
 Uso::
 
-    menu = dropdown_menu(parent, values, command=on_change, max_visible=6)
+    menu = dropdown_menu(parent, values, command=on_change)
     set_dropdown_values(menu, nuevos_valores)
 """
 
@@ -34,7 +34,9 @@ from .widgets import hide, show
 ROW_HEIGHT = 30        # alto de cada opcion (pixeles logicos)
 ROW_SPACING = 4        # el original separa cada opcion con pady=2
 FRAME_PADDING = 14     # borde y margen interno del marco desplazable
-DEFAULT_VISIBLE = 6    # opciones visibles antes de desplazar
+MAX_VISIBLE = 5        # opciones visibles como maximo; las demas, con la barra
+SCROLLBAR = ("gray58", "gray45")  # barra de la lista: visible sobre el fondo de la tarjeta
+SCROLLBAR_HOVER = ("gray45", "gray60")
 SELECTED = ("gray85", "gray30")
 OPEN_GRACE_SECONDS = 0.2  # el clic que abre la lista no debe cerrarla
 
@@ -43,7 +45,7 @@ class _ScrollablePopup(CTkScrollableDropdown):
     """Ajustes de comportamiento sobre la lista vendorizada."""
 
     def __init__(self, attach, max_visible: int, **kwargs) -> None:
-        self.max_visible = max_visible
+        self.max_visible = min(max_visible, MAX_VISIBLE)
         self._opened_at = 0.0
         root = attach.winfo_toplevel()
         configure_bindings = root.bind("<Configure>")
@@ -130,7 +132,7 @@ class _DropdownController:
         self.menu = menu
         self.values = list(values)
         self.command = command
-        self.max_visible = max_visible
+        self.max_visible = min(max_visible, MAX_VISIBLE)
         self.popup: _ScrollablePopup | None = None
         # Reemplaza el menu nativo de CTkOptionMenu por la lista desplazable.
         for widget in (menu._canvas, menu._text_label):  # noqa: SLF001
@@ -147,6 +149,10 @@ class _DropdownController:
                 values=list(self.values),
                 command=self._select,
                 button_height=ROW_HEIGHT,
+                height=_list_height(min(len(self.values), self.max_visible)),
+                scrollbar=True,
+                scrollbar_button_color=SCROLLBAR,
+                scrollbar_button_hover_color=SCROLLBAR_HOVER,
                 justify="left",
                 resize=False,
                 alpha=1.0,
@@ -184,19 +190,24 @@ def dropdown_menu(
     values: Sequence[str],
     command: Callable[[str], None] | None = None,
     *,
-    max_visible: int = DEFAULT_VISIBLE,
+    max_visible: int = MAX_VISIBLE,
     width: int = 180,
     **kwargs,
 ) -> ctk.CTkOptionMenu:
     """
     ``CTkOptionMenu`` cuya lista es desplazable y muestra hasta ``max_visible``
-    opciones. ``command`` recibe el valor elegido.
+    opciones (nunca mas de ``MAX_VISIBLE``). ``command`` recibe el valor elegido.
     """
     menu = ctk.CTkOptionMenu(
         parent, values=list(values), width=width, dynamic_resizing=False, font=style.fonts().body, **kwargs
     )
     menu._dropdown = _DropdownController(menu, values, command, max_visible)  # noqa: SLF001
     return menu
+
+
+def _list_height(rows: int) -> int:
+    """Alto logico de la lista para ``rows`` opciones (el parametro ``height`` del original)."""
+    return max(1, rows) * (ROW_HEIGHT + ROW_SPACING) + FRAME_PADDING
 
 
 def set_dropdown_values(menu: ctk.CTkOptionMenu, values: Sequence[str]) -> None:

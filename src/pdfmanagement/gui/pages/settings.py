@@ -5,12 +5,12 @@ Los cambios se guardan al instante. Solo el color del tema requiere reiniciar
 (limitacion de CustomTkinter).
 """
 
+import webbrowser
 from tkinter import filedialog
 
 import customtkinter as ctk
-from PIL import Image
 
-from ... import __app_name__, __version__, logging_setup, paths
+from ... import GITHUB_URL, LINKEDIN_URL, REPOSITORY_URL, __app_name__, __author__, __version__, logging_setup, paths
 from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_themes
 from .. import style
 from ..dropdown import dropdown_menu
@@ -24,6 +24,23 @@ DEBUG_LOGGING_HELP = (
     "Guarda en log/app.log cada accion con mas detalle (paginas del visor, zoom, posicion "
     "de la firma, desplegables, tiempos internos). Util para diagnosticar un problema; "
     "se aplica al instante, sin reiniciar. Las contrasenas nunca se registran."
+)
+
+
+ABOUT_PURPOSE = (
+    "Resuelve las tareas mas comunes con PDFs de forma facil y gratuita, sin subir sus documentos "
+    "a internet: todo se procesa en su equipo."
+)
+ABOUT_HIGHLIGHTS = (
+    "100 % local y sin conexion: sus archivos nunca salen del equipo",
+    "Visor con pestanas para leer, buscar, anotar y organizar paginas",
+    "Firma visual y firma digital con certificado (PAdES)",
+    "Unir, extraer, convertir y proteger con AES-256",
+    "Nunca modifica el original: siempre Guardar como, con deshacer ilimitado",
+)
+ABOUT_HOW = (
+    "Escrita en Python con CustomTkinter, PyMuPDF, pypdf y pyHanko, con arquitectura por capas y "
+    "pruebas automatizadas. Desarrollada con la asistencia de Claude Code (Anthropic)."
 )
 
 
@@ -111,20 +128,38 @@ class SettingsPage(BasePage):
         muted_label(about, f"Version {__version__}  ·  Licencia Apache 2.0").grid(
             row=about.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD
         )
-        muted_label(
-            about, "Herramienta gratuita y 100% local para unir, extraer, convertir, firmar y proteger PDFs.",
-            wraplength=300,
-        ).grid(row=about.row(2), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(8, 0))
-        if paths.DONATION_QR.exists():
-            ctk.CTkLabel(about, text="Apoye el proyecto", font=style.fonts().body_bold).grid(
-                row=about.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(16, 6)
-            )
-            qr = Image.open(paths.DONATION_QR)
-            qr.thumbnail((180, 180))
-            self._qr_image = ctk.CTkImage(qr, qr, size=qr.size)
-            ctk.CTkLabel(about, text="", image=self._qr_image).grid(
-                row=about.row(4), column=0, columnspan=3, padx=style.CARD_PAD, pady=(0, 4)
-            )
+        muted_label(about, ABOUT_PURPOSE, wraplength=300, justify="left").grid(
+            row=about.row(2), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 0)
+        )
+        ctk.CTkLabel(about, text="En que se destaca", font=style.fonts().body_bold).grid(
+            row=about.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 2)
+        )
+        ctk.CTkLabel(
+            about, text="\n".join(f"•  {item}" for item in ABOUT_HIGHLIGHTS), font=style.fonts().small,
+            justify="left", anchor="w", wraplength=300,
+        ).grid(row=about.row(4), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD)
+        ctk.CTkLabel(about, text="Como se hizo", font=style.fonts().body_bold).grid(
+            row=about.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 2)
+        )
+        muted_label(about, ABOUT_HOW, wraplength=300, justify="left").grid(
+            row=about.row(6), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD
+        )
+        ctk.CTkLabel(about, text=f"Desarrollado por {__author__}", font=style.fonts().body_bold).grid(
+            row=about.row(7), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 4)
+        )
+        links = ctk.CTkFrame(about, fg_color="transparent")
+        links.grid(row=about.row(8), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(0, 6))
+        for column, (text, url) in enumerate((
+            ("GitHub", GITHUB_URL), ("LinkedIn", LINKEDIN_URL), ("Codigo fuente", REPOSITORY_URL),
+        )):
+            button = secondary_button(links, text, lambda link=url: self._open_link(link), "open", width=96, height=30)
+            button.grid(row=0, column=column, padx=(0, 6))
+            ToolTip(button, url.removeprefix("https://"))
+
+    def _open_link(self, url: str) -> None:
+        """Abre el enlace en el navegador (la aplicacion en si nunca se conecta a internet)."""
+        self.log("Enlace abierto: %s", url)
+        webbrowser.open(url)
 
     def _row(self, card: Card, offset: int, label: str, widget) -> None:
         field_label(card, label).grid(row=card.row(offset), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=8)

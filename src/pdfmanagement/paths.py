@@ -23,12 +23,10 @@ else:
 # * Recursos
 ASSETS_DIR = RESOURCE_DIR / "assets"
 ICONS_DIR = ASSETS_DIR / "icons"
-IMAGES_DIR = ASSETS_DIR / "images"
 THEMES_DIR = ASSETS_DIR / "themes"
 DOCS_DIR = RESOURCE_DIR / "docs"
 USER_GUIDE_FILE = DOCS_DIR / "user_guide.md"
 APP_ICON = ICONS_DIR / "app.ico"
-DONATION_QR = IMAGES_DIR / "qr.png"
 
 # * Datos del usuario
 CONFIG_DIR = DATA_DIR / "config"

@@ -176,6 +176,7 @@ class SearchPanel(ctk.CTkFrame):
         self.query = tk.StringVar()
         self.match_case = tk.BooleanVar(value=False)
         self.whole_words = tk.BooleanVar(value=False)
+        self._listeners: list[Callable[[], None]] = []
 
         self.entry = ctk.CTkEntry(self, textvariable=self.query, placeholder_text="Buscar en el documento", height=32)
         self.entry.pack(fill="x", padx=8, pady=(8, 4))
@@ -208,6 +209,19 @@ class SearchPanel(ctk.CTkFrame):
     def focus_entry(self) -> None:
         self.entry.focus_set()
         self.entry.select_range(0, "end")
+
+    def add_listener(self, listener: Callable[[], None]) -> None:
+        """Avisa de cada cambio (resultados, seleccion, estado); lo usa la barra flotante."""
+        self._listeners.append(listener)
+
+    @property
+    def searching(self) -> bool:
+        return self._iterator is not None
+
+    @property
+    def searched_query(self) -> str:
+        """Texto de la ultima busqueda iniciada (normalizado)."""
+        return self._query
 
     def start(self) -> None:
         """Inicia una busqueda nueva desde la pagina actual."""
@@ -333,3 +347,5 @@ class SearchPanel(ctk.CTkFrame):
     def _update_buttons(self) -> None:
         set_enabled(self.previous_button, len(self.hits) > 1)
         set_enabled(self.next_button, len(self.hits) > 1)
+        for listener in self._listeners:
+            listener()

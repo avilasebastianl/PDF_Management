@@ -17,12 +17,14 @@ import pymupdf
 
 from ... import core
 from ...core.editing import AnnotationInfo, AnnotationStyle
+from ...core.editing.annotations import DEFAULT_FONT_SIZE, FONT_SIZES
 from .. import style
 from ..dialogs import ask_text
+from ..dropdown import dropdown_menu
 from ..viewer.annotation_tools import DragTool, InkTool, MarkupTool, NoteTool, line_rects, tk_color
 from ..viewer.page_view import PageHit
 from ..viewer.panels import AnnotationsPanel
-from ..widgets import ToolTip, icon_button
+from ..widgets import ToolTip, icon_button, muted_label
 
 if TYPE_CHECKING:
     from .viewer import ViewerPage
@@ -63,6 +65,7 @@ class ViewerAnnotations:
         self.view = page.view
         self.color = COLORS["Amarillo"]
         self.width = WIDTHS["Medio"]
+        self.font_size = DEFAULT_FONT_SIZE
         self.active: str | None = None
         self.selected: AnnotationInfo | None = None
         self._cache: dict[int, list[AnnotationInfo]] = {}
@@ -99,6 +102,12 @@ class ViewerAnnotations:
         self.width_selector.pack(side="left", padx=(10, 0))
         for value, button in self.width_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
             ToolTip(button, f"Grosor {value.lower()} para formas, lineas y dibujos")
+        muted_label(bar, "Letra").pack(side="left", padx=(12, 4))
+        self.size_menu = dropdown_menu(bar, [str(size) for size in FONT_SIZES], self._set_font_size,
+                                       width=64, height=28)
+        self.size_menu.set(str(DEFAULT_FONT_SIZE))
+        self.size_menu.pack(side="left")
+        ToolTip(self.size_menu, "Tamano de letra del texto nuevo o del cuadro de texto seleccionado")
         self._refresh_swatches()
         return bar
 
@@ -109,6 +118,8 @@ class ViewerAnnotations:
         page = self.page
         if page.session is None:
             return
+        if not page.edit_mode:
+            page.set_edit_mode(True)
         if key == self.active:
             self.cancel_tool()
             return
@@ -161,6 +172,13 @@ class ViewerAnnotations:
             self._run(lambda session: session.set_annotation_color(info.page, info.xref, self.color),
                       info.page, select=info.xref)
 
+    def _set_font_size(self, value: str) -> None:
+        self.font_size = float(value)
+        info = self.selected
+        if info is not None and info.kind == "FreeText" and info.font_size != self.font_size:
+            self._run(lambda session: session.set_annotation_font_size(info.page, info.xref, self.font_size),
+                      info.page, select=info.xref)
+
     def _set_width(self, name: str) -> None:
         self.width = WIDTHS[name]
         self.page.log_debug("Grosor de anotacion: %s", name)
@@ -201,7 +219,8 @@ class ViewerAnnotations:
             if text is None:
                 self.page.log_debug("Texto cancelado")
                 return
-            self._run(lambda session: session.add_free_text(page_index, rect, text, self.style()), page_index)
+            self._run(lambda session: session.add_free_text(page_index, rect, text, self.style(), self.font_size),
+                      page_index)
             return
         if kind in ("line", "arrow"):
             if abs(end[0] - start[0]) + abs(end[1] - start[1]) < 4:
@@ -242,6 +261,10 @@ class ViewerAnnotations:
                 actions.insert(0, "arrastre para mover")
             if info.has_text:
                 actions.insert(0, "doble clic para editar")
+            if info.font_size:
+                actions.insert(0, "tamano en Letra")
+                self.font_size = info.font_size
+                self.size_menu.set(f"{info.font_size:g}")
             self.page.selection_label.configure(text=f"{info.label} seleccionada  ·  " + "  ·  ".join(actions))
             self.page.log_debug("Anotacion seleccionada: %s", info.label, pagina=info.page + 1)
 

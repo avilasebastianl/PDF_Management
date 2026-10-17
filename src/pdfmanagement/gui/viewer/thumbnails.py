@@ -63,6 +63,7 @@ class ThumbnailStrip(ctk.CTkFrame):
         self._slots: list[tuple[float, float, float, float, float]] = []  # x0, y0, x1, y1, escala
         self._tops: list[float] = []
         self._images: dict[int, tuple[int, ImageTk.PhotoImage]] = {}
+        self._stale: set[int] = set()  # miniaturas que se redibujan (la vieja se ve mientras)
         self._job: str | None = None
         self.selected: set[int] = set()
         self._anchor = 0  # inicio de los rangos con Mayus
@@ -84,6 +85,7 @@ class ThumbnailStrip(ctk.CTkFrame):
         top = canvas.yview()[0] if keep_scroll else 0.0
         canvas.delete("all")
         self._images.clear()
+        self._stale.clear()
         self._slots = []
         self.selected = {page for page in self.selected if page < self.view.page_count}
         y = PADDING
@@ -111,10 +113,7 @@ class ThumbnailStrip(ctk.CTkFrame):
 
     def refresh_pages(self, pages) -> None:
         """Vuelve a dibujar las miniaturas cuyo contenido cambio (p. ej. al anotar)."""
-        for page in pages:
-            entry = self._images.pop(page, None)
-            if entry is not None:
-                self.canvas.delete(entry[0])
+        self._stale.update(page for page in pages if page in self._images)
         self._schedule()
 
     # * Dibujo --------------------------------------------------------------
@@ -132,13 +131,18 @@ class ThumbnailStrip(ctk.CTkFrame):
         first = max(bisect.bisect_right(self._tops, top) - 1, 0)
         page = first
         while page < len(self._slots) and self._slots[page][1] <= bottom:
-            if page not in self._images:
+            if page not in self._images or page in self._stale:
                 self.view.scheduler.request(page, self._slots[page][4], self._place, THUMB_PRIORITY + page - first)
             page += 1
 
     def _place(self, page: int, scale: float, photo: ImageTk.PhotoImage, _tile=None) -> None:
-        if page >= len(self._slots) or scale_key(scale) != scale_key(self._slots[page][4]) or page in self._images:
+        if page >= len(self._slots) or scale_key(scale) != scale_key(self._slots[page][4]):
             return
+        if page in self._images:
+            if page not in self._stale:
+                return
+            self.canvas.delete(self._images.pop(page)[0])
+        self._stale.discard(page)
         x0, y0, *_ = self._slots[page]
         item = self.canvas.create_image(x0, y0, anchor="nw", image=photo, tags="thumb")
         self._images[page] = (item, photo)

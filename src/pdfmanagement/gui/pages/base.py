@@ -63,6 +63,22 @@ class BasePage(ctk.CTkFrame):
     def on_show(self) -> None:
         """Se invoca cada vez que la pagina se vuelve visible."""
 
+    def on_hide(self) -> None:
+        """Se invoca al dejar de mostrar la pagina (otra seccion pasa al frente)."""
+
+    def flush_layout(self) -> None:
+        """Aplica ya los reacomodos pendientes (p. ej. del visor) antes de una animacion."""
+        view = getattr(self, "view", None)
+        if view is not None and hasattr(view, "flush_resize"):
+            view.flush_resize()
+            view.scheduler.drain()  # las paginas visibles quedan dibujadas antes de moverse
+
+    def pause_rendering(self, paused: bool) -> None:
+        """Pausa o reanuda el dibujo de paginas del visor de la seccion (durante animaciones)."""
+        view = getattr(self, "view", None)
+        if view is not None and hasattr(view, "scheduler"):
+            view.scheduler.pause(paused)
+
     def can_close(self) -> bool:
         """Antes de cerrar la ventana: ``False`` la mantiene abierta (p. ej. cambios sin guardar)."""
         return True

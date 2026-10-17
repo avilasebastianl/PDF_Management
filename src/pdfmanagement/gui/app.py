@@ -7,6 +7,7 @@ import os
 import platform
 import sys
 import time
+import tkinter as tk
 from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
@@ -18,7 +19,7 @@ from tkinterdnd2 import TkinterDnD
 from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import Settings
 from . import style
-from .appearance import AppearanceScheduler
+from .appearance import AppearanceScheduler, frozen_redraw
 from .dialogs import HelpWindow
 from .events import debug_event, log_event
 from . import icons
@@ -28,13 +29,15 @@ from .pages.base import BasePage
 from .status_bar import StatusBar
 from .system import open_path
 from .tasks import TaskRunner
-from .widgets import ToolTip, hide
+from .widgets import ToolTip, hide, show
 
 logger = logging.getLogger(__name__)
 
 PREBUILD_DELAY_MS = 600      # espera tras el arranque antes de precargar paginas
 PREBUILD_INTERVAL_MS = 150   # pausa entre paginas precargadas o reapiladas
 RESTACK_DELAY_MS = 400       # espera tras redimensionar antes de reapilar paginas
+SIDEBAR_ANIMATION_MS = 220   # duracion de contraer/expandir el menu lateral
+SIDEBAR_FRAME_MS = 12        # pausa entre cuadros de la animacion
 RESIZE_LOG_DELAY_MS = 600    # se registra el tamano final, no cada paso del arrastre
 
 # Nombres legibles de las preferencias para el registro de cambios.
@@ -104,6 +107,7 @@ class MainWindow:
         self._last_size: tuple[int, int] | None = None
         self._restack_job: str | None = None
         self._resize_log_job: str | None = None
+        self._sidebar_animation: tuple[float, int, int] | None = None
 
         self._build_sidebar()
         self._build_content()
@@ -197,36 +201,112 @@ class MainWindow:
         self._apply_sidebar_mode()
         self._refresh_nav()
 
-    def toggle_sidebar(self) -> None:
+    def set_chrome_visible(self, visible: bool) -> None:
+        """Muestra u oculta el menu lateral y la barra de estado (pantalla completa del visor)."""
+        for widget in (self.sidebar, self.status_bar):
+            (show if visible else hide)(widget)
+
+    def toggle_sidebar(self, animate: bool = True) -> None:
         """Contrae el menu lateral a solo iconos (o lo expande); se recuerda entre sesiones."""
+        if self._sidebar_animation is not None:
+            return  # se ignora el doble clic mientras se mueve
         self.settings.sidebar_collapsed = not self.settings.sidebar_collapsed
-        self._apply_sidebar_mode()
         self.save_settings()
+        if animate and self.root.winfo_viewable():
+            self._animate_sidebar()
+        else:
+            self._apply_sidebar_mode()
+
+    def _animate_sidebar(self) -> None:
+        """
+        Desliza el menu y el contenido sin tirones.
+
+        Redimensionar una seccion cuesta 150-220 ms (Tk vuelve a maquetar y
+        pintar todo), demasiado para cada cuadro. Por eso el contenido se
+        redimensiona una sola vez al principio, con el pintado congelado, y
+        durante la animacion solo se desplaza (mover una ventana es barato)
+        sobre el menu, que queda con su ancho maximo debajo, como un cajon.
+        El dibujo de paginas del visor se pausa mientras tanto.
+        """
+        collapsed = self.settings.sidebar_collapsed
+        start = self.sidebar.winfo_width()
+        end = style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH
+        final_width = self.root.winfo_width() - round(end * ctk.ScalingTracker.get_widget_scaling(self.sidebar))
+        self._unstack_hidden_pages()
+        with frozen_redraw(self.root):
+            if not collapsed:  # el menu completo queda debajo y el contenido lo va descubriendo
+                self.sidebar.configure(width=style.SIDEBAR_WIDTH)
+                self._apply_sidebar_labels(collapsed=False)
+            self.main.grid_remove()
+            # place de Tk: el de CustomTkinter no admite width (lo exige en el constructor)
+            tk.Frame.place_configure(self.main, x=start, y=0, width=final_width, relheight=1)
+            self.root.update_idletasks()
+            self.main.lift(self.sidebar)
+            page = self.pages.get(self.current_page)
+            if page is not None:
+                page.flush_layout()  # que el visor se reacomode ahora y no a mitad de la animacion
+                page.pause_rendering(True)
+        self._sidebar_animation = (time.perf_counter(), start, end)
+        self._sidebar_step()
+
+    def _sidebar_step(self) -> None:
+        started, start, end = self._sidebar_animation
+        progress = min(1.0, (time.perf_counter() - started) * 1000 / SIDEBAR_ANIMATION_MS)
+        eased = 1 - (1 - progress) ** 3  # arranca rapido y frena suave
+        scaling = ctk.ScalingTracker.get_widget_scaling(self.sidebar)
+        width = start / scaling + (end - start / scaling) * eased
+        tk.Frame.place_configure(self.main, x=round(width * scaling))
+        if progress < 1.0:
+            self.root.after(SIDEBAR_FRAME_MS, self._sidebar_step)
+            return
+        self._sidebar_animation = None
+        with frozen_redraw(self.root):
+            self._apply_sidebar_mode()
+            self.main.place_forget()
+            self.main.grid()
+        page = self.pages.get(self.current_page)
+        if page is not None:
+            page.pause_rendering(False)
+        self._restack_job = self.root.after(RESTACK_DELAY_MS, self._restack_pages)
+
+    def _unstack_hidden_pages(self) -> None:
+        """Las secciones ocultas montadas encarecen cada cambio de tamano: se desmontan."""
+        for name, page in self.pages.items():
+            if name != self.current_page and page.winfo_manager() == "grid":
+                hide(page)
+        if self._restack_job:
+            self.root.after_cancel(self._restack_job)
+            self._restack_job = None
 
     def _apply_sidebar_mode(self) -> None:
         collapsed = self.settings.sidebar_collapsed
         self.sidebar.configure(width=style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH)
+        self._apply_sidebar_labels(collapsed)
+
+    def _apply_sidebar_labels(self, collapsed: bool) -> None:
         if collapsed:
             self._brand.pack_forget()
-        else:
+        elif not self._brand.winfo_manager():
             self._brand.pack(side="left", padx=(8, 0))
         for page_class in PAGES:
-            self.nav_buttons[page_class.name].configure(
-                text="" if collapsed else f"  {page_class.name}", anchor="center" if collapsed else "w",
-            )
-        self.help_button.configure(text="" if collapsed else "  Ayuda", anchor="center" if collapsed else "w")
-        self.theme_button.configure(anchor="center" if collapsed else "w")
+            self.nav_buttons[page_class.name].configure(text="" if collapsed else f"  {page_class.name}")
+        self.help_button.configure(text="" if collapsed else "  Ayuda")
         self._refresh_theme_button()
 
     def _build_content(self) -> None:
-        self.content = ctk.CTkFrame(self.root, fg_color="transparent", corner_radius=0)
-        self.content.grid(row=0, column=1, sticky="nsew")
+        # Contenido y barra de estado van juntos: al contraer el menu se desplazan como un bloque.
+        self.main = ctk.CTkFrame(self.root, fg_color="transparent", corner_radius=0)
+        self.main.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        self.main.grid_columnconfigure(0, weight=1)
+        self.main.grid_rowconfigure(0, weight=1)
+        self.content = ctk.CTkFrame(self.main, fg_color="transparent", corner_radius=0)
+        self.content.grid(row=0, column=0, sticky="nsew")
         self.content.grid_columnconfigure(0, weight=1)
         self.content.grid_rowconfigure(0, weight=1)
 
     def _build_status_bar(self) -> None:
-        self.status_bar = StatusBar(self.root, on_view=lambda path: self.open_in("Visor", path))
-        self.status_bar.grid(row=1, column=1, sticky="ew")
+        self.status_bar = StatusBar(self.main, on_view=lambda path: self.open_in("Visor", path))
+        self.status_bar.grid(row=1, column=0, sticky="ew")
 
     def _bind_shortcuts(self) -> None:
         for index, page_class in enumerate(PAGES, start=1):
@@ -267,6 +347,9 @@ class MainWindow:
         """Muestra la pagina ``name`` (la construye si la precarga aun no lo hizo)."""
         if name != self.current_page:
             log_event("Navegacion", "%s -> %s", self.current_page or "(inicio)", name, origen=source)
+        previous = self.pages.get(self.current_page)
+        if previous is not None and self.current_page != name:
+            previous.on_hide()
         page = self._ensure_page(name)
         self.appearance.flush_page(page)  # por si quedo pendiente de un cambio de tema
         self._stack(page, front=True)

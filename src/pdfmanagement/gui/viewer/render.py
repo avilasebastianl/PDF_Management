@@ -55,6 +55,7 @@ class RenderScheduler:
         self._clips: dict[tuple[int, float, Tile], pymupdf.Rect | None] = {}
         self._order = itertools.count()
         self._job: str | None = None
+        self._paused = False
         self.rendered = 0  # paginas dibujadas (para mediciones)
 
     # * Documento -----------------------------------------------------------
@@ -132,12 +133,32 @@ class RenderScheduler:
 
     # * Ciclo ---------------------------------------------------------------
 
+    def drain(self, budget_ms: float = 150) -> None:
+        """Dibuja ya los pedidos pendientes, hasta agotar ``budget_ms`` (antes de una animacion)."""
+        deadline = time.perf_counter() + budget_ms / 1000
+        while self._queue and time.perf_counter() < deadline:
+            self._tick()
+        if self._job is not None:
+            self._widget.after_cancel(self._job)
+            self._job = None
+        self._schedule()
+
+    def pause(self, paused: bool) -> None:
+        """Detiene el dibujo (p. ej. durante una animacion); los pedidos esperan."""
+        self._paused = paused
+        if not paused and self._queue:
+            self._schedule()
+
     def _schedule(self) -> None:
+        if self._paused:
+            return
         if self._job is None:
             self._job = self._widget.after(TICK_MS, self._tick)
 
     def _tick(self) -> None:
         self._job = None
+        if self._paused:
+            return
         while self._queue:
             _priority, _order, generation, key = heapq.heappop(self._queue)
             if generation != self._generation or key not in self._pending or self._document is None:

@@ -147,7 +147,7 @@ class SignPage(BasePage):
         selector.grid_columnconfigure(0, weight=1)
         # Lista de la biblioteca de firmas: muestra 6 y se desplaza si hay mas.
         self.signature_menu = dropdown_menu(
-            selector, [NO_SIGNATURE], self._on_signature_selected, max_visible=6, width=160, height=34,
+            selector, [NO_SIGNATURE], self._on_signature_selected, width=160, height=34,
         )
         self.signature_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         icon_button(selector, "edit", self._draw_signature, "Dibujar firma nueva").grid(row=0, column=1)

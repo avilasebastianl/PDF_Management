@@ -37,6 +37,7 @@ BASE_SCALE = 96 / 72                 # 100 % = tamano real en una pantalla de 96
 ZOOM_STEPS = (25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500)
 FIT_WIDTH = "fit_width"
 FIT_PAGE = "fit_page"
+STALE = -1.0  # escala de una imagen que debe redibujarse (se ve hasta que llega la nueva)
 KEEP_RENDERED = 3                    # paginas dibujadas que se conservan fuera de la vista
 TILE_PX = 1024                       # lado de cada mosaico con zoom alto
 TILE_THRESHOLD_PX = 2_500_000        # paginas mas grandes que esto se dibujan por mosaicos
@@ -178,7 +179,17 @@ class PageView(ctk.CTkFrame):
         """
         if self.document is None:
             return
-        self.sizes = [(p.rect.width, p.rect.height) for p in self.document]
+        sizes = [(p.rect.width, p.rect.height) for p in self.document]
+        if pages is not None and page is None and sizes == self.sizes:
+            # Solo cambio el contenido (p. ej. una anotacion): misma maqueta y misma
+            # posicion. La imagen vieja se ve hasta que llega la nueva (sin parpadeo).
+            self.scheduler.invalidate(pages)
+            for key, (item, photo, _scale) in list(self._displayed.items()):
+                if key[0] in pages:
+                    self._displayed[key] = (item, photo, STALE)
+            self._update_visible()
+            return
+        self.sizes = sizes
         self.scheduler.invalidate(pages)
         for key in list(self._displayed):
             if pages is None or key[0] in pages:
@@ -579,12 +590,37 @@ class PageView(ctk.CTkFrame):
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(RESIZE_DEBOUNCE_MS, self._apply_resize)
 
+    def flush_resize(self) -> None:
+        """Aplica ya un cambio de tamano pendiente (en vez de esperar la pausa)."""
+        if self._resize_job:
+            self.after_cancel(self._resize_job)
+            self._apply_resize()
+
     def _apply_resize(self) -> None:
         self._resize_job = None
         if self.document is None:
             self._draw_placeholder()
-        else:
+        elif not self.continuous or not self.layout:
             self._relayout(keep_page=self.current_page)
+        else:
+            # Se conserva el punto de lectura (no el principio de la pagina): mostrar
+            # u ocultar una barra no debe mover lo que el usuario esta mirando.
+            anchor = self._reading_anchor()
+            self._relayout(keep_page=None)
+            if anchor is not None:
+                page, fraction = anchor
+                x0, y0, _x1, y1 = self.layout[page]
+                self._scroll_canvas_to(self.canvas.canvasx(0), y0 + fraction * (y1 - y0))
+                self._update_visible()
+
+    def _reading_anchor(self) -> tuple[int, float] | None:
+        """Pagina en el borde superior de la vista y que fraccion de ella queda por encima."""
+        top = self.canvas.canvasy(0)
+        page = self._page_index_at(top)
+        if page is None or not self.layout[page][3]:
+            return None
+        _x0, y0, _x1, y1 = self.layout[page]
+        return page, (top - y0) / max(y1 - y0, 1)
 
     def _on_wheel(self, event) -> None:
         if not self.sizes:

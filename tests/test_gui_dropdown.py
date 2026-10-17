@@ -101,3 +101,48 @@ def test_destroyed_menu_ignores_window_events(gui_app):
     event = type("E", (), {"widget": gui_app.root})()
     popup._on_root_configure(event)  # antes lanzaba TclError: bad window path name
     popup.destroy()
+
+
+def test_lists_show_at_most_five_options_with_visible_scrollbar(gui_app, tmp_path):
+    from conftest import make_pdf
+
+    gui_app.show_page("Visor")
+    viewer = gui_app.pages["Visor"]
+    viewer.open_file(make_pdf(tmp_path / "zoom.pdf", 1))
+    menu = viewer.toolbar.zoom_menu
+    popup = _open(menu, gui_app)
+    try:
+        assert len(popup.values) > 5 and popup.max_visible == 5
+        assert popup.frame._scrollbar.winfo_ismapped()
+        assert tuple(popup.frame._scrollbar._button_color) == ("gray58", "gray45")
+        row = popup.widgets[0].winfo_reqheight()
+        assert popup.winfo_height() < row * 7, "se ven 5 opciones; las demas, con la barra"
+    finally:
+        popup._withdraw()
+        viewer.close_all_documents()
+
+
+def test_about_shows_author_and_links(gui_app, monkeypatch):
+    from pdfmanagement import GITHUB_URL, LINKEDIN_URL
+    from pdfmanagement.gui.pages import settings as settings_module
+
+    gui_app.show_page("Ajustes")
+    page = gui_app.pages["Ajustes"]
+    texts = []
+
+    def collect(widget):
+        for child in widget.winfo_children():
+            try:
+                texts.append(child.cget("text"))
+            except Exception:  # noqa: BLE001 - no todos tienen texto
+                pass
+            collect(child)
+
+    collect(page)
+    assert any("Sebastian Avila" in str(text) for text in texts)
+    assert not any("Apoye" in str(text) for text in texts)
+    opened = []
+    monkeypatch.setattr(settings_module.webbrowser, "open", opened.append)
+    page._open_link(GITHUB_URL)
+    page._open_link(LINKEDIN_URL)
+    assert opened == ["https://github.com/avilasebastianl", "https://www.linkedin.com/in/avilasebastianl"]

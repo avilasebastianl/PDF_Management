@@ -5,6 +5,10 @@ Es la primera seccion de la aplicacion y el punto de partida para las
 herramientas de edicion: desde aqui el documento se puede enviar a Unir,
 Extraer, Firmar o Proteger.
 
+Varios documentos a la vez en pestanas, como un navegador (``DocumentTab``):
+cada una conserva su sesion, historial, pagina, zoom, desplazamiento y
+seleccion. Pantalla completa con el boton del visor o F11.
+
 Organizar paginas (panel Paginas, menu contextual o atajos): rotar,
 eliminar, reordenar arrastrando miniaturas, insertar otro PDF o una pagina en
 blanco. Anotar (barra de anotacion y panel Notas, ver viewer_annotations.py):
@@ -12,8 +16,9 @@ resaltar, subrayar, tachar, notas, texto, formas, lineas, flechas y dibujo a
 mano. Todo se puede deshacer y se guarda siempre con "Guardar como": el
 archivo original nunca se modifica.
 
-Atajos (con la seccion visible): Ctrl+O abrir, Ctrl+S / Ctrl+Mayus+S guardar
-como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
+Atajos (con la seccion visible): Ctrl+O abrir (en una pestana nueva), Ctrl+W
+cerrar pestana, Ctrl+Tab / Ctrl+Mayus+Tab cambiar de pestana, F11 pantalla
+completa, Ctrl+E editar, Ctrl+S / Ctrl+Mayus+S guardar como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
 rotar a la derecha / izquierda, Supr eliminar paginas, Ctrl+F buscar, F3 /
 Mayus+F3 resultado siguiente / anterior, Ctrl+C copiar seleccion, Ctrl+A
 seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
@@ -22,6 +27,7 @@ terminar la herramienta de anotacion y limpiar la seleccion.
 
 import tkinter as tk
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -32,8 +38,10 @@ from ...core.editing import DocumentSession
 from .. import style
 from ..dialogs import DocumentPropertiesWindow, ask_password
 from ..dropdown import dropdown_menu, set_dropdown_values
+from ..icons import icon
 from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
 from ..viewer.annotation_tools import SelectTool
+from ..viewer.find_bar import FindBar
 from ..viewer.panels import OutlinePanel, SearchPanel
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
@@ -50,6 +58,25 @@ PLACEHOLDER = (
 )
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
+MAX_TABS = 12
+TAB_TITLE_CHARS = 26
+
+
+@dataclass
+class DocumentTab:
+    """Un documento abierto en el visor y como se estaba viendo."""
+
+    session: DocumentSession
+    saved_path: Path | None = None  # ultimo "Guardar como"
+    signatures_confirmed: bool = False  # ya se aviso que editar invalida sus firmas
+    page: int = 0
+    zoom: str | float = FIT_WIDTH
+    scroll: float | None = None  # posicion vertical (0-1) al dejar la pestana
+    selection: list[int] = field(default_factory=list)
+
+    @property
+    def path(self) -> Path:
+        return self.saved_path or self.session.path
 
 
 class ViewerPage(BasePage):
@@ -61,29 +88,57 @@ class ViewerPage(BasePage):
     show_header = False  # el visor aprovecha todo el alto; el titulo ya lo indica el menu lateral
 
     def build(self) -> None:
-        self.session: DocumentSession | None = None
-        self.saved_path: Path | None = None  # ultimo "Guardar como" de esta sesion
-        self._signatures_confirmed = False
+        self.tabs: list[DocumentTab] = []
+        self.active = -1  # indice de la pestana visible (-1: ninguna)
+        self.fullscreen = False
         self._recent: list[Path] = recent.load_recent()
         # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
-        self.body.grid_rowconfigure(1, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)
         self._build_file_bar()
+        self._build_tab_bar()
         self._build_side_panel()
         self._build_viewer()
         self._bind_shortcuts()
         self._refresh_file_state()
 
+    # * Pestana activa ---------------------------------------------------------
+
+    @property
+    def tab(self) -> DocumentTab | None:
+        return self.tabs[self.active] if 0 <= self.active < len(self.tabs) else None
+
+    @property
+    def session(self) -> DocumentSession | None:
+        return self.tab.session if self.tab is not None else None
+
+    @property
+    def saved_path(self) -> Path | None:
+        return self.tab.saved_path if self.tab is not None else None
+
+    @saved_path.setter
+    def saved_path(self, value: Path | None) -> None:
+        if self.tab is not None:
+            self.tab.saved_path = value
+
+    @property
+    def _signatures_confirmed(self) -> bool:
+        return self.tab.signatures_confirmed if self.tab is not None else False
+
+    @_signatures_confirmed.setter
+    def _signatures_confirmed(self, value: bool) -> None:
+        if self.tab is not None:
+            self.tab.signatures_confirmed = value
+
     # * Construccion ----------------------------------------------------------
 
     def _build_file_bar(self) -> None:
-        bar = ctk.CTkFrame(self.body, fg_color="transparent")
+        bar = self.file_bar = ctk.CTkFrame(self.body, fg_color="transparent")
         bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
         bar.grid_columnconfigure(2, weight=1)
         primary_button(bar, "Abrir", self.browse, "folder", width=110).grid(row=0, column=0)
-        self.recent_menu = dropdown_menu(bar, self._recent_labels(), self._open_recent, width=160, height=34,
-                                         max_visible=10)
+        self.recent_menu = dropdown_menu(bar, self._recent_labels(), self._open_recent, width=160, height=34)
         self.recent_menu.set(RECENT_PLACEHOLDER)
         self.recent_menu.grid(row=0, column=1, padx=(8, 12))
         info = ctk.CTkFrame(bar, fg_color="transparent")
@@ -109,10 +164,17 @@ class ViewerPage(BasePage):
         self.send_menu.set(SEND_PLACEHOLDER)
         self.send_menu.grid(row=0, column=5)
 
+    def _build_tab_bar(self) -> None:
+        """Pestanas de los documentos abiertos (se muestra con al menos uno)."""
+        self.tab_bar = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.tab_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.tab_bar.grid_remove()
+        self._tab_buttons: list[ctk.CTkButton] = []
+
     def _build_side_panel(self) -> None:
         self.side = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
                                  border_width=1, border_color=style.CARD_BORDER, width=272)
-        self.side.grid(row=1, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.COMPACT_PAD))
+        self.side.grid(row=2, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.COMPACT_PAD))
         self.side.grid_propagate(False)
         self.side.pack_propagate(False)
         self.side_tabs = ctk.CTkSegmentedButton(self.side, values=list(SIDE_TABS), command=self._show_side,
@@ -126,8 +188,7 @@ class ViewerPage(BasePage):
     def _build_pages_panel(self) -> ctk.CTkFrame:
         """Miniaturas con la barra de organizacion encima."""
         panel = ctk.CTkFrame(self.side_stack, fg_color="transparent")
-        tools = ctk.CTkFrame(panel, fg_color="transparent")
-        tools.pack(fill="x", padx=6, pady=(0, 2))
+        tools = self.page_tools = ctk.CTkFrame(panel, fg_color="transparent")  # visible en modo edicion
         self.page_buttons = [
             icon_button(tools, "rotate_left", lambda: self.rotate_pages(-90), "Rotar a la izquierda (Ctrl+Mayus+R)"),
             icon_button(tools, "rotate_right", lambda: self.rotate_pages(90), "Rotar a la derecha (Ctrl+R)"),
@@ -139,7 +200,7 @@ class ViewerPage(BasePage):
             button.pack(side="left", padx=(0, 2))
         self.pages_hint = muted_label(panel, "")
         self.pages_hint.pack(fill="x", padx=10, pady=(0, 4))
-        self.thumbnails = ThumbnailStrip(panel, self.view, on_move=self.move_pages,
+        self.thumbnails = ThumbnailStrip(panel, self.view, on_move=None,  # arrastrar reordena solo al editar
                                          on_context=self._show_page_menu, on_selection=self._on_pages_selected)
         self.thumbnails.pack(fill="both", expand=True)
         return panel
@@ -147,7 +208,7 @@ class ViewerPage(BasePage):
     def _build_viewer(self) -> None:
         card = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
                             border_width=1, border_color=style.CARD_BORDER)
-        card.grid(row=1, column=1, sticky="nsew", pady=(0, style.COMPACT_PAD))
+        card.grid(row=2, column=1, sticky="nsew", pady=(0, style.COMPACT_PAD))
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(3, weight=1)
 
@@ -165,11 +226,16 @@ class ViewerPage(BasePage):
         tips = {TOOLS[0]: "Seleccionar y copiar texto (Ctrl+C)", TOOLS[1]: "Arrastrar para mover la pagina"}
         for value, button in self.tool_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
             ToolTip(button, tips[value])
-        self.search_button = icon_button(top, "search", self.open_search, "Buscar (Ctrl+F)")
+        self.search_button = secondary_button(top, "Buscar", self.toggle_find, "search", width=92, height=30)
         self.search_button.pack(side="left")
-        self.annotate_button = icon_button(top, "edit", self.toggle_annotation_bar,
-                                           "Mostrar u ocultar la barra de anotacion")
-        self.annotate_button.pack(side="left", padx=(2, 0))
+        ToolTip(self.search_button, "Buscar palabras en el documento (Ctrl+F)")
+        self.edit_button = secondary_button(top, "Editar", self.toggle_edit_mode, "edit", width=92, height=30)
+        self.edit_button.pack(side="left", padx=(6, 0))
+        ToolTip(self.edit_button, "Mostrar u ocultar las herramientas para anotar y organizar paginas (Ctrl+E)")
+        self.fullscreen_button = icon_button(top, "fullscreen", self.toggle_fullscreen,
+                                             lambda: "Salir de pantalla completa (F11 o Esc)" if self.fullscreen
+                                             else "Pantalla completa (F11)")
+        self.fullscreen_button.pack(side="left", padx=(6, 0))
         ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(row=2, column=0, sticky="ew", padx=1)
         self.view.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
         self.view.canvas.bind("<ButtonPress-3>", self._on_view_right_click, add="+")
@@ -189,8 +255,10 @@ class ViewerPage(BasePage):
         self.outline = OutlinePanel(self.side_stack, self.view)
         self.search = SearchPanel(self.side_stack, self.view)
         self.annotations = ViewerAnnotations(self, card, self.side_stack)
+        self.find_bar = FindBar(self.view, self.search, on_show_list=self._show_search_list, on_close=self.close_find)
         self.annotations.bar.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
-        self.annotation_bar_visible = True
+        self.annotations.bar.grid_remove()  # aparece con el boton Editar
+        self.edit_mode = False
         self._side_panels = dict(zip(SIDE_TABS, (self.pages_panel, self.outline, self.search, self.annotations.panel)))
         self._show_side(SIDE_TABS[0], log=False)
 
@@ -198,6 +266,11 @@ class ViewerPage(BasePage):
         root = self.app.root
         bindings = {
             "<Control-o>": self.browse,
+            "<Control-w>": self.close_current_tab,
+            "<Control-Tab>": lambda: self.cycle_tab(1),
+            "<Control-Shift-Tab>": lambda: self.cycle_tab(-1),
+            "<F11>": self.toggle_fullscreen,
+            "<Control-e>": self.toggle_edit_mode,
             "<Control-s>": self.save_as,
             "<Control-S>": self.save_as,
             "<Control-z>": self.undo,
@@ -253,9 +326,20 @@ class ViewerPage(BasePage):
             self.open_file(self._recent[labels.index(label)], source="recientes")
 
     def open_file(self, path: Path, source: str = "dialogo") -> bool:
-        """Abre ``path`` en el visor (pide la contrasena si hace falta)."""
+        """
+        Abre ``path`` en una pestana nueva (pide la contrasena si hace falta).
+        Si ya esta abierto, muestra su pestana.
+        """
         path = Path(path)
-        if not self._confirm_discard(f"abrir {path.name}"):
+        existing = self._find_tab(path)
+        if existing is not None:
+            self.switch_to(existing)
+            self.log("Documento ya abierto: se muestra su pestana", archivo=path.name, origen=source)
+            return True
+        if len(self.tabs) >= MAX_TABS:
+            self.app.show_error(core.InvalidInputError(
+                f"Puede tener hasta {MAX_TABS} documentos abiertos. Cierre alguna pestana (Ctrl+W) para abrir otro."
+            ))
             return False
         password = self._ask_password_until_valid(path)
         if password is False:
@@ -265,20 +349,8 @@ class ViewerPage(BasePage):
         except core.PdfManagementError as error:
             self.app.show_error(error)
             return False
-        self._close_session()
-        self.session = session
-        self.saved_path = None
-        self._signatures_confirmed = False
-        self.view.set_document(session.document)
-        self.thumbnails.set_selection([])
-        self.thumbnails.rebuild()
-        self.outline.set_entries(session.table_of_contents())
-        self.search.set_document(session.document)
-        self.text_tool.clear(self.view)
-        self.annotations.cancel_tool()
-        self.annotations.selected = None
-        self.annotations.reset()
-        self.selection_label.configure(text="")
+        self.tabs.append(DocumentTab(session))
+        self.switch_to(len(self.tabs) - 1)
         self._recent = recent.add_recent(session.path)
         set_dropdown_values(self.recent_menu, self._recent_labels())
         self.recent_menu.set(RECENT_PLACEHOLDER)
@@ -286,9 +358,175 @@ class ViewerPage(BasePage):
         self.log(
             "Documento abierto: %s", session.name, origen=source, paginas=session.page_count,
             protegido=session.encrypted, firmas_digitales=session.has_signatures(),
-            marcadores=len(session.table_of_contents()),
+            marcadores=len(session.table_of_contents()), pestanas=len(self.tabs),
         )
         return True
+
+    def _find_tab(self, path: Path) -> int | None:
+        target = path.resolve()
+        for index, tab in enumerate(self.tabs):
+            if target in (tab.session.path.resolve(), tab.path.resolve()):
+                return index
+        return None
+
+    # * Pestanas --------------------------------------------------------------
+
+    def switch_to(self, index: int) -> None:
+        """Muestra la pestana ``index`` recordando como se estaba viendo la actual."""
+        if not 0 <= index < len(self.tabs):
+            return
+        if index != self.active:
+            self._remember_view()
+            self.active = index
+            self._load_tab()
+            self.log_debug("Pestana: %s", self.tab.path.name, posicion=index + 1, total=len(self.tabs))
+        self._render_tabs()
+
+    def cycle_tab(self, step: int) -> None:
+        if len(self.tabs) > 1:
+            self.switch_to((self.active + step) % len(self.tabs))
+
+    def close_current_tab(self) -> None:
+        if self.tab is not None:
+            self.close_tab(self.active)
+
+    def close_tab(self, index: int, confirm: bool = True) -> bool:
+        """Cierra una pestana; con cambios sin guardar pregunta antes (si ``confirm``)."""
+        if not 0 <= index < len(self.tabs):
+            return False
+        if confirm and self.tabs[index].session.modified:
+            self.switch_to(index)  # que se vea cual es
+            if not self._confirm_discard("cerrar la pestana"):
+                return False
+        was_active = index == self.active
+        if was_active:
+            self.search.set_document(None)
+            self.view.set_document(None)
+        tab = self.tabs.pop(index)
+        tab.session.close()
+        if was_active:
+            self.active = min(index, len(self.tabs) - 1)
+            self._load_tab()
+        elif index < self.active:
+            self.active -= 1
+        self._render_tabs()
+        self.log("Pestana cerrada", archivo=tab.path.name, quedan=len(self.tabs))
+        return True
+
+    def close_all_documents(self, confirm: bool = False) -> bool:
+        while self.tabs:
+            if not self.close_tab(len(self.tabs) - 1, confirm=confirm):
+                return False
+        return True
+
+    def _remember_view(self) -> None:
+        tab = self.tab
+        if tab is None or not self.view.sizes:
+            return
+        tab.page = self.view.current_page
+        tab.zoom = self.view.zoom_mode
+        tab.scroll = self.view.canvas.yview()[0]
+        tab.selection = sorted(self.thumbnails.selected)
+
+    def _load_tab(self) -> None:
+        """Pone en el visor el documento de la pestana activa (o ninguno)."""
+        tab = self.tab
+        self.annotations.cancel_tool()
+        self.annotations.selected = None
+        self.find_bar.hide()
+        self.text_tool.clear(self.view)
+        self.selection_label.configure(text="")
+        self.thumbnails.set_selection([])
+        if tab is None:
+            self.search.set_document(None)
+            self.view.set_document(None)
+            self.thumbnails.rebuild()
+            self.outline.set_entries([])
+        else:
+            session = tab.session
+            self.view.set_document(session.document, page=tab.page)
+            if tab.zoom != self.view.zoom_mode:
+                self.view.set_zoom(tab.zoom)
+            if tab.scroll is not None and self.view.continuous:
+                self.view.canvas.yview_moveto(tab.scroll)  # vuelve exactamente a donde estaba
+                self.view._schedule_update()  # noqa: SLF001
+            self.thumbnails.rebuild()
+            self.thumbnails.set_selection(tab.selection)
+            self.outline.set_entries(session.table_of_contents())
+            self.search.set_document(session.document)
+        self.annotations.reset()
+        self._refresh_file_state()
+
+    def _render_tabs(self) -> None:
+        """Vuelve a dibujar la barra de pestanas (al abrir, cerrar o cambiar de pestana)."""
+        for widget in self.tab_bar.winfo_children():
+            widget.destroy()
+        self._tab_buttons = []
+        if not self.tabs:
+            self.tab_bar.grid_remove()
+            return
+        if not self.fullscreen:
+            self.tab_bar.grid()
+        accent = style.accent_color()
+        for index, tab in enumerate(self.tabs):
+            active = index == self.active
+            frame = ctk.CTkFrame(self.tab_bar, corner_radius=8, border_width=1,
+                                 fg_color=style.CARD_BG if active else "transparent",
+                                 border_color=accent if active else style.CARD_BORDER)
+            frame.pack(side="left", padx=(0, 4))
+            title = ctk.CTkButton(
+                frame, text=self._tab_title(tab), height=26, corner_radius=6, anchor="w",
+                fg_color="transparent", hover_color=style.HOVER, text_color=style.TEXT,
+                font=style.fonts().body_bold if active else style.fonts().small,
+                command=lambda i=index: self.switch_to(i),
+            )
+            title.pack(side="left", padx=(4, 0), pady=2)
+            ToolTip(title, str(tab.path))
+            icon_button(frame, "clear", lambda i=index: self.close_tab(i), "Cerrar pestana (Ctrl+W)",
+                        size=24).pack(side="left", padx=(0, 4), pady=2)
+            self._tab_buttons.append(title)
+        icon_button(self.tab_bar, "add", self.browse, "Abrir otro PDF en una pestana nueva (Ctrl+O)",
+                    size=28).pack(side="left", padx=(2, 0))
+
+    def _tab_title(self, tab: DocumentTab) -> str:
+        name = tab.path.name
+        if len(name) > TAB_TITLE_CHARS:
+            name = name[:TAB_TITLE_CHARS - 3] + "..."
+        return name + ("  •" if tab.session.modified else "")
+
+    def _update_tab_title(self) -> None:
+        if self.tab is not None and self.active < len(self._tab_buttons):
+            text = self._tab_title(self.tab)
+            button = self._tab_buttons[self.active]
+            if button.cget("text") != text:
+                button.configure(text=text)
+
+    # * Pantalla completa -------------------------------------------------------
+
+    def toggle_fullscreen(self) -> None:
+        """Solo el visor en toda la pantalla (sin menu, barras ni panel lateral)."""
+        self.fullscreen = not self.fullscreen
+        full = self.fullscreen
+        self.app.set_chrome_visible(not full)
+        if full:
+            self.file_bar.grid_remove()
+            self.tab_bar.grid_remove()
+            self.side.grid_remove()
+        else:
+            self.file_bar.grid()
+            if self.tabs:
+                self.tab_bar.grid()
+            if self.side_visible:
+                self.side.grid()
+        self.app.root.attributes("-fullscreen", full)
+        name = "exit_fullscreen" if full else "fullscreen"
+        self.fullscreen_button._icon_name = name  # noqa: SLF001 (lo usa set_enabled)
+        self.fullscreen_button.configure(image=icon(name, 16, style.TEXT))
+        self.log("Pantalla completa %s", "activada" if full else "desactivada")
+
+    def on_hide(self) -> None:
+        if self.fullscreen:
+            self.toggle_fullscreen()
 
     def _ask_password_until_valid(self, path: Path) -> str | None | bool:
         """
@@ -313,19 +551,26 @@ class ViewerPage(BasePage):
                 return False
 
     def _close_session(self) -> None:
-        if self.session is not None:
-            self.search.set_document(None)
-            self.view.set_document(None)
-            self.session.close()
-            self.session = None
-            self.annotations.selected = None
-            self.annotations.reset()
+        """Cierra la pestana activa sin preguntar."""
+        if self.tab is not None:
+            self.close_tab(self.active, confirm=False)
 
     def can_close(self) -> bool:
-        return self._confirm_discard("cerrar la aplicacion")
+        """Al cerrar la aplicacion pregunta por cada pestana con cambios sin guardar."""
+        for index, tab in enumerate(self.tabs):
+            if tab.session.modified:
+                self.switch_to(index)
+                if not self._confirm_discard("cerrar la aplicacion"):
+                    return False
+        return True
 
     def on_close(self) -> None:
-        self._close_session()
+        self.search.set_document(None)
+        self.view.set_document(None)
+        for tab in self.tabs:
+            tab.session.close()
+        self.tabs.clear()
+        self.active = -1
 
     # * Organizar paginas -----------------------------------------------------
 
@@ -526,11 +771,29 @@ class ViewerPage(BasePage):
         self.app.open_in(target, path)
 
     def open_search(self) -> None:
+        """Muestra la barra de busqueda flotante (Ctrl+F)."""
+        if self.session is None:
+            return
+        self.find_bar.show()
+        self.log_debug("Busqueda abierta")
+
+    def toggle_find(self) -> None:
+        if self.find_bar.visible:
+            self.close_find()
+        else:
+            self.open_search()
+
+    def close_find(self) -> None:
+        self.find_bar.hide()
+        self.search.clear()
+        self.view.canvas.focus_set()
+
+    def _show_search_list(self) -> None:
+        """Todos los resultados, con su contexto, en el panel lateral."""
         if not self.side_visible:
             self.toggle_side_panel()
         self.side_tabs.set("Buscar")
         self._show_side("Buscar")
-        self.search.focus_entry()
 
     def copy_selection(self) -> None:
         text = self.text_tool.selected_text()
@@ -548,6 +811,9 @@ class ViewerPage(BasePage):
             self.text_tool.select_all(self.view, self.view.current_page)
 
     def clear_marks(self) -> None:
+        if self.fullscreen:
+            self.toggle_fullscreen()
+        self.find_bar.hide()
         self.annotations.cancel_tool()
         self.annotations.select(None)
         self.text_tool.clear(self.view)
@@ -558,14 +824,36 @@ class ViewerPage(BasePage):
         if not self.annotations.delete_selected():
             self.delete_pages()
 
-    def toggle_annotation_bar(self) -> None:
-        self.annotation_bar_visible = not self.annotation_bar_visible
-        if self.annotation_bar_visible:
+    def toggle_edit_mode(self) -> None:
+        self.set_edit_mode(not self.edit_mode)
+
+    def set_edit_mode(self, enabled: bool) -> None:
+        """
+        Modo edicion: muestra la barra de anotacion y la de organizar paginas
+        y permite reordenar arrastrando miniaturas. Fuera de el, el visor es
+        solo para leer (menos botones y sin cambios accidentales).
+        """
+        if enabled == self.edit_mode:
+            return
+        self.edit_mode = enabled
+        if enabled:
             self.annotations.bar.grid()
+            self.page_tools.pack(fill="x", padx=6, pady=(0, 2), before=self.pages_hint)
         else:
             self.annotations.cancel_tool()
+            self.annotations.select(None)
             self.annotations.bar.grid_remove()
-        self.log_debug("Barra de anotacion %s", "visible" if self.annotation_bar_visible else "oculta")
+            self.page_tools.pack_forget()
+        self.thumbnails.on_move = self.move_pages if enabled else None
+        accent = style.accent_color()
+        self.edit_button.configure(
+            text="Listo" if enabled else "Editar",
+            fg_color=accent if enabled else "transparent",
+            hover_color=style.accent_hover_color() if enabled else style.HOVER,
+            text_color=style.WHITE if enabled else style.TEXT,
+        )
+        self._on_pages_selected(sorted(self.thumbnails.selected))
+        self.log("Modo edicion %s", "activado" if enabled else "desactivado")
 
     def restore_tool(self) -> None:
         """Vuelve a la herramienta Texto (al terminar una herramienta de anotacion)."""
@@ -656,8 +944,10 @@ class ViewerPage(BasePage):
             text = ""
         elif len(pages) > 1:
             text = f"{len(pages)} paginas seleccionadas"
-        else:
+        elif self.edit_mode:
             text = "Arrastre para reordenar"
+        else:
+            text = "Pulse Editar para organizar las paginas"
         if self.pages_hint.cget("text") != text:
             self.pages_hint.configure(text=text)
 
@@ -668,6 +958,7 @@ class ViewerPage(BasePage):
 
     def _refresh_file_state(self) -> None:
         session = self.session
+        self._update_tab_title()
         if session is None:
             self.file_label.configure(text="Ningun documento abierto")
             self.file_info.configure(text="Abra un PDF con el boton, con Ctrl+O o arrastrandolo al visor.")
@@ -690,7 +981,10 @@ class ViewerPage(BasePage):
         for widget in (self.send_menu, self.save_button):
             if widget.cget("state") != state:  # evitar redibujos innecesarios
                 widget.configure(state=state)
-        set_enabled(self.search_button, session is not None)
+        if self.search_button.cget("state") != state:
+            self.search_button.configure(state=state)
+        if self.edit_button.cget("state") != state:
+            self.edit_button.configure(state=state)
         set_enabled(self.properties_button, session is not None)
         set_enabled(self.undo_button, session is not None and session.history.can_undo)
         set_enabled(self.redo_button, session is not None and session.history.can_redo)

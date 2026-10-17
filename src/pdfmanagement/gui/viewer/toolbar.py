@@ -58,8 +58,7 @@ class ViewerToolbar(ctk.CTkFrame):
         self.zoom_out = icon_button(zoom, "zoom_out", view.zoom_out, "Alejar (Ctrl + rueda)")
         self.zoom_out.pack(side="left", padx=1)
         if zoom_menu:
-            self.zoom_menu = dropdown_menu(zoom, list(ZOOM_OPTIONS), self._choose_zoom, width=128, height=28,
-                                           max_visible=len(ZOOM_OPTIONS))
+            self.zoom_menu = dropdown_menu(zoom, list(ZOOM_OPTIONS), self._choose_zoom, width=128, height=28)
             self.zoom_menu.pack(side="left", padx=4)
             self.zoom_label = None
         else:

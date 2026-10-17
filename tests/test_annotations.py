@@ -70,7 +70,9 @@ def test_note_and_free_text(session):
     session.add_free_text(0, (80, 400, 330, 440), "Aprobado - año 2026", AnnotationStyle(color=RED))
     note, text = session.annotations(0)
     assert note.kind == "Text" and note.content == "Revisar esta clausula" and note.has_text
-    assert close_to(text.rect, (80, 400, 330, 440))
+    # El cuadro conserva la esquina y el ancho dibujados y toma el alto de una linea.
+    assert close_to(text.rect, (80, 400, 330, 400 + text.rect.height)) and 14 < text.rect.height < 24
+    assert text.font_size == 12 and text.color == pytest.approx(RED, abs=0.01)
     page = session.document[0]
     [found] = page_search(page, "Aprobado - año 2026")
     assert text.rect.intersects(found) and abs(found.x0 - text.rect.x0) < 5, "texto derecho en su lugar"
@@ -169,3 +171,39 @@ def test_failed_operation_does_not_undo_the_previous_one(session):
     with session.history.operation("Nada"):
         pass
     assert session.history.undo_label == "Agregar nota (pagina 1)", "una operacion vacia no se registra"
+
+
+def test_text_after_undo_has_a_valid_font(session):
+    """Antes: texto, deshacer, texto -> "cannot find object in xref" (fuente en la cache de MuPDF)."""
+    pymupdf.TOOLS.reset_mupdf_warnings()
+    session.add_free_text(0, (60, 400, 300, 440), "Primero", AnnotationStyle())
+    session.undo()
+    session.add_free_text(0, (60, 500, 300, 540), "Segundo", AnnotationStyle())
+    page = session.document[0]
+    page.get_pixmap()
+    assert "cannot find object" not in pymupdf.TOOLS.mupdf_warnings()
+    assert session.history.undo_depth == 1
+
+
+def test_free_text_font_size_and_fitting(session):
+    """El tamano de letra se puede cambiar y el cuadro se ajusta al texto."""
+    xref = session.add_free_text(0, (100, 100, 102, 102), "Clic simple", AnnotationStyle(), fontsize=14)
+    info = only(session)
+    assert info.font_size == 14
+    assert 60 < info.rect.width < 120, "con un clic el cuadro toma el ancho del texto"
+    session.set_annotation_font_size(0, xref, 28)
+    bigger = only(session)
+    assert bigger.font_size == 28 and bigger.rect.height > info.rect.height * 1.6
+    assert close_to(bigger.rect.tl, info.rect.tl, tolerance=1), "crece desde la esquina superior izquierda"
+    assert session.history.undo_label == "Cambiar tamano de texto"
+    session.set_annotation_text(0, xref, "Un texto bastante mas largo que ya no cabe en una sola linea del cuadro")
+    longer = only(session)
+    assert longer.rect.height > bigger.rect.height * 1.8 and longer.rect.width == pytest.approx(bigger.rect.width, abs=1)
+    session.undo()
+    session.undo()
+    assert only(session).font_size == 14
+    with pytest.raises(core.InvalidInputError):
+        session.set_annotation_font_size(0, xref, 1)
+    note = session.add_note(0, (300, 300), "nota", AnnotationStyle())
+    with pytest.raises(core.InvalidInputError):
+        session.set_annotation_font_size(0, note, 20)

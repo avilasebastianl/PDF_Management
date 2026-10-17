@@ -58,6 +58,7 @@ class DocumentSession:
         # No usar ``needs_pass`` aqui: MuPDF vuelve a autenticar con contrasena
         # vacia y reemplaza la clave buena; el documento se leeria en blanco.
         self.encrypted = password is not None or bool((document.metadata or {}).get("encryption"))
+        _prepare_font_cache(document)  # antes del historial: ver la funcion
         self.history = History(document, on_change=on_change)
         self._words: dict[int, list[tuple]] = {}
 
@@ -252,6 +253,9 @@ class DocumentSession:
     def set_annotation_color(self, page: int, xref: int, color) -> None:
         self._annotate(f"Cambiar color de {self._annotation_label(page, xref)}", page, annots.set_color, xref, color)
 
+    def set_annotation_font_size(self, page: int, xref: int, size: float) -> None:
+        self._annotate("Cambiar tamano de texto", page, annots.set_font_size, xref, size)
+
     def set_annotation_text(self, page: int, xref: int, text: str) -> None:
         self._annotate(f"Editar texto de {self._annotation_label(page, xref)}", page, annots.set_text, xref, text)
 
@@ -324,6 +328,30 @@ class DocumentSession:
 
     def close(self) -> None:
         self.document.close()
+
+
+def _prepare_font_cache(document: pymupdf.Document) -> None:
+    """
+    Crea la fuente Helvetica de los textos libres antes de activar el historial.
+
+    MuPDF guarda en una cache el objeto de cada fuente que agrega. Si se crea
+    dentro de una operacion y esa operacion se deshace, el objeto desaparece
+    pero la cache lo sigue usando: el siguiente texto queda apuntando a un
+    objeto inexistente ("cannot find object in xref"). Creada aqui, fuera del
+    historial, ningun deshacer la borra. No cambia nada visible: la anotacion
+    temporal se elimina y la fuente, si no se usa, no se guarda (``garbage``).
+    """
+    if not document.page_count:
+        return
+    page = document[0]
+    had_annots = document.xref_get_key(page.xref, "Annots")[0] != "null"
+    try:
+        page.delete_annot(page.add_freetext_annot((0, 0, 50, 20), "x", fontname="helv"))
+    except (RuntimeError, ValueError) as error:  # PDF raro: los textos funcionan igual, con el aviso
+        logger.warning("No se pudo preparar la fuente de los textos: %s", error)
+        return
+    if not had_annots:
+        document.xref_set_key(page.xref, "Annots", "null")
 
 
 def _plural(count: int, word: str) -> str:

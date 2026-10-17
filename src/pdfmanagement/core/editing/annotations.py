@@ -18,6 +18,7 @@ Reglas verificadas con PyMuPDF 1.28 (todas dentro de ``History.operation``):
   icono de las notas: esos tres se mueven recreandolos con sus propiedades.
 """
 
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -59,6 +60,10 @@ MARKUP_ADDERS = {
     "strikeout": "add_strikeout_annot",
 }
 DEFAULT_FONT_SIZE = 12
+FONT_SIZES = (8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48)
+LINE_HEIGHT = 1.2  # interlineado del texto libre de MuPDF (medido: 14,4 pt con letra de 12)
+TEXT_PADDING = 4  # margen interno del cuadro de texto, en puntos
+MAX_AUTO_WIDTH = 320  # ancho maximo de un cuadro creado con un clic
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,7 @@ class AnnotationInfo:
     rect: pymupdf.Rect  # coordenadas visibles
     content: str
     color: Color | None
+    font_size: float | None = None  # solo texto libre
 
     @property
     def label(self) -> str:
@@ -104,10 +110,12 @@ def list_annotations(page: pymupdf.Page, index: int) -> list[AnnotationInfo]:
         if kind in HIDDEN_KINDS:
             continue
         stroke = annot.colors.get("stroke") or annot.colors.get("fill")
+        color = tuple(stroke[:3]) if stroke and len(stroke) >= 3 else None
         result.append(AnnotationInfo(
             page=index, xref=annot.xref, kind=kind, rect=annot.rect * page.rotation_matrix,
             content=(annot.info.get("content") or "").strip(),
-            color=tuple(stroke[:3]) if stroke and len(stroke) >= 3 else None,
+            color=_free_text_color(annot) or color if kind == "FreeText" else color,
+            font_size=font_size(annot) if kind == "FreeText" else None,
         ))
     return result
 
@@ -142,9 +150,14 @@ def add_note(page: pymupdf.Page, point: Point, text: str, style: AnnotationStyle
 
 def add_free_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str, style: AnnotationStyle,
                   fontsize: float = DEFAULT_FONT_SIZE) -> int:
-    """Texto escrito sobre la pagina, derecho aunque la pagina este girada."""
+    """
+    Texto escrito sobre la pagina, derecho aunque la pagina este girada. El
+    cuadro se ajusta al texto: si ``rect`` es angosto (un clic) toma el ancho
+    del texto; si se dibujo, conserva su ancho y crece hacia abajo si hace falta.
+    """
     if not text.strip():
         raise InvalidInputError("Escriba el texto que desea agregar.")
+    rect = fit_text_rect(page, pymupdf.Rect(rect), text, fontsize, keep_width=pymupdf.Rect(rect).width >= 40)
     annot = page.add_freetext_annot(
         _to_pdf(page, rect), text, fontsize=fontsize, fontname="helv", text_color=style.color, rotate=page.rotation,
     )
@@ -228,7 +241,70 @@ def set_text(page: pymupdf.Page, xref: int, text: str) -> None:
     color = _free_text_color(annot)
     annot.set_info(content=text)
     if annot.type[1] == "FreeText":
+        _refit(page, annot, text, font_size(annot) or DEFAULT_FONT_SIZE)
         annot.update(text_color=color)  # vuelve a dibujar el texto con su color
+
+
+def set_font_size(page: pymupdf.Page, xref: int, size: float) -> None:
+    """Cambia el tamano de letra de un texto libre; el cuadro se ajusta al nuevo tamano."""
+    annot = find(page, xref)
+    if annot.type[1] != "FreeText":
+        raise InvalidInputError("Solo los cuadros de texto tienen tamano de letra.")
+    if not 4 <= size <= 200:
+        raise InvalidInputError("El tamano de letra debe estar entre 4 y 200 puntos.")
+    color = _free_text_color(annot)
+    _refit(page, annot, annot.info.get("content") or "", size)
+    annot.update(fontsize=size, text_color=color)
+
+
+def font_size(annot: pymupdf.Annot) -> float | None:
+    """Tamano de letra de un texto libre (de su cadena /DA: ``/Helv 12 Tf``)."""
+    appearance = annot.parent.parent.xref_get_key(annot.xref, "DA")[1]
+    match = re.search(r"([\d.]+)\s+Tf", appearance)
+    return float(match.group(1)) if match else None
+
+
+def text_lines(text: str, fontsize: float, width: float) -> list[str]:
+    """Lineas en que se parte ``text`` dentro de ``width`` puntos (como lo dibuja MuPDF)."""
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        for word in paragraph.split(" "):
+            candidate = f"{current} {word}" if current else word
+            if current and pymupdf.get_text_length(candidate, "helv", fontsize) > width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        lines.append(current)
+    return lines
+
+
+def fit_text_rect(page: pymupdf.Page, rect: pymupdf.Rect, text: str, fontsize: float,
+                  keep_width: bool = True) -> pymupdf.Rect:
+    """
+    Cuadro (visible) para ``text``: conserva la esquina superior izquierda y,
+    si ``keep_width``, el ancho; el alto es el que necesitan las lineas.
+    """
+    bounds = page.rect
+    if keep_width:
+        width = rect.width
+    else:
+        longest = max(pymupdf.get_text_length(line, "helv", fontsize) for line in text.split("\n"))
+        width = min(longest + 2 * TEXT_PADDING + 2, MAX_AUTO_WIDTH)
+    width = min(width, bounds.width - 4)
+    lines = text_lines(text, fontsize, width - 2 * TEXT_PADDING)
+    height = len(lines) * fontsize * LINE_HEIGHT + fontsize * 0.4 + 2
+    x0 = max(2.0, min(rect.x0, bounds.width - width - 2))
+    y0 = max(2.0, min(rect.y0, bounds.height - height - 2))
+    return pymupdf.Rect(x0, y0, x0 + width, y0 + max(height, 12))
+
+
+def _refit(page: pymupdf.Page, annot: pymupdf.Annot, text: str, size: float) -> None:
+    """Ajusta el alto del cuadro de texto a ``text`` con letra ``size`` (conserva el ancho)."""
+    visible = annot.rect * page.rotation_matrix
+    fitted = fit_text_rect(page, visible, text or " ", size)
+    annot.set_rect((fitted * page.derotation_matrix).normalize())
 
 
 # * Utilidades ----------------------------------------------------------------
