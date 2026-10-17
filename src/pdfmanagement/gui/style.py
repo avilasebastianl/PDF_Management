@@ -76,3 +76,17 @@ def accent_hover_color() -> tuple[str, str]:
 def themed(color: tuple[str, str]) -> str:
     """Resuelve una tupla de color segun el modo de apariencia actual."""
     return color[1] if ctk.get_appearance_mode() == "Dark" else color[0]
+
+
+def link_color() -> tuple[str, str]:
+    """Color de enlaces: el acento del tema, aclarado en modo oscuro para buen contraste."""
+    from PIL import ImageColor
+
+    light, dark = accent_color()
+    try:
+        red, green, blue = ImageColor.getrgb(dark)[:3]
+    except ValueError:
+        return light, dark
+    mix = 0.5  # proporcion de blanco
+    red, green, blue = (round(channel + (255 - channel) * mix) for channel in (red, green, blue))
+    return light, f"#{red:02x}{green:02x}{blue:02x}"

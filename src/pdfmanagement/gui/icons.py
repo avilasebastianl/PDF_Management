@@ -28,6 +28,7 @@ GLYPHS = {
     "settings": "\ue713",
     "help": "\ue897",
     "add": "\ue710",
+    "minus": "\ue738",
     "delete": "\ue74d",
     "up": "\ue70e",
     "down": "\ue70d",

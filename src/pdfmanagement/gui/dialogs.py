@@ -87,74 +87,171 @@ def _password_dialog(parent, title: str, message: str) -> str | None:
 # * Ayuda -------------------------------------------------------------------
 
 class HelpWindow(ctk.CTkToplevel):
-    """Muestra ``docs/user_guide.md`` con un formato Markdown basico."""
+    """
+    Muestra ``docs/user_guide.md`` con un formato Markdown basico, un indice
+    lateral de secciones y bloques de codigo con boton "Copiar".
+    """
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, section: str | None = None) -> None:
         super().__init__(parent)
-        _prepare_toplevel(self, parent, "Guia de uso", 860, 640, modal=False)
-        self.minsize(640, 420)
-        text_box = ctk.CTkTextbox(self, wrap="word", font=style.fonts().body, corner_radius=0)
-        text_box.pack(fill="both", expand=True)
+        _prepare_toplevel(self, parent, "Guia de uso", 1000, 680, modal=False)
+        self.minsize(760, 460)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        self._sections: dict[str, str] = {}  # titulo -> marca en el texto
+
+        self.index = ctk.CTkScrollableFrame(self, width=210, corner_radius=0, fg_color=style.SIDEBAR_BG)
+        self.index.grid(row=0, column=0, sticky="nsw")
+        ctk.CTkLabel(self.index, text="Contenido", font=style.fonts().section, anchor="w").pack(
+            fill="x", padx=12, pady=(14, 6)
+        )
+
+        self.text_box = ctk.CTkTextbox(self, wrap="word", font=style.fonts().body, corner_radius=0)
+        self.text_box.grid(row=0, column=1, sticky="nsew")
         guide = (
             paths.USER_GUIDE_FILE.read_text(encoding="utf-8")
             if paths.USER_GUIDE_FILE.exists()
             else "# Guia de uso\n\nNo se encontro la documentacion."
         )
-        self._render_markdown(text_box, guide)
-        text_box.configure(state="disabled")
+        self._render_markdown(guide)
+        self.text_box.configure(state="disabled")
+        if section:
+            self.after(80, lambda: self.show_section(section))
 
-    @staticmethod
-    def _render_markdown(text_box: ctk.CTkTextbox, markdown: str) -> None:
-        scaling = ctk.ScalingTracker.get_widget_scaling(text_box)
+    def show_section(self, title: str) -> None:
+        """Desplaza la guia para que la seccion ``title`` quede arriba."""
+        mark = self._sections.get(title)
+        if mark is None:
+            return
+        self.text_box._textbox.yview(mark)  # noqa: SLF001
+        self.lift()
+        self.focus()
+
+    # * Render ----------------------------------------------------------------
+
+    def _render_markdown(self, markdown: str) -> None:
+        scaling = ctk.ScalingTracker.get_widget_scaling(self.text_box)
         family = style.FONT_FAMILY
 
         def size(points: int) -> int:
             return round(points * scaling)
 
-        native = text_box._textbox  # noqa: SLF001 - CTkTextbox no expone los tags
+        native = self.text_box._textbox  # noqa: SLF001 - CTkTextbox no expone los tags
         native.configure(padx=28, pady=20, spacing1=2)
         native.tag_configure("h1", font=(family, size(20), "bold"), spacing3=10)
         native.tag_configure("h2", font=(family, size(15), "bold"), spacing1=16, spacing3=6)
         native.tag_configure("h3", font=(family, size(12), "bold"), spacing1=10, spacing3=4)
         native.tag_configure("body", font=(family, size(10)), spacing3=4)
         native.tag_configure("list", font=(family, size(10)), lmargin1=18, lmargin2=34, spacing3=3)
-        native.tag_configure("code", font=("Consolas", size(10)), background=style.themed(("gray90", "gray25")))
         native.tag_configure("bold", font=(family, size(10), "bold"))
+        native.tag_configure("italic", font=(family, size(10), "italic"))
+        code_background = style.themed(("gray92", "gray24"))
+        native.tag_configure("code", font=("Consolas", size(10)), background=code_background)
+        native.tag_configure(
+            "codeblock", font=("Consolas", size(9)), background=code_background, wrap="char",
+            lmargin1=14, lmargin2=14, rmargin=14, spacing1=2, spacing3=2,
+        )
 
+        code_lines: list[str] | None = None
+        skip_blank = False  # el titulo ya trae su propio espaciado
         for raw_line in markdown.splitlines():
             line = raw_line.strip()
             if line.startswith("```"):
+                if code_lines is None:
+                    code_lines = []
+                else:
+                    self._insert_code_block(native, code_lines)
+                    code_lines = None
                 continue
-            if line.startswith("### "):
-                native.insert("end", line[4:] + "\n", "h3")
-            elif line.startswith("## "):
-                native.insert("end", line[3:] + "\n", "h2")
-            elif line.startswith("# "):
-                native.insert("end", line[2:] + "\n", "h1")
-            elif line.startswith(("- ", "* ")):
-                HelpWindow._insert_inline(native, "•  " + line[2:], "list")
+            if code_lines is not None:
+                code_lines.append(raw_line)
+                continue
+            if line.startswith(("# ", "## ", "### ")):
+                level, title = line.split(" ", 1)
+                if level == "#":
+                    native.insert("end", title + "\n", "h1")
+                else:
+                    self._insert_heading(native, title, "h2" if level == "##" else "h3")
+                skip_blank = True
+                continue
+            if not line and skip_blank:
+                continue
+            skip_blank = False
+            if line.startswith(("- ", "* ")):
+                self._insert_inline(native, "•  " + line[2:], "list")
             elif line[:1].isdigit() and ". " in line[:4]:
-                HelpWindow._insert_inline(native, line, "list")
+                self._insert_inline(native, line, "list")
             elif line:
-                HelpWindow._insert_inline(native, line, "body")
+                self._insert_inline(native, line, "body")
             native.insert("end", "\n")
+
+    def _insert_heading(self, native: tk.Text, title: str, tag: str) -> None:
+        mark = f"section{len(self._sections)}"
+        native.mark_set(mark, "end-1c")
+        native.mark_gravity(mark, "left")
+        self._sections[title] = mark
+        native.insert("end", title + "\n", tag)
+        # Etiquetas (no botones) para que los titulos largos se ajusten en vez de recortarse.
+        level_two = tag == "h2"
+        color = style.TEXT if level_two else style.TEXT_MUTED
+        entry = ctk.CTkLabel(
+            self.index,
+            text=title,
+            anchor="w",
+            justify="left",
+            wraplength=170 if level_two else 158,
+            text_color=color,
+            font=style.fonts().body_bold if level_two else style.fonts().small,
+            cursor="hand2",
+        )
+        entry.pack(fill="x", padx=(14 if level_two else 26, 8), pady=(8 if level_two else 2, 0))
+        entry.bind("<Button-1>", lambda _event: self.show_section(title))
+        entry.bind("<Enter>", lambda _event: entry.configure(text_color=style.accent_color()))
+        entry.bind("<Leave>", lambda _event: entry.configure(text_color=color))
+
+    def _insert_code_block(self, native: tk.Text, lines: list[str]) -> None:
+        """Bloque de codigo con fondo propio y boton para copiarlo al portapapeles."""
+        code = "\n".join(lines).strip("\n")
+        button = ctk.CTkButton(
+            native, text="Copiar", width=70, height=24, corner_radius=6, font=style.fonts().small,
+        )
+        button.configure(command=lambda: self._copy(code, button))
+        native.window_create("end", window=button, padx=14, pady=4)
+        native.insert("end", "\n")
+        native.insert("end", code + "\n", "codeblock")
+
+    def _copy(self, code: str, button: ctk.CTkButton) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(code)
+        button.configure(text="Copiado")
+        self.after(1500, lambda: button.winfo_exists() and button.configure(text="Copiar"))
 
     @staticmethod
     def _insert_inline(native: tk.Text, line: str, base_tag: str) -> None:
-        """Inserta una linea respetando **negrita** y `codigo`."""
-        token, buffer, bold, code = 0, "", False, False
+        """Inserta una linea respetando **negrita**, *cursiva* y `codigo`."""
+        styles = {"bold": False, "italic": False, "code": False}
+        token, buffer = 0, ""
+
+        def flush() -> None:
+            native.insert("end", buffer, (base_tag, *(name for name, active in styles.items() if active)))
+
         while token < len(line):
-            if line.startswith("**", token):
-                native.insert("end", buffer, (base_tag, "bold") if bold else base_tag)
-                buffer, bold, token = "", not bold, token + 2
-                continue
+            marker, width = None, 1
             if line[token] == "`":
-                native.insert("end", buffer, (base_tag, "code") if code else base_tag)
-                buffer, code, token = "", not code, token + 1
+                marker = "code"
+            elif not styles["code"] and line.startswith("**", token):
+                marker, width = "bold", 2
+            elif not styles["code"] and line[token] == "*":
+                marker = "italic"
+            if marker:
+                flush()
+                buffer = ""
+                styles[marker] = not styles[marker]
+                token += width
                 continue
             buffer += line[token]
             token += 1
-        native.insert("end", buffer, base_tag)
+        flush()
 
 
 # * Crear firma -------------------------------------------------------------

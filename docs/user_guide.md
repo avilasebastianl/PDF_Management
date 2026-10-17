@@ -50,9 +50,10 @@ Estampe una imagen de su firma sobre el documento.
 
 1. Seleccione el **PDF a firmar**. Se abre en la ultima pagina.
 2. Elija una firma guardada, **dibuje** una nueva (icono de lapiz) o **importe** una imagen PNG/JPG.
-3. Haga clic en la vista previa para ubicar la firma y arrastrela para ajustarla. Tambien puede escribir **Pagina**, **X**, **Y** y **Ancho** (en puntos: 72 pt = 1 pulgada).
-4. Opcional: **Firmar todas las paginas** en la misma posicion.
-5. Presione **Firmar PDF**.
+3. Haga clic en la vista previa para ubicar la firma y arrastrela para moverla.
+4. Para cambiar el tamano, arrastre cualquiera de las **cuatro esquinas** del recuadro (la proporcion se mantiene) o use el control **Tamano** con su deslizador y los botones **-** / **+**. Tambien puede escribir **Pagina**, **X**, **Y** y **Ancho** (en puntos: 72 pt = 1 pulgada).
+5. Opcional: **Firmar todas las paginas** en la misma posicion y tamano.
+6. Presione **Firmar PDF**.
 
 Navegue con los botones de pagina, acerque o aleje con **Ctrl + rueda del mouse** y use **Ajustar pagina** para volver a ver la hoja completa.
 
@@ -64,10 +65,12 @@ La firma visual no tiene validez criptografica: cualquiera podria copiar la imag
 
 Firma el PDF con su certificado digital (archivo `.pfx` o `.p12`). Cualquier programa de PDF (por ejemplo Adobe Acrobat) puede comprobar quien firmo y si el documento cambio despues de la firma.
 
+Si aun no tiene un certificado, vea **Como obtener un certificado digital** mas abajo.
+
 1. Seleccione el **PDF a firmar**.
 2. En **Certificado digital**, elija su archivo `.pfx` / `.p12`.
 3. Opcional: escriba el **Motivo** (por ejemplo "Aprobado") y el **Lugar**.
-4. Con **Mostrar la firma en el documento** activado, ubique el recuadro en la vista previa como en la firma visual. El recuadro muestra su imagen de firma (opcional, elijala en **Firma**) y debajo la leyenda "Firmado digitalmente por" con el titular del certificado y la fecha. Si desactiva la opcion, la firma es invisible y solo aparece en el panel de firmas del lector de PDF.
+4. Con **Mostrar la firma en el documento** activado, ubique y dimensione el recuadro en la vista previa como en la firma visual. El recuadro muestra su imagen de firma (opcional, elijala en **Firma**) y debajo la leyenda "Firmado digitalmente por" con el titular del certificado y la fecha. Si desactiva la opcion, la firma es invisible y solo aparece en el panel de firmas del lector de PDF.
 5. Presione **Firmar digitalmente** e ingrese la **contrasena del certificado**. Si es incorrecta, se vuelve a pedir.
 
 Tenga en cuenta:
@@ -80,6 +83,34 @@ Tenga en cuenta:
 - La firma digital se ubica en una sola pagina.
 
 Desde la linea de comandos: `python main.pyw sign-cert contrato.pdf --cert firma.pfx --x 400 --y 700` (sin `--x`/`--y` la firma es invisible).
+
+### Como obtener un certificado digital
+
+Necesita un archivo `.pfx` o `.p12` (contiene su clave privada y su identidad) y la contrasena que lo protege.
+
+**Para uso real (con validez legal).** Adquieralo con una entidad de certificacion reconocida. En Colombia, por ejemplo, las acreditadas por ONAC: Certicamara, GSE o Andes SCD. Le entregan el archivo y su contrasena. Los certificados en token USB o tarjeta aun no son compatibles con la aplicacion.
+
+**Para hacer pruebas (autofirmado).** Puede crear uno gratis en su propio equipo con PowerShell. Abra PowerShell (menu Inicio > escriba *PowerShell*) y ejecute los dos comandos, uno por uno. Cambie *Su Nombre* por el nombre que quiere ver en la firma; el segundo comando le pedira la contrasena con la que protegera el archivo.
+
+```powershell
+$cert = New-SelfSignedCertificate -Type Custom -Subject "CN=Su Nombre, C=CO" -KeyUsage DigitalSignature, NonRepudiation -KeyAlgorithm RSA -KeyLength 2048 -TextExtension @("2.5.29.37={text}1.3.6.1.4.1.311.10.3.12") -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(1)
+```
+
+```powershell
+Export-PfxCertificate -Cert $cert -FilePath "$HOME\Documents\firma_prueba.pfx" -Password (Read-Host -AsSecureString "Contrasena del certificado")
+```
+
+El archivo queda en **Documentos\firma_prueba.pfx**, listo para elegirlo en **Certificado digital**. Puede seleccionar los comandos en esta ventana y copiarlos con **Ctrl+C**, o usar el boton **Copiar** de cada bloque.
+
+El certificado tambien queda guardado en Windows (Administrador de certificados: `certmgr.msc` > Personal > Certificados). Si no lo necesita ahi, puede borrarlo; el archivo `.pfx` sigue funcionando.
+
+### Verificar una firma digital
+
+1. Abra el PDF firmado en **Adobe Acrobat Reader** (gratuito).
+2. Abra el **Panel de firmas** (barra superior: *Firmado y todas las firmas son validas* o el icono de la pluma).
+3. Revise el firmante, la fecha y que el documento no se modifico despues de firmar.
+
+Con un certificado autofirmado, Acrobat indicara que la **identidad del firmante es desconocida**: la firma es valida, pero nadie respalda su identidad. Para sus pruebas puede confiar en el manualmente: en el panel de firmas, clic derecho sobre la firma > *Mostrar propiedades de firma* > *Mostrar certificado del firmante* > pestana *Confianza* > *Agregar a certificados de confianza*.
 
 ## Proteger
 

@@ -38,7 +38,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
-| **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
+| **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, tamano ajustable (asas en las esquinas y control deslizante), paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
 | **Proteger** | Cifra o descifra un PDF | AES-256, deteccion automatica del estado, confirmacion de contrasena |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, pagina inicial, carpeta de salida |
 
@@ -244,7 +244,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
 | `AppearanceScheduler` (`appearance.py`) | Al cambiar de tema redibuja primero lo que se ve, con el pintado congelado, y difiere por lotes las secciones ocultas y las filas fuera de vista; `flush_page()` actualiza una seccion pendiente antes de mostrarla |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
-| `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias |
+| `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
 
 ## Flujos principales
@@ -414,6 +414,7 @@ venv\Scripts\python.exe -m pytest
 | `tests/test_config_cli.py` | Valores por defecto, validacion, migracion de `default.ini`, CLI (incluye `sign-cert`) |
 | `tests/test_convert.py` | Conversion real con Word y Excel (se omite si Office no esta instalado) |
 | `tests/test_gui_appearance.py` | Cambio de tema: prioridad de lo visible, seccion pendiente actualizada al abrirla, cambios rapidos sucesivos (requiere pantalla) |
+| `tests/test_gui_sign.py` | Redimensionado de la firma (asas, deslizador, limites de pagina, coincidencia con el PDF) y enlace a la guia del certificado (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
 

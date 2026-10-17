@@ -16,12 +16,14 @@ import pymupdf
 from PIL import Image, ImageTk
 
 from ... import core, signatures
+from ...core.signing import MIN_SIGNATURE_WIDTH
 from .. import style
 from ..dialogs import SignaturePad, ask_certificate_password, ask_password
-from ..icons import GLYPHS, render_glyph
+from ..icons import GLYPHS, icon, render_glyph
 from ..widgets import (
     Card,
     FileField,
+    ToolTip,
     enable_file_drop,
     field_label,
     hide,
@@ -39,6 +41,7 @@ DIGITAL = "Firma digital"
 CERTIFICATE_FILETYPES = (("Certificados digitales", "*.pfx *.p12"),)
 DEFAULT_ASPECT = 0.4
 CERTIFICATE_HOLDER = "Titular del certificado"
+CERTIFICATE_GUIDE_SECTION = "Como obtener un certificado digital"  # titulo en docs/user_guide.md
 VIEWER_MARGIN = 24
 PLACEHOLDER_EMPTY = (
     "Haga clic aqui o arrastre un PDF para comenzar",
@@ -50,6 +53,10 @@ PLACEHOLDER_LOCKED = (
 )
 ZOOM_STEP = 1.25
 ZOOM_LIMITS = (0.3, 5.0)
+HANDLE_SIZE = 9          # lado de las asas de redimensionado, en pixeles del visor
+SIZE_STEP = 10           # paso de los botones - / + del tamano, en puntos
+SIZE_SLIDER_MAX = 400    # ancho maximo del deslizador (se ajusta a la pagina)
+_CORNER_CURSORS = {"nw": "size_nw_se", "se": "size_nw_se", "ne": "size_ne_sw", "sw": "size_ne_sw"}
 
 
 def _glyph_image(name: str, size: int, color: str) -> Image.Image:
@@ -78,6 +85,10 @@ class SignPage(BasePage):
         self.image_aspect: float | None = None
         self._certificate_holder = CERTIFICATE_HOLDER
         self._drag_offset: tuple[float, float] | None = None
+        # Redimensionado con las asas: esquina tomada y esquina opuesta fija (en puntos).
+        self._resize_corner: str | None = None
+        self._resize_anchor: tuple[float, float] = (0.0, 0.0)
+        self._syncing_size = False
         self._page_photo = None
         self._overlay_photo = None
         self._redraw_pending = False
@@ -118,6 +129,7 @@ class SignPage(BasePage):
         )
 
         signature = Card(panel, "Firma")
+        self.signature_card = signature
         signature.grid(row=2, column=0, sticky="ew", pady=(0, style.GAP))
         selector = ctk.CTkFrame(signature, fg_color="transparent")
         selector.grid(row=signature.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 6))
@@ -161,17 +173,29 @@ class SignPage(BasePage):
             ctk.CTkEntry(grid, textvariable=variable, width=70, height=30).grid(
                 row=row, column=column * 2 + 1, sticky="ew", pady=4
             )
+        field_label(grid, "Tamano").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(8, 4))
+        sizer = ctk.CTkFrame(grid, fg_color="transparent")
+        sizer.grid(row=2, column=1, columnspan=3, sticky="ew", pady=(8, 4))
+        sizer.grid_columnconfigure(1, weight=1)
+        icon_button(sizer, "minus", lambda: self._step_size(-SIZE_STEP), "Achicar la firma", size=28).grid(row=0, column=0)
+        self.size_slider = ctk.CTkSlider(
+            sizer, from_=MIN_SIGNATURE_WIDTH, to=SIZE_SLIDER_MAX, command=self._on_size_slider, height=16,
+        )
+        self.size_slider.set(core.DEFAULT_SIGNATURE_WIDTH)
+        self.size_slider.grid(row=0, column=1, sticky="ew", padx=4)
+        icon_button(sizer, "add", lambda: self._step_size(SIZE_STEP), "Agrandar la firma", size=28).grid(row=0, column=2)
         self.all_pages = tk.BooleanVar(value=False)
         self.all_pages_check = ctk.CTkCheckBox(
             position, text="Firmar todas las paginas", variable=self.all_pages, font=style.fonts().body,
             command=self._schedule_overlay,
         )
         self.all_pages_check.grid(row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2))
-        muted_label(position, "Medidas en puntos (72 pt = 1 pulgada).").grid(
+        muted_label(position, "Arrastre las esquinas del recuadro para cambiar el tamano. Medidas en puntos (72 pt = 1 pulgada).", wraplength=290).grid(
             row=position.row(2), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD
         )
         for variable in (self.width_var, self.x_var, self.y_var):
             variable.trace_add("write", lambda *_: self._schedule_overlay())
+        self.width_var.trace_add("write", lambda *_: self._sync_size_slider())
         self.page_var.trace_add("write", lambda *_: self._on_page_typed())
 
         output = Card(panel, "Resultado")
@@ -198,8 +222,23 @@ class SignPage(BasePage):
             card, card.row(1), "Archivo .pfx / .p12", filetypes=CERTIFICATE_FILETYPES,
             placeholder="Seleccione su certificado", stacked=True,
         )
+        # Acceso directo a la guia: una sola linea, no ocupa espacio en el panel.
+        guide_link = ctk.CTkButton(
+            card,
+            text="  No tiene certificado? Vea como obtenerlo",
+            image=icon("info", 14, style.link_color()),
+            anchor="w",
+            height=24,
+            fg_color="transparent",
+            hover_color=style.HOVER,
+            text_color=style.link_color(),
+            font=style.fonts().small,
+            command=lambda: self.app.open_help(CERTIFICATE_GUIDE_SECTION),
+        )
+        guide_link.grid(row=card.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD - 6, pady=(6, 0))
+        ToolTip(guide_link, "Abre la guia: certificados reales y de prueba, y como verificar la firma")
         details = ctk.CTkFrame(card, fg_color="transparent")
-        details.grid(row=card.row(3), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 0))
+        details.grid(row=card.row(4), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(8, 0))
         details.grid_columnconfigure(1, weight=1)
         self.reason_var = tk.StringVar()
         self.location_var = tk.StringVar()
@@ -212,10 +251,10 @@ class SignPage(BasePage):
         ctk.CTkCheckBox(
             card, text="Mostrar la firma en el documento", variable=self.visible, font=style.fonts().body,
             command=self._schedule_overlay,
-        ).grid(row=card.row(4), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 6))
+        ).grid(row=card.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 6))
         muted_label(
             card, "La contrasena del certificado se pide al firmar y nunca se guarda.", wraplength=290
-        ).grid(row=card.row(5), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
+        ).grid(row=card.row(6), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
 
     def _build_viewer(self) -> None:
         viewer = Card(self.body)
@@ -269,7 +308,8 @@ class SignPage(BasePage):
 
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
-        self.canvas.bind("<ButtonRelease-1>", lambda _event: setattr(self, "_drag_offset", None))
+        self.canvas.bind("<ButtonRelease-1>", self._on_release)
+        self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         ctk.AppearanceModeTracker.add(self._on_appearance_change, self.canvas)
@@ -291,14 +331,19 @@ class SignPage(BasePage):
         return self.image_aspect or DEFAULT_ASPECT
 
     def _apply_mode(self) -> None:
+        # Lo principal de cada modo va primero: en firma digital el certificado
+        # sube antes de la imagen (opcional), asi no hace falta desplazarse.
+        card_options = {"column": 0, "sticky": "ew", "pady": (0, style.GAP)}
         if self.digital:
-            show(self.certificate_card)
+            self.certificate_card.grid(row=2, **card_options)
+            self.signature_card.grid(row=3, **card_options)
             show(self.signature_hint)
             self.all_pages.set(False)
             self.all_pages_check.configure(state="disabled")
             self.run_button.configure(text="Firmar digitalmente")
         else:
             hide(self.certificate_card)
+            self.signature_card.grid(row=2, **card_options)
             hide(self.signature_hint)
             self.all_pages_check.configure(state="normal")
             self.run_button.configure(text="Firmar PDF")
@@ -469,6 +514,15 @@ class SignPage(BasePage):
             return
         x, y = self._to_page_point(event)
         rect = self._current_rect()
+        corner = self._corner_at(x, y, rect)
+        if corner is not None:
+            # La esquina opuesta queda fija mientras se arrastra.
+            self._resize_corner = corner
+            self._resize_anchor = (
+                rect.x1 if "w" in corner else rect.x0,
+                rect.y1 if "n" in corner else rect.y0,
+            )
+            return
         if rect is not None and rect.contains(pymupdf.Point(x, y)):
             self._drag_offset = (x - rect.x0, y - rect.y0)
             return
@@ -478,10 +532,100 @@ class SignPage(BasePage):
         self._set_position(x - width / 2, y - height / 2)
 
     def _on_drag(self, event) -> None:
-        if self._drag_offset is None or self.document is None:
+        if self.document is None:
             return
         x, y = self._to_page_point(event)
-        self._set_position(x - self._drag_offset[0], y - self._drag_offset[1])
+        if self._resize_corner is not None:
+            anchor_x, anchor_y = self._resize_anchor
+            # Mantiene la proporcion: manda el eje en el que mas se movio el cursor.
+            width = max(abs(x - anchor_x), abs(y - anchor_y) / self.aspect_ratio)
+            self._apply_size(width, self._resize_corner, self._resize_anchor)
+        elif self._drag_offset is not None:
+            self._set_position(x - self._drag_offset[0], y - self._drag_offset[1])
+
+    def _on_release(self, _event) -> None:
+        self._drag_offset = None
+        self._resize_corner = None
+
+    def _on_motion(self, event) -> None:
+        """Cursor segun lo que hay debajo: asa (redimensionar), firma (mover) o pagina."""
+        if self.document is None:
+            cursor = "hand2"
+        elif not self._overlay_visible():
+            cursor = ""
+        else:
+            x, y = self._to_page_point(event)
+            rect = self._current_rect()
+            corner = self._corner_at(x, y, rect)
+            if corner is not None:
+                cursor = _CORNER_CURSORS[corner]
+            elif rect is not None and rect.contains(pymupdf.Point(x, y)):
+                cursor = "fleur"
+            else:
+                cursor = "crosshair"
+        if self.canvas.cget("cursor") != cursor:
+            self.canvas.configure(cursor=cursor)
+
+    def _corner_at(self, x: float, y: float, rect: pymupdf.Rect | None) -> str | None:
+        """Esquina del recuadro bajo el punto ``(x, y)`` (en puntos), si la hay."""
+        if rect is None or not self._overlay_visible():
+            return None
+        tolerance = HANDLE_SIZE / self.scale
+        for name, (corner_x, corner_y) in (
+            ("nw", (rect.x0, rect.y0)), ("ne", (rect.x1, rect.y0)),
+            ("sw", (rect.x0, rect.y1)), ("se", (rect.x1, rect.y1)),
+        ):
+            if abs(x - corner_x) <= tolerance and abs(y - corner_y) <= tolerance:
+                return name
+        return None
+
+    # * Tamano ----------------------------------------------------------------
+
+    def _apply_size(self, width: float, corner: str | None = None, anchor: tuple[float, float] | None = None) -> None:
+        """
+        Cambia el ancho de la firma (el alto sigue la proporcion). Con ``corner``
+        y ``anchor`` crece desde la esquina opuesta; sin ellos, desde el centro.
+        """
+        if self.document is None or self._current_rect() is None:
+            self.width_var.set(f"{max(width, MIN_SIGNATURE_WIDTH):.0f}")
+            return
+        aspect = self.aspect_ratio
+        width = max(MIN_SIGNATURE_WIDTH, min(width, self.page_rect.width, self.page_rect.height / aspect))
+        height = width * aspect
+        if corner is None or anchor is None:
+            current = self._current_rect()
+            center_x, center_y = (current.x0 + current.x1) / 2, (current.y0 + current.y1) / 2
+            x, y = center_x - width / 2, center_y - height / 2
+        else:
+            x = anchor[0] - width if "w" in corner else anchor[0]
+            y = anchor[1] - height if "n" in corner else anchor[1]
+        rect = core.signature_rect(self.page_rect, core.SignaturePlacement(x=x, y=y, width=width), aspect)
+        self.width_var.set(f"{rect.width:.1f}")
+        self.x_var.set(f"{rect.x0:.1f}")
+        self.y_var.set(f"{rect.y0:.1f}")
+
+    def _step_size(self, delta: float) -> None:
+        try:
+            width = float(self.width_var.get())
+        except ValueError:
+            width = core.DEFAULT_SIGNATURE_WIDTH
+        self._apply_size(width + delta)
+
+    def _on_size_slider(self, value: float) -> None:
+        if not self._syncing_size:
+            self._apply_size(value)
+
+    def _sync_size_slider(self) -> None:
+        """Refleja en el deslizador el ancho escrito o arrastrado."""
+        try:
+            width = float(self.width_var.get())
+        except ValueError:
+            return
+        self._syncing_size = True
+        try:
+            self.size_slider.set(width)
+        finally:
+            self._syncing_size = False
 
     # * Visor -----------------------------------------------------------------
 
@@ -581,6 +725,8 @@ class SignPage(BasePage):
             return
         page = self.document[self.page_index]
         self.page_rect = page.rect
+        self.size_slider.configure(to=max(MIN_SIGNATURE_WIDTH + 10, min(SIZE_SLIDER_MAX, self.page_rect.width)))
+        self._sync_size_slider()
         canvas_width = max(self.canvas.winfo_width(), 200)
         canvas_height = max(self.canvas.winfo_height(), 200)
         fit = min(
@@ -642,10 +788,17 @@ class SignPage(BasePage):
         if self.signature_image is not None and image_height > 0:
             self._overlay_photo = ImageTk.PhotoImage(self.signature_image.resize((width, image_height), Image.LANCZOS))
             self.canvas.create_image(x0, y0, anchor="nw", image=self._overlay_photo, tags="overlay")
+        accent = style.themed(style.accent_color())
         self.canvas.create_rectangle(
             x0 - 2, y0 - 2, x0 + width + 2, y0 + height + 2,
-            outline=style.themed(style.accent_color()), dash=(4, 3), width=1.5, tags="overlay",
+            outline=accent, dash=(4, 3), width=1.5, tags="overlay",
         )
+        half = HANDLE_SIZE / 2
+        for corner_x, corner_y in ((x0, y0), (x0 + width, y0), (x0, y0 + height), (x0 + width, y0 + height)):
+            self.canvas.create_rectangle(
+                corner_x - half, corner_y - half, corner_x + half, corner_y + half,
+                fill="white", outline=accent, width=1.5, tags="overlay",
+            )
 
     def _draw_caption(self, x0: float, bottom: float, width: int, height: float) -> None:
         """Vista previa de la leyenda de la firma digital (misma proporcion que en el PDF)."""

@@ -320,11 +320,14 @@ class MainWindow:
 
     # * Ventanas y ciclo de vida ----------------------------------------------
 
-    def open_help(self) -> None:
+    def open_help(self, section: str | None = None) -> None:
+        """Abre la guia de uso (o la trae al frente), opcionalmente en ``section``."""
         if getattr(self, "_help", None) is not None and self._help.winfo_exists():
+            if section:
+                self._help.show_section(section)
             self._help.focus()
             return
-        self._help = HelpWindow(self.root)
+        self._help = HelpWindow(self.root, section=section)
 
     def run(self) -> None:
         initial = self.settings.initial_page
