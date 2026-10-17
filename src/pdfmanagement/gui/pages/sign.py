@@ -18,6 +18,7 @@ from PIL import Image, ImageTk
 from ... import core, signatures
 from .. import style
 from ..dialogs import SignaturePad, ask_certificate_password, ask_password
+from ..icons import GLYPHS, render_glyph
 from ..widgets import (
     Card,
     FileField,
@@ -27,6 +28,7 @@ from ..widgets import (
     icon_button,
     muted_label,
     primary_button,
+    set_enabled,
     show,
 )
 from .base import BasePage
@@ -38,8 +40,22 @@ CERTIFICATE_FILETYPES = (("Certificados digitales", "*.pfx *.p12"),)
 DEFAULT_ASPECT = 0.4
 CERTIFICATE_HOLDER = "Titular del certificado"
 VIEWER_MARGIN = 24
+PLACEHOLDER_EMPTY = (
+    "Haga clic aqui o arrastre un PDF para comenzar",
+    'Tambien puede usar el boton "Examinar" del panel. Solo archivos PDF.',
+)
+PLACEHOLDER_LOCKED = (
+    "El documento esta protegido",
+    "Seleccionelo de nuevo e ingrese su contrasena para verlo.",
+)
 ZOOM_STEP = 1.25
 ZOOM_LIMITS = (0.3, 5.0)
+
+
+def _glyph_image(name: str, size: int, color: str) -> Image.Image:
+    """Icono de la fuente del sistema como imagen PIL (para dibujar en el lienzo)."""
+    image = render_glyph(GLYPHS[name], size, color)
+    return image.resize((size, size), Image.LANCZOS) if image else Image.new("RGBA", (size, size), (0, 0, 0, 0))
 
 
 class SignPage(BasePage):
@@ -204,31 +220,52 @@ class SignPage(BasePage):
     def _build_viewer(self) -> None:
         viewer = Card(self.body)
         viewer.grid(row=0, column=1, sticky="nsew", pady=(0, style.PAD))
-        viewer.grid_columnconfigure(0, weight=1)
-        viewer.grid_rowconfigure(1, weight=1)
+        # Card reparte el ancho entre sus columnas; aqui el lienzo ocupa todo.
+        viewer.grid_columnconfigure(0, weight=1, minsize=0)
+        viewer.grid_columnconfigure(1, weight=0, minsize=0)
+        viewer.grid_rowconfigure(2, weight=1)
 
+        # Barra de herramientas: navegacion | nombre del documento | zoom
         toolbar = ctk.CTkFrame(viewer, fg_color="transparent")
-        toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=8)
-        toolbar.grid_columnconfigure(4, weight=1)
-        icon_button(toolbar, "first", lambda: self._go_to(0), "Primera pagina").grid(row=0, column=0)
-        icon_button(toolbar, "previous", lambda: self._go_to(self.page_index - 1), "Pagina anterior").grid(row=0, column=1)
-        self.page_label = ctk.CTkLabel(toolbar, text="Sin documento", width=120, font=style.fonts().body)
-        self.page_label.grid(row=0, column=2)
-        icon_button(toolbar, "next", lambda: self._go_to(self.page_index + 1), "Pagina siguiente").grid(row=0, column=3, sticky="w")
-        icon_button(toolbar, "last", lambda: self._go_to(self._page_count() - 1), "Ultima pagina").grid(row=0, column=4, sticky="w")
-        icon_button(toolbar, "zoom_out", lambda: self._set_zoom(self.zoom / ZOOM_STEP), "Alejar (Ctrl + rueda)").grid(row=0, column=5)
-        self.zoom_label = ctk.CTkLabel(toolbar, text="100%", width=54, font=style.fonts().body)
-        self.zoom_label.grid(row=0, column=6)
-        icon_button(toolbar, "zoom_in", lambda: self._set_zoom(self.zoom * ZOOM_STEP), "Acercar (Ctrl + rueda)").grid(row=0, column=7)
-        icon_button(toolbar, "fit", lambda: self._set_zoom(1.0), "Ajustar pagina").grid(row=0, column=8, padx=(4, 0))
+        toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 8))
+        toolbar.grid_columnconfigure(1, weight=1)
+
+        navigation = ctk.CTkFrame(toolbar, fg_color="transparent")
+        navigation.grid(row=0, column=0, sticky="w")
+        first = icon_button(navigation, "first", lambda: self._go_to(0), "Primera pagina")
+        previous = icon_button(navigation, "previous", lambda: self._go_to(self.page_index - 1), "Pagina anterior")
+        self.page_label = ctk.CTkLabel(navigation, text="", width=118, font=style.fonts().body)
+        following = icon_button(navigation, "next", lambda: self._go_to(self.page_index + 1), "Pagina siguiente")
+        last = icon_button(navigation, "last", lambda: self._go_to(self._page_count() - 1), "Ultima pagina")
+        for widget in (first, previous, self.page_label, following, last):
+            widget.pack(side="left", padx=1)
+
+        self.document_label = ctk.CTkLabel(toolbar, text="", font=style.fonts().small, text_color=style.TEXT_MUTED)
+        self.document_label.grid(row=0, column=1, sticky="ew", padx=12)
+
+        zoom = ctk.CTkFrame(toolbar, fg_color="transparent")
+        zoom.grid(row=0, column=2, sticky="e")
+        zoom_out = icon_button(zoom, "zoom_out", lambda: self._set_zoom(self.zoom / ZOOM_STEP), "Alejar (Ctrl + rueda)")
+        self.zoom_label = ctk.CTkLabel(zoom, text="", width=52, font=style.fonts().body)
+        zoom_in = icon_button(zoom, "zoom_in", lambda: self._set_zoom(self.zoom * ZOOM_STEP), "Acercar (Ctrl + rueda)")
+        fit = icon_button(zoom, "fit", lambda: self._set_zoom(1.0), "Ajustar pagina a la ventana")
+        for widget in (zoom_out, self.zoom_label, zoom_in, fit):
+            widget.pack(side="left", padx=1)
+        self._viewer_buttons = [first, previous, following, last, zoom_out, zoom_in, fit]
+        self._nav_buttons = {"first": first, "previous": previous, "next": following, "last": last}
+        self._zoom_buttons = {"out": zoom_out, "in": zoom_in}
+
+        ctk.CTkFrame(viewer, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(
+            row=1, column=0, columnspan=2, sticky="ew", padx=1
+        )
 
         self.canvas = tk.Canvas(viewer, highlightthickness=0, background=style.themed(style.CANVAS_BG))
-        self.canvas.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(0, 0))
-        vertical = ctk.CTkScrollbar(viewer, orientation="vertical", command=self.canvas.yview)
-        vertical.grid(row=1, column=1, sticky="ns", padx=(0, 6))
-        horizontal = ctk.CTkScrollbar(viewer, orientation="horizontal", command=self.canvas.xview)
-        horizontal.grid(row=2, column=0, sticky="ew", padx=(10, 0), pady=(0, 8))
-        self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+        self.canvas.grid(row=2, column=0, sticky="nsew", padx=(12, 12), pady=(12, 12))
+        self.vertical_scroll = ctk.CTkScrollbar(viewer, orientation="vertical", command=self.canvas.yview)
+        self.vertical_scroll.grid(row=2, column=1, sticky="ns", padx=(0, 8), pady=(12, 12))
+        self.horizontal_scroll = ctk.CTkScrollbar(viewer, orientation="horizontal", command=self.canvas.xview)
+        self.horizontal_scroll.grid(row=3, column=0, sticky="ew", padx=(12, 12), pady=(0, 10))
+        self.canvas.configure(xscrollcommand=self.horizontal_scroll.set, yscrollcommand=self.vertical_scroll.set)
 
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
@@ -237,6 +274,7 @@ class SignPage(BasePage):
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         ctk.AppearanceModeTracker.add(self._on_appearance_change, self.canvas)
         enable_file_drop(self.canvas, lambda files: files and self.source_field.set(files[0]), recursive=False)
+        self._placeholder = PLACEHOLDER_EMPTY
         self._draw_placeholder()
 
     # * Modo ------------------------------------------------------------------
@@ -286,7 +324,7 @@ class SignPage(BasePage):
                 password = ask_password(self, source.name, retry=retry or isinstance(error, core.WrongPasswordError))
                 retry = True
                 if not password:
-                    self._draw_placeholder("El documento esta protegido.")
+                    self._draw_placeholder(PLACEHOLDER_LOCKED)
                     return
             except core.PdfManagementError as error:
                 self.app.show_error(error)
@@ -485,17 +523,56 @@ class SignPage(BasePage):
 
     def _on_appearance_change(self, mode: str) -> None:
         self.canvas.configure(background=style.CANVAS_BG[1] if mode.lower() == "dark" else style.CANVAS_BG[0])
+        # Los colores del lienzo se fijan al dibujar: se repinta con el tema nuevo.
+        if self.document is None:
+            self._draw_placeholder()
+        else:
+            self._render_page()
 
-    def _draw_placeholder(self, message: str = "Haga clic aqui o arrastre un PDF para comenzar") -> None:
-        self.canvas.delete("all")
-        self.canvas.configure(scrollregion=(0, 0, 0, 0))
-        width = max(self.canvas.winfo_width(), 400)
-        height = max(self.canvas.winfo_height(), 300)
-        self.canvas.create_text(
-            width / 2, height / 2, text=message, fill=style.themed(style.TEXT_MUTED),
-            font=(style.FONT_FAMILY, 12),
+    def _draw_placeholder(self, placeholder: tuple[str, str] | None = None) -> None:
+        """
+        Zona para soltar un PDF: recuadro punteado con icono, titulo y ayuda,
+        siempre centrados en el area visible del visor.
+        """
+        if placeholder is not None:
+            self._placeholder = placeholder
+        title, subtitle = self._placeholder
+        canvas = self.canvas
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 50 or height < 50:  # aun sin mapear: se redibuja en <Configure>
+            width, height = 640, 480
+        canvas.configure(scrollregion=(0, 0, width, height))
+        canvas.xview_moveto(0)
+        canvas.yview_moveto(0)
+        self._update_scrollbars(width, height, width, height)
+
+        scaling = ctk.ScalingTracker.get_widget_scaling(self)
+        muted = style.themed(style.TEXT_MUTED)
+        inset = 16
+        text_width = max(width - 2 * inset - 40, 200)
+        canvas.create_rectangle(inset, inset, width - inset, height - inset, outline=muted, dash=(6, 5), width=1.5)
+        center_x, center_y = width / 2, height / 2
+        self._placeholder_icon = ImageTk.PhotoImage(_glyph_image("pdf", round(52 * scaling), muted))
+        canvas.create_image(center_x, center_y - 34 * scaling, image=self._placeholder_icon, anchor="center")
+        canvas.create_text(
+            center_x, center_y + 14 * scaling, text=title, anchor="center", justify="center", width=text_width,
+            fill=style.themed(style.TEXT), font=(style.FONT_FAMILY, round(13 * scaling), "bold"),
+        )
+        canvas.create_text(
+            center_x, center_y + 40 * scaling, text=subtitle, anchor="center", justify="center", width=text_width,
+            fill=muted, font=(style.FONT_FAMILY, round(10 * scaling)),
         )
         self.page_label.configure(text="Sin documento")
+        self.document_label.configure(text="")
+        self.zoom_label.configure(text="—")
+        for button in self._viewer_buttons:
+            set_enabled(button, False)
+
+    def _update_scrollbars(self, content_width: float, content_height: float, canvas_width: int, canvas_height: int) -> None:
+        """Muestra cada barra de desplazamiento solo si el contenido no cabe."""
+        (show if content_width > canvas_width + 1 else hide)(self.horizontal_scroll)
+        (show if content_height > canvas_height + 1 else hide)(self.vertical_scroll)
 
     def _render_page(self) -> None:
         self._resize_job = None
@@ -524,11 +601,22 @@ class SignPage(BasePage):
             fill=style.themed(style.PAGE_SHADOW), outline="",
         )
         self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self._page_photo)
-        self.canvas.configure(
-            scrollregion=(0, 0, max(canvas_width, image.width + 2 * VIEWER_MARGIN), max(canvas_height, image.height + 2 * VIEWER_MARGIN))
-        )
+        content_width = image.width + 2 * VIEWER_MARGIN
+        content_height = image.height + 2 * VIEWER_MARGIN
+        self.canvas.configure(scrollregion=(0, 0, max(canvas_width, content_width), max(canvas_height, content_height)))
+        self._update_scrollbars(content_width, content_height, canvas_width, canvas_height)
         self.page_label.configure(text=f"Pagina {self.page_index + 1} de {self._page_count()}")
+        self.document_label.configure(text=self.document_path.name if self.document_path else "")
         self.zoom_label.configure(text=f"{self.zoom:.0%}")
+        # Cada boton se activa solo si su accion tiene efecto en la posicion actual.
+        at_first, at_last = self.page_index == 0, self.page_index >= self._page_count() - 1
+        set_enabled(self._nav_buttons["first"], not at_first)
+        set_enabled(self._nav_buttons["previous"], not at_first)
+        set_enabled(self._nav_buttons["next"], not at_last)
+        set_enabled(self._nav_buttons["last"], not at_last)
+        set_enabled(self._zoom_buttons["out"], self.zoom > ZOOM_LIMITS[0] + 1e-6)
+        set_enabled(self._zoom_buttons["in"], self.zoom < ZOOM_LIMITS[1] - 1e-6)
+        set_enabled(self._viewer_buttons[-1], True)
         self._draw_overlay()
 
     def _schedule_overlay(self) -> None:

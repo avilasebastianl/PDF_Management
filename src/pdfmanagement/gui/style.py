@@ -22,6 +22,7 @@ CORNER = 10
 # * Colores semanticos
 TEXT = ("gray10", "gray92")
 TEXT_MUTED = ("gray40", "gray62")
+TEXT_DISABLED = ("gray75", "gray35")
 SIDEBAR_BG = ("gray88", "gray12")
 CONTENT_BG = ("gray95", "gray16")
 CARD_BG = ("white", "gray20")

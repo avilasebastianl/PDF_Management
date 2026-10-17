@@ -84,11 +84,12 @@ def secondary_button(parent, text: str, command: Callable, icon_name: str | None
 
 
 def icon_button(parent, icon_name: str, command: Callable, tooltip: str, size: int = 32, **kwargs) -> ctk.CTkButton:
-    """Boton cuadrado solo con icono y tooltip."""
+    """Boton cuadrado solo con icono y tooltip. Use ``set_enabled`` para activarlo o no."""
+    disabled = kwargs.get("state") == "disabled"
     button = ctk.CTkButton(
         parent,
         text="" if icon(icon_name) else tooltip[:1],
-        image=icon(icon_name, 16),
+        image=icon(icon_name, 16, style.TEXT_DISABLED if disabled else style.TEXT),
         width=size,
         height=size,
         fg_color="transparent",
@@ -99,7 +100,18 @@ def icon_button(parent, icon_name: str, command: Callable, tooltip: str, size: i
         **kwargs,
     )
     ToolTip(button, tooltip)
+    button._icon_name = icon_name
     return button
+
+
+def set_enabled(button: ctk.CTkButton, enabled: bool) -> None:
+    """Activa o desactiva un ``icon_button`` atenuando su icono cuando no esta disponible."""
+    if (button.cget("state") == "normal") == enabled:
+        return
+    button.configure(
+        state="normal" if enabled else "disabled",
+        image=icon(button._icon_name, 16, style.TEXT if enabled else style.TEXT_DISABLED),
+    )
 
 
 # * Estructura --------------------------------------------------------------

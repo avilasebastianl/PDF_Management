@@ -34,6 +34,7 @@ from ..widgets import (
     muted_label,
     primary_button,
     secondary_button,
+    set_enabled,
     show,
 )
 from .base import BasePage
@@ -102,8 +103,8 @@ class _FileRow:
             self._index = index
         edges = (index == 0, index == total - 1)
         if edges != self._edges:
-            self.up.configure(state="disabled" if edges[0] else "normal")
-            self.down.configure(state="disabled" if edges[1] else "normal")
+            set_enabled(self.up, not edges[0])
+            set_enabled(self.down, not edges[1])
             self._edges = edges
 
     def update_info(self, info: core.PdfInfo) -> None:

@@ -91,6 +91,16 @@ def _render(glyph: str, size: int, color: str) -> Image.Image:
     return image
 
 
+def render_glyph(glyph: str, size: int, color: str) -> Image.Image | None:
+    """
+    Icono como imagen PIL en un solo color (para dibujar en un ``Canvas``).
+    Devuelve ``None`` si la fuente de iconos no esta disponible.
+    """
+    if _font_path() is None:
+        return None
+    return _render(glyph, size, color)
+
+
 @cache
 def icon(name: str, size: int = 18, color: tuple[str, str] = style.TEXT) -> ctk.CTkImage | None:
     """
