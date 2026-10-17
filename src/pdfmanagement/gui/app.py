@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 PREBUILD_DELAY_MS = 600      # espera tras el arranque antes de precargar paginas
 PREBUILD_INTERVAL_MS = 150   # pausa entre paginas precargadas o reapiladas
 RESTACK_DELAY_MS = 400       # espera tras redimensionar antes de reapilar paginas
-SIDEBAR_ANIMATION_MS = 220   # duracion de contraer/expandir el menu lateral
-SIDEBAR_FRAME_MS = 12        # pausa entre cuadros de la animacion
+SIDEBAR_ANIMATION_MS = 260   # duracion de contraer/expandir el menu lateral
+SIDEBAR_FRAME_MS = 6         # pausa entre cuadros (cada cuadro se pinta enseguida)
 RESIZE_LOG_DELAY_MS = 600    # se registra el tamano final, no cada paso del arrastre
 
 # Nombres legibles de las preferencias para el registro de cambios.
@@ -107,7 +107,7 @@ class MainWindow:
         self._last_size: tuple[int, int] | None = None
         self._restack_job: str | None = None
         self._resize_log_job: str | None = None
-        self._sidebar_animation: tuple[float, int, int] | None = None
+        self._sidebar_animation: tuple[float, int, int, float] | None = None
 
         self._build_sidebar()
         self._build_content()
@@ -205,6 +205,21 @@ class MainWindow:
         """Muestra u oculta el menu lateral y la barra de estado (pantalla completa del visor)."""
         for widget in (self.sidebar, self.status_bar):
             (show if visible else hide)(widget)
+        self._place_main(None if visible else 0)
+
+    def _place_main(self, left: int | None = None) -> None:
+        """
+        El contenido ocupa todo a la derecha del menu: ``x`` = ancho del menu y
+        ``relwidth=1`` con ``width=-x``, asi sigue a la ventana al redimensionarla.
+        Se coloca con ``place`` (no con ``grid``) para que la animacion del menu
+        solo mueva ``x`` y al terminar no haya que cambiar de gestor de geometria
+        (eso obligaba a remaquetar toda la seccion: ~110 ms pintandose a la vista).
+        """
+        if left is None:
+            width = style.SIDEBAR_COLLAPSED_WIDTH if self.settings.sidebar_collapsed else style.SIDEBAR_WIDTH
+            left = round(width * ctk.ScalingTracker.get_widget_scaling(self.sidebar))
+        # place de Tk: el de CustomTkinter no admite width (lo exige en el constructor)
+        tk.Frame.place_configure(self.main, x=left, y=0, relwidth=1, width=-left, relheight=1)
 
     def toggle_sidebar(self, animate: bool = True) -> None:
         """Contrae el menu lateral a solo iconos (o lo expande); se recuerda entre sesiones."""
@@ -227,45 +242,54 @@ class MainWindow:
         durante la animacion solo se desplaza (mover una ventana es barato)
         sobre el menu, que queda con su ancho maximo debajo, como un cajon.
         El dibujo de paginas del visor se pausa mientras tanto.
+
+        Para que no parpadee: el contenido pasa de ``grid`` a ``place`` (y al
+        final de vuelta) sin desmontarse nunca, y solo se congela el pintado
+        una vez, al principio; lo que cambia al final queda tapado.
         """
         collapsed = self.settings.sidebar_collapsed
         start = self.sidebar.winfo_width()
         end = style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH
         final_width = self.root.winfo_width() - round(end * ctk.ScalingTracker.get_widget_scaling(self.sidebar))
         self._unstack_hidden_pages()
+        page = self.pages.get(self.current_page)
+        old_width = self.main.winfo_width()
         with frozen_redraw(self.root):
             if not collapsed:  # el menu completo queda debajo y el contenido lo va descubriendo
                 self.sidebar.configure(width=style.SIDEBAR_WIDTH)
                 self._apply_sidebar_labels(collapsed=False)
-            self.main.grid_remove()
-            # place de Tk: el de CustomTkinter no admite width (lo exige en el constructor)
-            tk.Frame.place_configure(self.main, x=start, y=0, width=final_width, relheight=1)
-            self.root.update_idletasks()
+            # Durante la animacion el ancho es fijo (el final) y solo cambia x.
+            tk.Frame.place_configure(self.main, x=start, relwidth=0, width=final_width)
             self.main.lift(self.sidebar)
-            page = self.pages.get(self.current_page)
+            self.root.update_idletasks()
+            shift = 0.0
             if page is not None:
-                page.flush_layout()  # que el visor se reacomode ahora y no a mitad de la animacion
+                shift = page.begin_slide((old_width - final_width) / 2)
                 page.pause_rendering(True)
-        self._sidebar_animation = (time.perf_counter(), start, end)
+        self._sidebar_animation = (time.perf_counter(), start, end, shift)
         self._sidebar_step()
 
     def _sidebar_step(self) -> None:
-        started, start, end = self._sidebar_animation
+        started, start, end, shift = self._sidebar_animation
         progress = min(1.0, (time.perf_counter() - started) * 1000 / SIDEBAR_ANIMATION_MS)
         eased = 1 - (1 - progress) ** 3  # arranca rapido y frena suave
         scaling = ctk.ScalingTracker.get_widget_scaling(self.sidebar)
         width = start / scaling + (end - start / scaling) * eased
         tk.Frame.place_configure(self.main, x=round(width * scaling))
+        page = self.pages.get(self.current_page)
+        if shift and page is not None:
+            page.slide_content(shift * (1 - eased))  # las paginas centradas acompanan el movimiento
+        self.root.update_idletasks()  # cada cuadro se pinta ya, a ritmo parejo
         if progress < 1.0:
             self.root.after(SIDEBAR_FRAME_MS, self._sidebar_step)
             return
         self._sidebar_animation = None
-        with frozen_redraw(self.root):
-            self._apply_sidebar_mode()
-            self.main.place_forget()
-            self.main.grid()
-        page = self.pages.get(self.current_page)
+        # Lo que cambia ahora queda debajo del contenido: no hace falta congelar
+        # el pintado (y repintar toda la ventana, que se notaba como un destello).
+        self._apply_sidebar_mode()
+        self._place_main()  # mismo tamano y posicion: no se remaqueta nada
         if page is not None:
+            page.slide_content(0)
             page.pause_rendering(False)
         self._restack_job = self.root.after(RESTACK_DELAY_MS, self._restack_pages)
 
@@ -296,7 +320,7 @@ class MainWindow:
     def _build_content(self) -> None:
         # Contenido y barra de estado van juntos: al contraer el menu se desplazan como un bloque.
         self.main = ctk.CTkFrame(self.root, fg_color="transparent", corner_radius=0)
-        self.main.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        self._place_main()
         self.main.grid_columnconfigure(0, weight=1)
         self.main.grid_rowconfigure(0, weight=1)
         self.content = ctk.CTkFrame(self.main, fg_color="transparent", corner_radius=0)

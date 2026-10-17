@@ -104,6 +104,7 @@ class PageView(ctk.CTkFrame):
         self._displayed: dict[tuple[int, tuple[int, int] | None], tuple[int, ImageTk.PhotoImage, float]] = {}
         self._page_listeners: list[Callable[[int], None]] = []
         self._painters: list[Callable[[PageView], None]] = []
+        self._slide = 0  # desplazamiento temporal del dibujo (animacion del menu)
         self._layout_listeners: list[Callable[[], None]] = []
         self._update_job: str | None = None
         self._resize_job: str | None = None
@@ -432,6 +433,7 @@ class PageView(ctk.CTkFrame):
     def _relayout(self, keep_page: int | None) -> None:
         canvas = self.canvas
         canvas.delete("all")
+        self._slide = 0
         self._displayed.clear()
         self.scale = self._compute_scale()
         width = max(canvas.winfo_width(), 200)
@@ -589,6 +591,13 @@ class PageView(ctk.CTkFrame):
         if self._resize_job:
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(RESIZE_DEBOUNCE_MS, self._apply_resize)
+
+    def slide_offset(self, offset: float) -> None:
+        """Desplaza todo el dibujo ``offset`` pixeles en horizontal (animaciones; 0 = en su lugar)."""
+        delta = round(offset) - self._slide
+        if delta:
+            self.canvas.move("all", delta, 0)
+            self._slide += delta
 
     def flush_resize(self) -> None:
         """Aplica ya un cambio de tamano pendiente (en vez de esperar la pausa)."""

@@ -173,7 +173,9 @@ def test_sidebar_collapses_to_icons(gui_app):
     pump(gui_app, lambda: gui_app._sidebar_animation is None, timeout=0.3)
     assert gui_app.settings.sidebar_collapsed
     assert gui_app.sidebar.cget("width") == 64
-    assert gui_app.main.winfo_manager() == "grid", "al terminar la animacion el contenido vuelve a su celda"
+    sidebar_width = gui_app.sidebar.winfo_width()
+    assert gui_app.main.winfo_x() == sidebar_width, "el contenido queda justo a la derecha del menu"
+    assert gui_app.main.winfo_width() == gui_app.root.winfo_width() - sidebar_width
     assert all(button.cget("text") == "" for button in gui_app.nav_buttons.values())
     assert not gui_app._brand.winfo_ismapped()
     # Contraido, el tooltip dice el nombre de la seccion.

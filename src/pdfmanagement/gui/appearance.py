@@ -39,7 +39,9 @@ _OFFSCREEN = 0          # grupo de widgets de la seccion actual que no estan a l
 _MISSING = object()
 
 _WM_SETREDRAW = 0x000B
-_RDW_FLAGS = 0x0001 | 0x0004 | 0x0080 | 0x0100 | 0x0400  # INVALIDATE|ERASE|ALLCHILDREN|UPDATENOW|FRAME
+# INVALIDATE|ALLCHILDREN|UPDATENOW|FRAME. Sin ERASE: borrar el fondo antes de que Tk
+# pinte se veia como un destello al reactivar el pintado.
+_RDW_FLAGS = 0x0001 | 0x0080 | 0x0100 | 0x0400
 
 
 @contextmanager

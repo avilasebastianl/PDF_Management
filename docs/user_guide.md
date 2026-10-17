@@ -17,7 +17,8 @@ Lea cualquier PDF sin salir de la aplicacion. Es la primera seccion y la que se 
 - **Abrir**: boton **Abrir**, **Ctrl+O**, clic en el area vacia o arrastre un PDF. Si esta protegido se pide la contrasena. **Recientes** muestra los ultimos 10 archivos.
 - **Pestanas**: cada documento se abre en su propia pestana, como en un navegador, y conserva su pagina, zoom y cambios. Cambie con un clic o **Ctrl+Tab**, cierre con la **x** o **Ctrl+W** y abra otro con **+**. Si abre un archivo que ya esta abierto, se muestra su pestana.
 - **Buscar**: pulse el boton **Buscar** (o **Ctrl+F**), escriba y pulse **Enter**; cada **Enter** va al siguiente resultado (**Mayus+Enter** al anterior). La barra muestra cuantos hay; **Aa** distingue mayusculas, **ab** busca palabras completas y el boton de lista los muestra todos con su contexto en el panel lateral. **Esc** la cierra.
-- **Pantalla completa**: el boton de las flechas (o **F11**) deja solo el visor; **Esc** o **F11** vuelven.
+- **Leer en toda la ventana**: el boton de la ventana (o **Ctrl+Mayus+F**) oculta el menu, las barras y el panel lateral y deja el documento ocupando toda la ventana, con las pestanas a mano. **Esc** vuelve.
+- **Pantalla completa**: el boton de las flechas (o **F11**) deja solo el visor en toda la pantalla; **Esc** o **F11** vuelven.
 - **Panel lateral** (boton de lista para mostrarlo u ocultarlo):
   - **Paginas**: miniaturas; haga clic en una para ir a esa pagina.
   - **Marcadores**: el indice del documento, si lo tiene.

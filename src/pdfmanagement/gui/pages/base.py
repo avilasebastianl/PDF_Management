@@ -73,6 +73,25 @@ class BasePage(ctk.CTkFrame):
             view.flush_resize()
             view.scheduler.drain()  # las paginas visibles quedan dibujadas antes de moverse
 
+    def begin_slide(self, center_shift: float) -> float:
+        """
+        Antes de deslizar la seccion: reacomoda el visor a su ancho final y
+        devuelve cuanto hay que desplazar sus paginas para que no salten de
+        lado (0 si no hace falta). ``center_shift`` es cuanto se movio el
+        centro del contenido al cambiar de ancho.
+        """
+        self.flush_layout()
+        view = getattr(self, "view", None)
+        if view is None or not hasattr(view, "slide_offset") or view.zoom_mode == "fit_width":
+            return 0.0  # ajustado al ancho, la pagina ya ocupa todo: no salta de lado
+        view.slide_offset(center_shift)
+        return center_shift
+
+    def slide_content(self, offset: float) -> None:
+        view = getattr(self, "view", None)
+        if view is not None and hasattr(view, "slide_offset"):
+            view.slide_offset(offset)
+
     def pause_rendering(self, paused: bool) -> None:
         """Pausa o reanuda el dibujo de paginas del visor de la seccion (durante animaciones)."""
         view = getattr(self, "view", None)

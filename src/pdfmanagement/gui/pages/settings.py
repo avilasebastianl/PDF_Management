@@ -14,6 +14,7 @@ from ... import GITHUB_URL, LINKEDIN_URL, REPOSITORY_URL, __app_name__, __author
 from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_themes
 from .. import style
 from ..dropdown import dropdown_menu
+from ..icons import icon
 from ..system import open_path
 from ..widgets import Card, ToolTip, field_label, hide, muted_label, primary_button, secondary_button, show
 from .base import BasePage
@@ -27,6 +28,11 @@ DEBUG_LOGGING_HELP = (
 )
 
 
+ABOUT_TAGLINE = "Sus PDFs, faciles, gratis y 100 % privados"
+ABOUT_BANNER_MUTED = ("gray90", "gray85")
+ABOUT_AUTHOR_BG = ("gray90", "gray22")
+ABOUT_WRAP = 400
+ABOUT_STACK = ("Python", "CustomTkinter", "PyMuPDF", "pypdf", "pyHanko", "pytest")
 ABOUT_PURPOSE = (
     "Resuelve las tareas mas comunes con PDFs de forma facil y gratuita, sin subir sus documentos "
     "a internet: todo se procesa en su equipo."
@@ -39,8 +45,8 @@ ABOUT_HIGHLIGHTS = (
     "Nunca modifica el original: siempre Guardar como, con deshacer ilimitado",
 )
 ABOUT_HOW = (
-    "Escrita en Python con CustomTkinter, PyMuPDF, pypdf y pyHanko, con arquitectura por capas y "
-    "pruebas automatizadas. Desarrollada con la asistencia de Claude Code (Anthropic)."
+    "Arquitectura por capas (nucleo sin interfaz, servicios y GUI) con pruebas automatizadas. "
+    "Desarrollada con la asistencia de Claude Code (Anthropic)."
 )
 
 
@@ -119,42 +125,78 @@ class SettingsPage(BasePage):
         ToolTip(self.debug_switch, DEBUG_LOGGING_HELP)
         secondary_button(diagnostics, "Ver registro", self._open_log, "open", width=120).pack(side="left", padx=(12, 0))
 
-        # * Acerca de
-        about = Card(self.body, "Acerca de")
-        about.grid(row=0, column=1, rowspan=3, sticky="new", pady=(0, style.PAD))
-        ctk.CTkLabel(about, text=__app_name__, font=style.fonts().section).grid(
-            row=about.row(0), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(6, 0)
+        self._build_about()
+
+    def _build_about(self) -> None:
+        """Tarjeta destacada: proposito, ventajas, como se hizo y quien la desarrollo."""
+        accent = style.accent_color()
+        about = self.about = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
+                                          border_width=2, border_color=accent)
+        about.grid(row=0, column=1, rowspan=4, sticky="new", pady=(0, style.PAD))
+        about.grid_columnconfigure(0, weight=1)
+        # La fila vacia de abajo absorbe el alto extra: las tarjetas de la izquierda no se separan.
+        self.body.grid_rowconfigure(3, weight=1)
+
+        # Cabecera con el color de acento: logo, nombre y eslogan.
+        banner = ctk.CTkFrame(about, corner_radius=style.CORNER - 2, fg_color=accent)
+        banner.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
+        ctk.CTkLabel(banner, text="", image=icon("pdf", 48, style.WHITE)).grid(
+            row=0, column=0, rowspan=3, padx=(18, 12), pady=14
         )
-        muted_label(about, f"Version {__version__}  ·  Licencia Apache 2.0").grid(
-            row=about.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD
+        ctk.CTkLabel(banner, text=__app_name__, font=style.fonts().title, text_color=style.WHITE, anchor="w").grid(
+            row=0, column=1, sticky="w", pady=(14, 0)
         )
-        muted_label(about, ABOUT_PURPOSE, wraplength=300, justify="left").grid(
-            row=about.row(2), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 0)
+        ctk.CTkLabel(banner, text=ABOUT_TAGLINE, font=style.fonts().body, text_color=style.WHITE, anchor="w").grid(
+            row=1, column=1, sticky="w"
         )
-        ctk.CTkLabel(about, text="En que se destaca", font=style.fonts().body_bold).grid(
-            row=about.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 2)
+        ctk.CTkLabel(banner, text=f"Version {__version__}  ·  Licencia Apache 2.0", font=style.fonts().small,
+                     text_color=ABOUT_BANNER_MUTED, anchor="w").grid(row=2, column=1, sticky="w", pady=(2, 14))
+
+        body = ctk.CTkFrame(about, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="ew", padx=style.CARD_PAD + 2, pady=(14, style.CARD_PAD))
+        body.grid_columnconfigure(0, weight=1)
+        row = iter(range(100))
+        ctk.CTkLabel(body, text=ABOUT_PURPOSE, font=style.fonts().body, text_color=style.TEXT, justify="left",
+                     anchor="w", wraplength=ABOUT_WRAP).grid(row=next(row), column=0, sticky="w")
+
+        self._about_title(body, "En que se destaca", next(row))
+        check = icon("check", 18, accent)
+        for item in ABOUT_HIGHLIGHTS:
+            line = ctk.CTkFrame(body, fg_color="transparent")
+            line.grid(row=next(row), column=0, sticky="w", pady=2)
+            ctk.CTkLabel(line, text="", image=check, width=20).pack(side="left", anchor="n", padx=(0, 6))
+            ctk.CTkLabel(line, text=item, font=style.fonts().body, text_color=style.TEXT, justify="left",
+                         anchor="w", wraplength=ABOUT_WRAP - 30).pack(side="left")
+
+        self._about_title(body, "Como se hizo", next(row))
+        muted_label(body, ABOUT_HOW, wraplength=ABOUT_WRAP).grid(row=next(row), column=0, sticky="w")
+        chips = ctk.CTkFrame(body, fg_color="transparent")
+        chips.grid(row=next(row), column=0, sticky="w", pady=(8, 0))
+        for index, technology in enumerate(ABOUT_STACK):
+            ctk.CTkLabel(chips, text=technology, font=style.fonts().small, fg_color=style.HOVER, corner_radius=10,
+                         text_color=style.TEXT, height=24).grid(row=index // 4, column=index % 4, padx=(0, 6), pady=3,
+                                                              ipadx=8, sticky="w")
+
+        # Autor: bloque resaltado con sus enlaces.
+        author = ctk.CTkFrame(body, corner_radius=10, fg_color=ABOUT_AUTHOR_BG)
+        author.grid(row=next(row), column=0, sticky="ew", pady=(18, 0))
+        muted_label(author, "Desarrollado por").pack(anchor="w", padx=14, pady=(12, 0))
+        ctk.CTkLabel(author, text=__author__, font=style.fonts().section, text_color=style.TEXT, anchor="w").pack(
+            anchor="w", padx=14
         )
-        ctk.CTkLabel(
-            about, text="\n".join(f"•  {item}" for item in ABOUT_HIGHLIGHTS), font=style.fonts().small,
-            justify="left", anchor="w", wraplength=300,
-        ).grid(row=about.row(4), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD)
-        ctk.CTkLabel(about, text="Como se hizo", font=style.fonts().body_bold).grid(
-            row=about.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 2)
-        )
-        muted_label(about, ABOUT_HOW, wraplength=300, justify="left").grid(
-            row=about.row(6), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD
-        )
-        ctk.CTkLabel(about, text=f"Desarrollado por {__author__}", font=style.fonts().body_bold).grid(
-            row=about.row(7), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(14, 4)
-        )
-        links = ctk.CTkFrame(about, fg_color="transparent")
-        links.grid(row=about.row(8), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(0, 6))
-        for column, (text, url) in enumerate((
-            ("GitHub", GITHUB_URL), ("LinkedIn", LINKEDIN_URL), ("Codigo fuente", REPOSITORY_URL),
-        )):
-            button = secondary_button(links, text, lambda link=url: self._open_link(link), "open", width=96, height=30)
-            button.grid(row=0, column=column, padx=(0, 6))
+        links = ctk.CTkFrame(author, fg_color="transparent")
+        links.pack(anchor="w", padx=14, pady=(10, 14))
+        for text, url, make in (("GitHub", GITHUB_URL, primary_button), ("LinkedIn", LINKEDIN_URL, primary_button),
+                                ("Codigo fuente", REPOSITORY_URL, secondary_button)):
+            button = make(links, text, lambda link=url: self._open_link(link), "open", width=108)
+            button.pack(side="left", padx=(0, 8))
             ToolTip(button, url.removeprefix("https://"))
+
+    @staticmethod
+    def _about_title(parent, text: str, row: int) -> None:
+        ctk.CTkLabel(parent, text=text, font=style.fonts().section, text_color=style.TEXT, anchor="w").grid(
+            row=row, column=0, sticky="w", pady=(16, 6)
+        )
 
     def _open_link(self, url: str) -> None:
         """Abre el enlace en el navegador (la aplicacion en si nunca se conecta a internet)."""

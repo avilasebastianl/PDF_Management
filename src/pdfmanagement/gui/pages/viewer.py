@@ -7,7 +7,8 @@ Extraer, Firmar o Proteger.
 
 Varios documentos a la vez en pestanas, como un navegador (``DocumentTab``):
 cada una conserva su sesion, historial, pagina, zoom, desplazamiento y
-seleccion. Pantalla completa con el boton del visor o F11.
+seleccion. Dos modos de lectura: "toda la ventana" (Ctrl+Mayus+F; solo el
+visor y las pestanas dentro de la ventana) y pantalla completa (F11).
 
 Organizar paginas (panel Paginas, menu contextual o atajos): rotar,
 eliminar, reordenar arrastrando miniaturas, insertar otro PDF o una pagina en
@@ -17,8 +18,8 @@ mano. Todo se puede deshacer y se guarda siempre con "Guardar como": el
 archivo original nunca se modifica.
 
 Atajos (con la seccion visible): Ctrl+O abrir (en una pestana nueva), Ctrl+W
-cerrar pestana, Ctrl+Tab / Ctrl+Mayus+Tab cambiar de pestana, F11 pantalla
-completa, Ctrl+E editar, Ctrl+S / Ctrl+Mayus+S guardar como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
+cerrar pestana, Ctrl+Tab / Ctrl+Mayus+Tab cambiar de pestana, Ctrl+Mayus+F
+visor en toda la ventana, F11 pantalla completa, Ctrl+E editar, Ctrl+S / Ctrl+Mayus+S guardar como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
 rotar a la derecha / izquierda, Supr eliminar paginas, Ctrl+F buscar, F3 /
 Mayus+F3 resultado siguiente / anterior, Ctrl+C copiar seleccion, Ctrl+A
 seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
@@ -59,6 +60,7 @@ PLACEHOLDER = (
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
 MAX_TABS = 12
+NORMAL, WINDOW, FULLSCREEN = "normal", "ventana", "pantalla completa"
 TAB_TITLE_CHARS = 26
 
 
@@ -90,7 +92,7 @@ class ViewerPage(BasePage):
     def build(self) -> None:
         self.tabs: list[DocumentTab] = []
         self.active = -1  # indice de la pestana visible (-1: ninguna)
-        self.fullscreen = False
+        self.view_mode = NORMAL  # NORMAL, WINDOW (toda la ventana) o FULLSCREEN
         self._recent: list[Path] = recent.load_recent()
         # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
         self.body.grid_columnconfigure(0, weight=0)
@@ -232,10 +234,14 @@ class ViewerPage(BasePage):
         self.edit_button = secondary_button(top, "Editar", self.toggle_edit_mode, "edit", width=92, height=30)
         self.edit_button.pack(side="left", padx=(6, 0))
         ToolTip(self.edit_button, "Mostrar u ocultar las herramientas para anotar y organizar paginas (Ctrl+E)")
+        self.window_button = icon_button(top, "window_mode", self.toggle_window_mode,
+                                         lambda: "Volver a la vista normal (Ctrl+Mayus+F o Esc)" if self.view_mode == WINDOW
+                                         else "Visor en toda la ventana para leer (Ctrl+Mayus+F)")
+        self.window_button.pack(side="left", padx=(6, 0))
         self.fullscreen_button = icon_button(top, "fullscreen", self.toggle_fullscreen,
                                              lambda: "Salir de pantalla completa (F11 o Esc)" if self.fullscreen
                                              else "Pantalla completa (F11)")
-        self.fullscreen_button.pack(side="left", padx=(6, 0))
+        self.fullscreen_button.pack(side="left", padx=(2, 0))
         ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(row=2, column=0, sticky="ew", padx=1)
         self.view.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
         self.view.canvas.bind("<ButtonPress-3>", self._on_view_right_click, add="+")
@@ -270,6 +276,7 @@ class ViewerPage(BasePage):
             "<Control-Tab>": lambda: self.cycle_tab(1),
             "<Control-Shift-Tab>": lambda: self.cycle_tab(-1),
             "<F11>": self.toggle_fullscreen,
+            "<Control-F>": self.toggle_window_mode,
             "<Control-e>": self.toggle_edit_mode,
             "<Control-s>": self.save_as,
             "<Control-S>": self.save_as,
@@ -465,7 +472,7 @@ class ViewerPage(BasePage):
         if not self.tabs:
             self.tab_bar.grid_remove()
             return
-        if not self.fullscreen:
+        if self.view_mode != FULLSCREEN:
             self.tab_bar.grid()
         accent = style.accent_color()
         for index, tab in enumerate(self.tabs):
@@ -503,30 +510,45 @@ class ViewerPage(BasePage):
 
     # * Pantalla completa -------------------------------------------------------
 
+    @property
+    def fullscreen(self) -> bool:
+        return self.view_mode == FULLSCREEN
+
     def toggle_fullscreen(self) -> None:
-        """Solo el visor en toda la pantalla (sin menu, barras ni panel lateral)."""
-        self.fullscreen = not self.fullscreen
-        full = self.fullscreen
-        self.app.set_chrome_visible(not full)
-        if full:
+        """Solo el visor en toda la pantalla (sin menu, barras, pestanas ni panel)."""
+        self.set_view_mode(NORMAL if self.view_mode == FULLSCREEN else FULLSCREEN)
+
+    def toggle_window_mode(self) -> None:
+        """El visor ocupa toda la ventana (con las pestanas), sin pasar a pantalla completa."""
+        self.set_view_mode(NORMAL if self.view_mode == WINDOW else WINDOW)
+
+    def set_view_mode(self, mode: str) -> None:
+        if mode == self.view_mode:
+            return
+        self.view_mode = mode
+        reading = mode != NORMAL
+        self.app.set_chrome_visible(not reading)
+        if reading:
             self.file_bar.grid_remove()
-            self.tab_bar.grid_remove()
             self.side.grid_remove()
         else:
             self.file_bar.grid()
-            if self.tabs:
-                self.tab_bar.grid()
             if self.side_visible:
                 self.side.grid()
-        self.app.root.attributes("-fullscreen", full)
-        name = "exit_fullscreen" if full else "fullscreen"
-        self.fullscreen_button._icon_name = name  # noqa: SLF001 (lo usa set_enabled)
-        self.fullscreen_button.configure(image=icon(name, 16, style.TEXT))
-        self.log("Pantalla completa %s", "activada" if full else "desactivada")
+        if self.tabs and mode != FULLSCREEN:
+            self.tab_bar.grid()
+        else:
+            self.tab_bar.grid_remove()
+        self.app.root.attributes("-fullscreen", mode == FULLSCREEN)
+        for button, name, active in ((self.window_button, "window_mode", mode == WINDOW),
+                                     (self.fullscreen_button, "fullscreen", mode == FULLSCREEN)):
+            icon_name = f"exit_{name}" if active else name
+            button._icon_name = icon_name  # noqa: SLF001 (lo usa set_enabled)
+            button.configure(image=icon(icon_name, 16, style.TEXT))
+        self.log("Modo de vista: %s", mode)
 
     def on_hide(self) -> None:
-        if self.fullscreen:
-            self.toggle_fullscreen()
+        self.set_view_mode(NORMAL)
 
     def _ask_password_until_valid(self, path: Path) -> str | None | bool:
         """
@@ -811,8 +833,7 @@ class ViewerPage(BasePage):
             self.text_tool.select_all(self.view, self.view.current_page)
 
     def clear_marks(self) -> None:
-        if self.fullscreen:
-            self.toggle_fullscreen()
+        self.set_view_mode(NORMAL)  # Esc tambien sale de los modos de lectura
         self.find_bar.hide()
         self.annotations.cancel_tool()
         self.annotations.select(None)

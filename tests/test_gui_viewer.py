@@ -342,3 +342,19 @@ def test_find_bar_searches_with_enter(viewer, gui_app):
     bar._flip(viewer.search.match_case, bar.case_button)
     viewer.close_find()
     assert not bar.visible and viewer.search.hits == []
+
+
+def test_window_mode_reads_in_the_whole_window(viewer, gui_app):
+    viewer.toggle_window_mode()
+    pump(gui_app, timeout=0.3)
+    assert viewer.view_mode == "ventana" and not gui_app.root.attributes("-fullscreen"), "sin pantalla completa"
+    assert not gui_app.sidebar.winfo_ismapped() and not viewer.file_bar.winfo_ismapped()
+    assert not viewer.side.winfo_ismapped() and viewer.tab_bar.winfo_ismapped(), "las pestanas siguen a mano"
+    assert gui_app.main.winfo_x() == 0 and gui_app.main.winfo_width() == gui_app.root.winfo_width()
+    viewer.toggle_fullscreen()  # de un modo al otro directamente
+    pump(gui_app, timeout=0.3)
+    assert viewer.fullscreen and not viewer.tab_bar.winfo_ismapped()
+    viewer.clear_marks()  # Esc
+    pump(gui_app, timeout=0.3)
+    assert viewer.view_mode == "normal" and gui_app.sidebar.winfo_ismapped() and viewer.side.winfo_ismapped()
+    assert gui_app.main.winfo_x() == gui_app.sidebar.winfo_width()

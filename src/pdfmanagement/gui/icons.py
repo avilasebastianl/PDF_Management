@@ -59,6 +59,8 @@ GLYPHS = {
     "menu": "\ue700",
     "fullscreen": "\ue740",
     "exit_fullscreen": "\ue73f",
+    "window_mode": "\ue737",
+    "exit_window_mode": "\uee49",
     "search": "\ue721",
     "highlight": "\ue7e6",
     "underline": "\ue8dc",
