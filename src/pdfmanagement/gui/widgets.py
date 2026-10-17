@@ -329,9 +329,10 @@ class ToolTip:
 
     DELAY_MS = 450
 
-    def __init__(self, widget, text: str) -> None:
+    def __init__(self, widget, text: str | Callable[[], str], above: bool = False) -> None:
         self.widget = widget
-        self.text = text
+        self.text = text  # texto fijo o funcion que lo calcula al mostrarse
+        self.above = above  # mostrar encima del widget (p. ej. en la barra de estado)
         self.window: tk.Toplevel | None = None
         self._after_id: str | None = None
         widget.bind("<Enter>", self._schedule, add="+")
@@ -348,22 +349,31 @@ class ToolTip:
             self._after_id = None
 
     def _show(self) -> None:
-        if self.window or not self.text:
+        text = self.text() if callable(self.text) else self.text
+        if self.window or not text:
             return
         x = self.widget.winfo_rootx() + 8
         y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
         self.window = tk.Toplevel(self.widget)
         self.window.wm_overrideredirect(True)
+        self.window.wm_attributes("-topmost", True)
         self.window.wm_geometry(f"+{x}+{y}")
         tk.Label(
             self.window,
-            text=self.text,
+            text=text,
+            justify="left",
+            wraplength=420,
             background=style.themed(("gray20", "gray85")),
             foreground=style.themed(("white", "gray10")),
             font=(style.FONT_FAMILY, 9),
             padx=8,
             pady=4,
         ).pack()
+        # Encima del widget si se pidio o si no cabe debajo en la pantalla.
+        self.window.update_idletasks()
+        if self.above or y + self.window.winfo_height() > self.widget.winfo_screenheight() - 40:
+            y = self.widget.winfo_rooty() - self.window.winfo_height() - 6
+            self.window.wm_geometry(f"+{x}+{y}")
 
     def _hide(self, _event=None) -> None:
         self._cancel()

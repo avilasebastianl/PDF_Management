@@ -2,7 +2,9 @@
 
 Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+6**. Pulse **F1** para abrir esta guia.
 
-En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador. Al terminar una operacion, la barra inferior muestra el resultado con los botones **Mostrar en carpeta** y **Abrir**.
+En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
+
+La **barra de estado** (parte inferior) indica que esta haciendo la aplicacion: un punto gris significa *listo*, la barra animada una operacion *en curso* (con las que esperan en cola), el punto verde el *ultimo archivo generado* con los botones **Mostrar en carpeta** y **Abrir**, y el rojo que la ultima operacion *no se completo*. Pase el cursor sobre ella para ver el detalle. Puede seguir trabajando mientras una operacion esta en curso.
 
 La aplicacion nunca sobrescribe un archivo sin preguntar: si el nombre de salida sugerido ya existe, elige automaticamente uno libre, por ejemplo `informe_firmado (2).pdf`.
 

@@ -39,6 +39,11 @@ class TaskRunner:
     def busy(self) -> bool:
         return bool(self._tasks)
 
+    @property
+    def pending(self) -> int:
+        """Numero de tareas en curso o en cola."""
+        return len(self._tasks)
+
     def submit(
         self,
         description: str,

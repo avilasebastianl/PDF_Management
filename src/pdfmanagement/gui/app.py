@@ -19,9 +19,10 @@ from .dialogs import HelpWindow
 from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
-from .system import open_path, reveal_in_folder
+from .status_bar import StatusBar
+from .system import open_path
 from .tasks import TaskRunner
-from .widgets import ToolTip, hide, show
+from .widgets import ToolTip, hide
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class MainWindow:
         self.pages: dict[str, BasePage] = {}
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
         self.current_page: str | None = None
-        self._last_result: Path | None = None
+        self._deferred_success: tuple[str, Path] | None = None
 
         self._build_sidebar()
         self._build_content()
@@ -136,26 +137,8 @@ class MainWindow:
         self.content.grid_rowconfigure(0, weight=1)
 
     def _build_status_bar(self) -> None:
-        bar = ctk.CTkFrame(self.root, height=40, corner_radius=0, fg_color=style.SIDEBAR_BG)
-        bar.grid(row=1, column=1, sticky="ew")
-        bar.grid_columnconfigure(2, weight=1)
-
-        self.status_icon = ctk.CTkLabel(bar, text="", width=20)
-        self.status_icon.grid(row=0, column=0, padx=(style.PAD, 6), pady=8)
-        self.progress = ctk.CTkProgressBar(bar, width=90, height=6, mode="indeterminate")
-        self.status_label = ctk.CTkLabel(bar, text="Listo", font=style.fonts().small, text_color=style.TEXT_MUTED, anchor="w")
-        self.status_label.grid(row=0, column=2, sticky="ew")
-
-        self.open_result_button = ctk.CTkButton(
-            bar, text="Abrir", width=70, height=26, font=style.fonts().small,
-            command=lambda: self._last_result and open_path(self._last_result),
-        )
-        self.reveal_result_button = ctk.CTkButton(
-            bar, text="Mostrar en carpeta", width=130, height=26, font=style.fonts().small,
-            fg_color="transparent", border_width=1, border_color=style.CARD_BORDER,
-            text_color=style.TEXT, hover_color=style.HOVER,
-            command=lambda: self._last_result and reveal_in_folder(self._last_result),
-        )
+        self.status_bar = StatusBar(self.root)
+        self.status_bar.grid(row=1, column=1, sticky="ew")
 
     def _bind_shortcuts(self) -> None:
         for index, page_class in enumerate(PAGES, start=1):
@@ -221,34 +204,21 @@ class MainWindow:
 
     def _on_busy_change(self, busy: bool, message: str) -> None:
         if busy:
-            self._hide_result_actions()
-            hide(self.status_icon)
-            self.progress.grid(row=0, column=1, padx=(style.PAD, 10))
-            self.progress.start()
-            self.status_label.configure(text=f"{message}...", text_color=style.TEXT)
-        else:
-            self.progress.stop()
-            hide(self.progress)
-            show(self.status_icon)
-            if self.status_label.cget("text").endswith("..."):
-                self._set_status("Listo")
-
-    def _set_status(self, text: str, icon_name: str | None = None, color=style.TEXT_MUTED) -> None:
-        self.status_icon.configure(image=icon(icon_name, 16, color) if icon_name else None)
-        self.status_label.configure(text=text, text_color=color if icon_name else style.TEXT_MUTED)
-
-    def _hide_result_actions(self) -> None:
-        hide(self.open_result_button)
-        hide(self.reveal_result_button)
+            self.status_bar.set_busy(message, self.runner.pending)
+        elif self._deferred_success is not None:
+            self.status_bar.set_success(*self._deferred_success)
+            self._deferred_success = None
+        elif self.status_bar.state == "busy":
+            self.status_bar.set_idle()
 
     def notify_success(self, title: str, result: Path) -> None:
         """Informa el resultado en la barra de estado sin interrumpir al usuario."""
         logger.debug("%s: %s", title, result)
-        self._last_result = result
-        self._set_status(f"{title}: {result.name}", "check", style.SUCCESS)
-        if not self.runner.busy:
-            self.reveal_result_button.grid(row=0, column=3, padx=(8, 6))
-            self.open_result_button.grid(row=0, column=4, padx=(0, style.PAD))
+        if self.runner.busy:
+            # Quedan tareas en cola: el resultado se muestra cuando terminen todas.
+            self._deferred_success = (title, result)
+        else:
+            self.status_bar.set_success(title, result)
         if self.settings.open_after_save:
             open_path(result)
 
@@ -263,8 +233,7 @@ class MainWindow:
                 f"Ocurrio un error inesperado:\n{error}\n\n"
                 f"El detalle quedo registrado en {paths.LOG_DIR / 'error.log'}"
             )
-        self._hide_result_actions()
-        self._set_status("La operacion no se completo", "info", style.DANGER)
+        self.status_bar.set_error(str(error))
         messagebox.showerror("No se pudo completar la operacion", message, parent=self.root)
 
     def _on_callback_exception(self, exc_type, exc_value, exc_traceback) -> None:

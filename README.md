@@ -42,7 +42,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Proteger** | Cifra o descifra un PDF | AES-256, deteccion automatica del estado, confirmacion de contrasena |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, pagina inicial, carpeta de salida |
 
-Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado con acciones **Abrir** y **Mostrar en carpeta**, atajos `Ctrl+1..6` y `F1`, y una CLI con las mismas operaciones.
+Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir** y **Mostrar en carpeta**), atajos `Ctrl+1..6` y `F1`, y una CLI con las mismas operaciones.
 
 ## Inicio rapido
 
@@ -164,6 +164,7 @@ PDFManagement/
 │   └── gui/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
 │       ├── tasks.py            # TaskRunner (hilos + sondeo seguro)
+│       ├── status_bar.py       # Barra de estado (progreso, resultado, errores)
 │       ├── style.py            # Tipografia, espaciado y colores
 │       ├── icons.py            # Iconos desde la fuente de Windows
 │       ├── widgets.py          # Card, FileField, PasswordField, ToolTip...
@@ -231,6 +232,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `MainWindow` (`app.py`) | Crea la ventana (CustomTkinter + tkdnd), barra lateral, carga diferida de paginas, barra de estado, `notify_success()`, `show_error()`, apariencia, reinicio, recordar tamano |
 | `BasePage` (`pages/base.py`) | Encabezado, `run_task()` (hilo + reintento con contrasena), `resolve_output()` (politica de sobrescritura), `default_output()`, `guard()` |
 | `TaskRunner` (`tasks.py`) | Pool de 2 hilos; el hilo de la GUI sondea cada 80 ms y ejecuta los callbacks |
+| `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
