@@ -9,6 +9,7 @@ import tkinter as tk
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from tkinter import filedialog
+from typing import ClassVar
 
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES
@@ -57,8 +58,8 @@ def hide(widget) -> None:
     """
     call = getattr(widget, "_last_geometry_manager_call", None)
     if call:
-        widget._hidden_grid_kwargs = call["kwargs"]
-        widget._last_geometry_manager_call = None
+        widget._hidden_grid_kwargs = call["kwargs"]  # noqa: SLF001 - atributos propios de CustomTkinter
+        widget._last_geometry_manager_call = None  # noqa: SLF001
     widget.grid_remove()
 
 
@@ -68,6 +69,7 @@ def show(widget) -> None:
 
 
 # * Botones -----------------------------------------------------------------
+
 
 def primary_button(parent, text: str, command: Callable, icon_name: str | None = None, **kwargs) -> ctk.CTkButton:
     """Boton de accion principal (color del tema)."""
@@ -102,8 +104,9 @@ def secondary_button(parent, text: str, command: Callable, icon_name: str | None
     )
 
 
-def icon_button(parent, icon_name: str, command: Callable, tooltip: str | Callable[[], str], size: int = 32,
-                **kwargs) -> ctk.CTkButton:
+def icon_button(
+    parent, icon_name: str, command: Callable, tooltip: str | Callable[[], str], size: int = 32, **kwargs
+) -> ctk.CTkButton:
     """
     Boton cuadrado solo con icono y tooltip (texto fijo o funcion que lo
     calcula al mostrarse). Use ``set_enabled`` para activarlo o no.
@@ -123,7 +126,7 @@ def icon_button(parent, icon_name: str, command: Callable, tooltip: str | Callab
         **kwargs,
     )
     ToolTip(button, tooltip)
-    button._icon_name = icon_name
+    button.icon_key = icon_name
     return button
 
 
@@ -133,11 +136,12 @@ def set_enabled(button: ctk.CTkButton, enabled: bool) -> None:
         return
     button.configure(
         state="normal" if enabled else "disabled",
-        image=icon(button._icon_name, 16, style.TEXT if enabled else style.TEXT_DISABLED),
+        image=icon(button.icon_key, 16, style.TEXT if enabled else style.TEXT_DISABLED),
     )
 
 
 # * Estructura --------------------------------------------------------------
+
 
 class PageHeader(ctk.CTkFrame):
     """Titulo y descripcion de una pagina."""
@@ -175,7 +179,12 @@ class Card(ctk.CTkFrame):
             self.first_row = 1
         if description:
             ctk.CTkLabel(
-                self, text=description, font=style.fonts().small, text_color=style.TEXT_MUTED, anchor="w", justify="left"
+                self,
+                text=description,
+                font=style.fonts().small,
+                text_color=style.TEXT_MUTED,
+                anchor="w",
+                justify="left",
             ).grid(row=self.first_row, column=0, columnspan=4, sticky="ew", padx=style.CARD_PAD)
             self.first_row += 1
         # Espaciador inferior para que la ultima fila tenga margen.
@@ -197,6 +206,7 @@ def muted_label(parent, text: str = "", **kwargs) -> ctk.CTkLabel:
 
 
 # * Campos ------------------------------------------------------------------
+
 
 class FileField:
     """
@@ -270,13 +280,14 @@ class FileField:
         current = self.path
         if current and current.parent.exists():
             initial = current.parent
-        options = {"filetypes": self.filetypes, "initialdir": str(initial) if initial else None}
+        initialdir = str(initial) if initial else None
         if self.mode == "save":
             chosen = filedialog.asksaveasfilename(
                 title="Guardar como",
                 defaultextension=".pdf",
                 initialfile=current.name if current else "",
-                **options,
+                filetypes=self.filetypes,
+                initialdir=initialdir,
             )
             if chosen:
                 self._log_choice(Path(chosen), "Guardar como")
@@ -285,7 +296,9 @@ class FileField:
             else:
                 debug_event(area_of(self.entry), "%s: dialogo cancelado", self.label)
         else:
-            chosen = filedialog.askopenfilename(title="Seleccionar archivo", **options)
+            chosen = filedialog.askopenfilename(
+                title="Seleccionar archivo", filetypes=self.filetypes, initialdir=initialdir
+            )
             if chosen:
                 self._log_choice(Path(chosen), "dialogo")
                 self.set(Path(chosen))
@@ -342,6 +355,7 @@ class PasswordField:
 
 # * Arrastrar y soltar --------------------------------------------------------
 
+
 def enable_file_drop(widget, callback: Callable[[list[Path]], None], recursive: bool = True) -> None:
     """
     Permite soltar archivos del explorador sobre ``widget`` (y sus hijos).
@@ -372,6 +386,7 @@ def _walk(widget):
 
 # * Tooltip -----------------------------------------------------------------
 
+
 class ToolTip:
     """
     Tooltip que aparece tras una breve pausa sobre el widget.
@@ -386,7 +401,7 @@ class ToolTip:
     DELAY_MS = 450
     MARGIN = 8  # distancia minima al borde del monitor
     _active: "ToolTip | None" = None  # a lo sumo uno visible
-    _hooked: set[str] = set()  # ventanas con el aviso de desactivacion instalado
+    _hooked: ClassVar[set[str]] = set()  # ventanas con el aviso de desactivacion instalado
 
     def __init__(self, widget, text: str | Callable[[], str], above: bool = False) -> None:
         self.widget = widget
@@ -395,8 +410,8 @@ class ToolTip:
         self.window: tk.Toplevel | None = None
         self._after_id: str | None = None
         widget.bind("<Enter>", self._schedule, add="+")
-        widget.bind("<Leave>", self._hide, add="+")
-        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<ButtonPress>", self.hide, add="+")
 
     def _schedule(self, _event=None) -> None:
         self._cancel()
@@ -413,7 +428,7 @@ class ToolTip:
         if self.window or not text or not self.widget.winfo_exists() or not _app_is_active(self.widget):
             return
         if ToolTip._active is not None:
-            ToolTip._active._hide()
+            ToolTip._active.hide()
         self._hook_deactivation()
         self.window = tk.Toplevel(self.widget)
         self.window.withdraw()  # se ubica antes de verse: sin saltos
@@ -461,14 +476,14 @@ class ToolTip:
     def _hide_if_inactive() -> None:
         active = ToolTip._active
         if active is not None and (not active.widget.winfo_exists() or not _app_is_active(active.widget)):
-            active._hide()
+            active.hide()
 
     @staticmethod
     def _hide_active() -> None:
         if ToolTip._active is not None:
-            ToolTip._active._hide()
+            ToolTip._active.hide()
 
-    def _hide(self, _event=None) -> None:
+    def hide(self, _event=None) -> None:
         self._cancel()
         if self.window:
             self.window.destroy()
@@ -489,8 +504,9 @@ def monitor_work_area(widget) -> tuple[int, int, int, int]:
     """Area util (sin barra de tareas) del monitor donde esta ``widget``."""
     if sys.platform.startswith("win"):
         try:
-            return _windows_work_area(widget.winfo_rootx() + widget.winfo_width() // 2,
-                                      widget.winfo_rooty() + widget.winfo_height() // 2)
+            return _windows_work_area(
+                widget.winfo_rootx() + widget.winfo_width() // 2, widget.winfo_rooty() + widget.winfo_height() // 2
+            )
         except (OSError, AttributeError):
             pass
     return 0, 0, widget.winfo_screenwidth(), widget.winfo_screenheight()
@@ -498,7 +514,12 @@ def monitor_work_area(widget) -> tuple[int, int, int, int]:
 
 def _windows_work_area(x: int, y: int) -> tuple[int, int, int, int]:
     class _Rect(ctypes.Structure):
-        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
 
     class _MonitorInfo(ctypes.Structure):
         _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", _Rect), ("rcWork", _Rect), ("dwFlags", ctypes.c_ulong)]

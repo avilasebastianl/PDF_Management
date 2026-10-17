@@ -5,8 +5,8 @@ pagina en blanco, con deshacer/rehacer y Guardar como.
 
 import pymupdf
 import pytest
-
 from conftest import make_pdf, page_texts
+
 from pdfmanagement import core
 from pdfmanagement.core.editing import DocumentSession, SearchOptions, iter_search
 from pdfmanagement.core.editing.text import page_words
@@ -68,10 +68,10 @@ def test_delete_pages_and_keep_at_least_one(session):
 @pytest.mark.parametrize(
     ("pages", "target", "expected", "new_indices"),
     [
-        ([0], 5, [2, 3, 4, 5, 1], [4]),          # al final
-        ([4], 0, [5, 1, 2, 3, 4], [0]),          # al principio
-        ([0, 1], 4, [3, 4, 1, 2, 5], [2, 3]),    # bloque hacia adelante
-        ([1, 3], 0, [2, 4, 1, 3, 5], [0, 1]),    # paginas sueltas juntas
+        ([0], 5, [2, 3, 4, 5, 1], [4]),  # al final
+        ([4], 0, [5, 1, 2, 3, 4], [0]),  # al principio
+        ([0, 1], 4, [3, 4, 1, 2, 5], [2, 3]),  # bloque hacia adelante
+        ([1, 3], 0, [2, 4, 1, 3, 5], [0, 1]),  # paginas sueltas juntas
         ([2], 1, [1, 3, 2, 4, 5], [1]),
     ],
 )
@@ -93,7 +93,9 @@ def test_insert_pdf_with_rotation_images_and_annotations(session, tmp_path):
     for number in (1, 2):
         page = other.new_page()
         page.insert_text((72, 72), f"Anexo {number}", fontsize=20)
-    other[0].insert_image(pymupdf.Rect(100, 100, 200, 200), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 8, 8), 0))
+    other[0].insert_image(
+        pymupdf.Rect(100, 100, 200, 200), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 8, 8), 0)
+    )
     other[0].add_text_annot((300, 300), "revisar")
     other[0].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(10, 10, 60, 30), "uri": "https://example.com"})
     other[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(10, 40, 60, 60), "page": 1})

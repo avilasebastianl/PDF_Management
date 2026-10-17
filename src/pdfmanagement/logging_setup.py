@@ -76,8 +76,9 @@ def configure_logging(log_dir: Path | None = None, debug: bool = False) -> None:
 
     def log_thread_exception(args: threading.ExceptHookArgs) -> None:
         logger.critical(
-            "Excepcion no controlada en el hilo %s", args.thread.name if args.thread else "?",
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            "Excepcion no controlada en el hilo %s",
+            args.thread.name if args.thread else "?",
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),  # type: ignore[arg-type]  # exc_value puede ser None
         )
 
     sys.excepthook = log_uncaught

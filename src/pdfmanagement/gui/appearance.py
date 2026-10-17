@@ -32,10 +32,10 @@ import customtkinter as ctk
 
 logger = logging.getLogger(__name__)
 
-BATCH_BUDGET_MS = 25   # tiempo maximo por lote al actualizar secciones ocultas
-BATCH_PAUSE_MS = 1     # pausa entre lotes para atender eventos del usuario
+BATCH_BUDGET_MS = 25  # tiempo maximo por lote al actualizar secciones ocultas
+BATCH_PAUSE_MS = 1  # pausa entre lotes para atender eventos del usuario
 
-_OFFSCREEN = 0          # grupo de widgets de la seccion actual que no estan a la vista
+_OFFSCREEN = 0  # grupo de widgets de la seccion actual que no estan a la vista
 _MISSING = object()
 
 _WM_SETREDRAW = 0x000B
@@ -94,7 +94,7 @@ class AppearanceScheduler:
             scheduler._apply("Dark" if tracker.appearance_mode == 1 else "Light", list(tracker.callback_list))
 
         patched = classmethod(update_callbacks)
-        patched.__pdfmanagement_original__ = self._original
+        setattr(patched, "__pdfmanagement_original__", self._original)  # noqa: B010 - atributo propio en un classmethod
         tracker_class.update_callbacks = patched
 
     def uninstall(self) -> None:
@@ -131,7 +131,10 @@ class AppearanceScheduler:
         self._pending = pending
         logger.debug(
             "Tema %s: %d widgets visibles en %.0f ms, %d diferidos",
-            mode, len(visible), (time.perf_counter() - started) * 1000, sum(map(len, pending.values())),
+            mode,
+            len(visible),
+            (time.perf_counter() - started) * 1000,
+            sum(map(len, pending.values())),
         )
         if pending:
             self._job = self.root.after(BATCH_PAUSE_MS, self._process_batch)
@@ -154,7 +157,7 @@ class AppearanceScheduler:
                 del self._pending[owner]
             try:
                 callback(self._mode)
-            except Exception:  # noqa: BLE001 - p. ej. un widget ya destruido
+            except Exception:
                 continue
         if self._pending:
             self._job = self.root.after(BATCH_PAUSE_MS, self._process_batch)
@@ -163,7 +166,7 @@ class AppearanceScheduler:
         for callback in callbacks:
             try:
                 callback(self._mode)
-            except Exception:  # noqa: BLE001 - mismo criterio que CustomTkinter
+            except Exception:
                 continue
 
     def _cancel_job(self) -> None:

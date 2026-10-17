@@ -64,7 +64,6 @@ class SettingsPage(BasePage):
     icon_name = "settings"
 
     def build(self) -> None:
-        settings = self.app.settings
         self.body.grid_columnconfigure(0, weight=3)
         self.body.grid_columnconfigure(1, weight=2)
         self._build_saved_banner()
@@ -73,8 +72,10 @@ class SettingsPage(BasePage):
         appearance = Card(self.body, "Apariencia")
         appearance.grid(row=1, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
         self.mode = ctk.CTkSegmentedButton(
-            appearance, values=[MODE_LABELS[mode] for mode in APPEARANCE_MODES],
-            command=self._on_mode_changed, font=style.fonts().body,
+            appearance,
+            values=[MODE_LABELS[mode] for mode in APPEARANCE_MODES],
+            command=self._on_mode_changed,
+            font=style.fonts().body,
         )
         self._row(appearance, 0, "Modo", self.mode)
 
@@ -88,8 +89,12 @@ class SettingsPage(BasePage):
 
         self.restart_notice = ctk.CTkFrame(appearance, fg_color="transparent")
         muted_label(self.restart_notice, "El nuevo color se aplicara al reiniciar.").pack(side="left")
-        primary_button(self.restart_notice, "Reiniciar ahora", self.app.restart, "refresh", width=150).pack(side="left", padx=10)
-        self.restart_notice.grid(row=appearance.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(6, 0))
+        primary_button(self.restart_notice, "Reiniciar ahora", self.app.restart, "refresh", width=150).pack(
+            side="left", padx=10
+        )
+        self.restart_notice.grid(
+            row=appearance.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(6, 0)
+        )
         hide(self.restart_notice)
 
         # * General
@@ -101,7 +106,9 @@ class SettingsPage(BasePage):
         self.open_after = ctk.CTkSwitch(general, text="", command=self._on_open_after)
         self._row(general, 1, "Abrir el archivo al terminar", self.open_after)
 
-        field_label(general, "Carpeta de salida").grid(row=general.row(2), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=(8, 0))
+        field_label(general, "Carpeta de salida").grid(
+            row=general.row(2), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=(8, 0)
+        )
         self.output_dir = muted_label(general)
         self.output_dir.grid(row=general.row(2), column=1, sticky="ew", padx=(0, style.CARD_PAD), pady=(8, 0))
         buttons = ctk.CTkFrame(general, fg_color="transparent")
@@ -110,7 +117,9 @@ class SettingsPage(BasePage):
         secondary_button(buttons, "Restablecer", self._reset_output_dir, width=110).pack(side="left", padx=8)
 
         # * Datos
-        data = Card(self.body, "Datos locales", "Todo se procesa y guarda en este equipo; la aplicacion no usa internet.")
+        data = Card(
+            self.body, "Datos locales", "Todo se procesa y guarda en este equipo; la aplicacion no usa internet."
+        )
         data.grid(row=3, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.PAD))
         folders = ctk.CTkFrame(data, fg_color="transparent")
         folders.grid(row=data.row(0), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 0))
@@ -120,13 +129,19 @@ class SettingsPage(BasePage):
             ("Registros", lambda: paths.LOG_DIR),
         ):
             secondary_button(
-                folders, text, lambda f=folder, t=text: self._open_folder(f(), t), "folder", width=110,
+                folders,
+                text,
+                lambda f=folder, t=text: self._open_folder(f(), t),
+                "folder",
+                width=110,
             ).pack(side="left", padx=(0, 8))
 
         diagnostics = ctk.CTkFrame(data, fg_color="transparent")
         diagnostics.grid(row=data.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(12, 0))
         self.debug_switch = ctk.CTkSwitch(
-            diagnostics, text="Registro detallado (para depurar)", font=style.fonts().body,
+            diagnostics,
+            text="Registro detallado (para depurar)",
+            font=style.fonts().body,
             command=self._on_debug_logging,
         )
         self.debug_switch.pack(side="left")
@@ -138,12 +153,14 @@ class SettingsPage(BasePage):
     def _build_saved_banner(self) -> None:
         """Aviso fijo: todo se guarda al instante y queda como configuracion al iniciar."""
         accent = style.accent_color()
-        banner = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=SAVED_BANNER_BG, border_width=1,
-                              border_color=accent)
+        banner = ctk.CTkFrame(
+            self.body, corner_radius=style.CORNER, fg_color=SAVED_BANNER_BG, border_width=1, border_color=accent
+        )
         banner.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
         banner.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(banner, text="", image=icon("check", 22, accent)).grid(row=0, column=0, rowspan=2, padx=(16, 12),
-                                                                          pady=12)
+        ctk.CTkLabel(banner, text="", image=icon("check", 22, accent)).grid(
+            row=0, column=0, rowspan=2, padx=(16, 12), pady=12
+        )
         ctk.CTkLabel(banner, text=SAVED_TITLE, font=style.fonts().body_bold, text_color=style.TEXT, anchor="w").grid(
             row=0, column=1, sticky="w", pady=(10, 0)
         )
@@ -156,17 +173,18 @@ class SettingsPage(BasePage):
         """Confirma cada guardado ("Guardado a las 10:42") y lo resalta un momento."""
         if not changed or not self.saved_status.winfo_exists():
             return
-        self.saved_status.configure(text=f"✓ Guardado a las {datetime.now():%H:%M:%S}",
-                                    text_color=style.accent_color())
-        if getattr(self, "_saved_fade", None):
-            self.after_cancel(self._saved_fade)
+        self.saved_status.configure(text=f"✓ Guardado a las {datetime.now():%H:%M:%S}", text_color=style.accent_color())
+        fade: str | None = getattr(self, "_saved_fade", None)
+        if fade:
+            self.after_cancel(fade)
         self._saved_fade = self.after(2500, lambda: self.saved_status.configure(text_color=style.TEXT_MUTED))
 
     def _build_about(self) -> None:
         """Tarjeta destacada: proposito, ventajas, como se hizo y quien la desarrollo."""
         accent = style.accent_color()
-        about = self.about = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
-                                          border_width=2, border_color=accent)
+        about = self.about = ctk.CTkFrame(
+            self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG, border_width=2, border_color=accent
+        )
         about.grid(row=1, column=1, rowspan=4, sticky="new", pady=(0, style.PAD))
         about.grid_columnconfigure(0, weight=1)
         # La fila vacia de abajo absorbe el alto extra: las tarjetas de la izquierda no se separan.
@@ -184,15 +202,27 @@ class SettingsPage(BasePage):
         ctk.CTkLabel(banner, text=ABOUT_TAGLINE, font=style.fonts().body, text_color=style.WHITE, anchor="w").grid(
             row=1, column=1, sticky="w"
         )
-        ctk.CTkLabel(banner, text=f"Version {__version__}  ·  Licencia Apache 2.0", font=style.fonts().small,
-                     text_color=ABOUT_BANNER_MUTED, anchor="w").grid(row=2, column=1, sticky="w", pady=(2, 14))
+        ctk.CTkLabel(
+            banner,
+            text=f"Version {__version__}  ·  Licencia Apache 2.0",
+            font=style.fonts().small,
+            text_color=ABOUT_BANNER_MUTED,
+            anchor="w",
+        ).grid(row=2, column=1, sticky="w", pady=(2, 14))
 
         body = ctk.CTkFrame(about, fg_color="transparent")
         body.grid(row=1, column=0, sticky="ew", padx=style.CARD_PAD + 2, pady=(14, style.CARD_PAD))
         body.grid_columnconfigure(0, weight=1)
         row = iter(range(100))
-        ctk.CTkLabel(body, text=ABOUT_PURPOSE, font=style.fonts().body, text_color=style.TEXT, justify="left",
-                     anchor="w", wraplength=ABOUT_WRAP).grid(row=next(row), column=0, sticky="w")
+        ctk.CTkLabel(
+            body,
+            text=ABOUT_PURPOSE,
+            font=style.fonts().body,
+            text_color=style.TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=ABOUT_WRAP,
+        ).grid(row=next(row), column=0, sticky="w")
 
         self._about_title(body, "En que se destaca", next(row))
         check = icon("check", 18, accent)
@@ -200,17 +230,30 @@ class SettingsPage(BasePage):
             line = ctk.CTkFrame(body, fg_color="transparent")
             line.grid(row=next(row), column=0, sticky="w", pady=2)
             ctk.CTkLabel(line, text="", image=check, width=20).pack(side="left", anchor="n", padx=(0, 6))
-            ctk.CTkLabel(line, text=item, font=style.fonts().body, text_color=style.TEXT, justify="left",
-                         anchor="w", wraplength=ABOUT_WRAP - 30).pack(side="left")
+            ctk.CTkLabel(
+                line,
+                text=item,
+                font=style.fonts().body,
+                text_color=style.TEXT,
+                justify="left",
+                anchor="w",
+                wraplength=ABOUT_WRAP - 30,
+            ).pack(side="left")
 
         self._about_title(body, "Como se hizo", next(row))
         muted_label(body, ABOUT_HOW, wraplength=ABOUT_WRAP).grid(row=next(row), column=0, sticky="w")
         chips = ctk.CTkFrame(body, fg_color="transparent")
         chips.grid(row=next(row), column=0, sticky="w", pady=(8, 0))
         for index, technology in enumerate(ABOUT_STACK):
-            ctk.CTkLabel(chips, text=technology, font=style.fonts().small, fg_color=style.HOVER, corner_radius=10,
-                         text_color=style.TEXT, height=24).grid(row=index // 4, column=index % 4, padx=(0, 6), pady=3,
-                                                              ipadx=8, sticky="w")
+            ctk.CTkLabel(
+                chips,
+                text=technology,
+                font=style.fonts().small,
+                fg_color=style.HOVER,
+                corner_radius=10,
+                text_color=style.TEXT,
+                height=24,
+            ).grid(row=index // 4, column=index % 4, padx=(0, 6), pady=3, ipadx=8, sticky="w")
 
         # Autor: bloque resaltado con sus enlaces.
         author = ctk.CTkFrame(body, corner_radius=10, fg_color=ABOUT_AUTHOR_BG)
@@ -221,8 +264,11 @@ class SettingsPage(BasePage):
         )
         links = ctk.CTkFrame(author, fg_color="transparent")
         links.pack(anchor="w", padx=14, pady=(10, 14))
-        for text, url, make in (("GitHub", GITHUB_URL, primary_button), ("LinkedIn", LINKEDIN_URL, primary_button),
-                                ("Codigo fuente", REPOSITORY_URL, secondary_button)):
+        for text, url, make in (
+            ("GitHub", GITHUB_URL, primary_button),
+            ("LinkedIn", LINKEDIN_URL, primary_button),
+            ("Codigo fuente", REPOSITORY_URL, secondary_button),
+        ):
             button = make(links, text, lambda link=url: self._open_link(link), "open", width=108)
             button.pack(side="left", padx=(0, 8))
             ToolTip(button, url.removeprefix("https://"))
@@ -239,21 +285,28 @@ class SettingsPage(BasePage):
         webbrowser.open(url)
 
     def _row(self, card: Card, offset: int, label: str, widget) -> None:
-        field_label(card, label).grid(row=card.row(offset), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=8)
+        field_label(card, label).grid(
+            row=card.row(offset), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=8
+        )
         widget.grid(row=card.row(offset), column=1, sticky="w", pady=8, padx=(0, style.CARD_PAD))
 
     def on_show(self) -> None:
         settings = self.app.settings
         snapshot = (
-            settings.appearance_mode, settings.color_theme, settings.ui_scaling,
-            settings.initial_page, settings.open_after_save, str(settings.output_path), settings.debug_logging,
+            settings.appearance_mode,
+            settings.color_theme,
+            settings.ui_scaling,
+            settings.initial_page,
+            settings.open_after_save,
+            str(settings.output_path),
+            settings.debug_logging,
         )
         if snapshot == getattr(self, "_shown", None):
             return  # nada cambio desde la ultima vez: evita redibujar los controles
         self._shown = snapshot
         self.mode.set(MODE_LABELS[settings.appearance_mode])
         self.color.set(settings.color_theme)
-        self.scaling.set(f"{int(round(settings.ui_scaling * 100))}%")
+        self.scaling.set(f"{round(settings.ui_scaling * 100)}%")
         self.initial_page.set(settings.initial_page)
         if settings.open_after_save:
             self.open_after.select()

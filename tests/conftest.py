@@ -80,10 +80,12 @@ def make_certificate(
     ``valid_days`` son los dias de inicio y fin de vigencia relativos a hoy.
     """
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = x509.Name([
-        x509.NameAttribute(x509.NameOID.COMMON_NAME, name),
-        x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "CO"),
-    ])
+    subject = x509.Name(
+        [
+            x509.NameAttribute(x509.NameOID.COMMON_NAME, name),
+            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "CO"),
+        ]
+    )
     now = datetime.now(UTC)
     certificate = (
         x509.CertificateBuilder()
@@ -96,17 +98,21 @@ def make_certificate(
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(
             x509.KeyUsage(
-                digital_signature=True, content_commitment=True, key_encipherment=False,
-                data_encipherment=False, key_agreement=False, key_cert_sign=False, crl_sign=False,
-                encipher_only=False, decipher_only=False,
+                digital_signature=True,
+                content_commitment=True,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
             ),
             critical=True,
         )
         .sign(key, hashes.SHA256())
     )
-    encryption = (
-        serialization.BestAvailableEncryption(password.encode()) if password else serialization.NoEncryption()
-    )
+    encryption = serialization.BestAvailableEncryption(password.encode()) if password else serialization.NoEncryption()
     path.write_bytes(pkcs12.serialize_key_and_certificates(b"prueba", key, certificate, None, encryption))
     return path, certificate.public_bytes(serialization.Encoding.DER)
 

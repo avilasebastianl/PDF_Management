@@ -8,8 +8,8 @@ Requiere una pantalla (se omite si Tk no puede crear ventanas).
 
 import pymupdf
 import pytest
-
 from conftest import CERTIFICATE_PASSWORD, make_pdf, pump
+
 from pdfmanagement import core
 
 
@@ -21,9 +21,11 @@ def manual_pdf(tmp_path_factory):
     for index in range(40):
         page = document.new_page()
         page.insert_text((60, 70), f"Capitulo {index // 10 + 1} - Seccion {index + 1}", fontsize=18)
-        page.insert_textbox(pymupdf.Rect(60, 100, 540, 760),
-                            "El contrato de servicios establece la vigencia del acuerdo entre las partes. " * 8,
-                            fontsize=11)
+        page.insert_textbox(
+            pymupdf.Rect(60, 100, 540, 760),
+            "El contrato de servicios establece la vigencia del acuerdo entre las partes. " * 8,
+            fontsize=11,
+        )
         if index % 10 == 0:
             toc.append([1, f"Capitulo {index // 10 + 1}", index + 1])
     document.set_toc(toc)
@@ -142,6 +144,7 @@ def test_shortcuts_only_work_in_the_viewer(gui_app, viewer):
 
 # * Organizar paginas (fase 2) ------------------------------------------------
 
+
 def page_titles(viewer, count=None):
     """Primera linea de cada pagina: ``"Capitulo 1 - Seccion 3"``."""
     pages = range(viewer.session.page_count if count is None else count)
@@ -252,8 +255,9 @@ def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_p
 def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificate, monkeypatch):
     from pdfmanagement.gui.pages import viewer as viewer_module
 
-    signed = core.sign_pdf_with_certificate(make_pdf(tmp_path / "contrato.pdf", 2), tmp_path / "firmado.pdf",
-                                            certificate[0], CERTIFICATE_PASSWORD)
+    signed = core.sign_pdf_with_certificate(
+        make_pdf(tmp_path / "contrato.pdf", 2), tmp_path / "firmado.pdf", certificate[0], CERTIFICATE_PASSWORD
+    )
     gui_app.show_page("Visor")
     page = gui_app.pages["Visor"]
     assert page.open_file(signed)

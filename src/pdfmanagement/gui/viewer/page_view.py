@@ -33,14 +33,14 @@ from .render import RenderScheduler, scale_key
 
 MARGIN = 24
 GAP = 16
-BASE_SCALE = 96 / 72                 # 100 % = tamano real en una pantalla de 96 ppp
+BASE_SCALE = 96 / 72  # 100 % = tamano real en una pantalla de 96 ppp
 ZOOM_STEPS = (25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500)
 FIT_WIDTH = "fit_width"
 FIT_PAGE = "fit_page"
 STALE = -1.0  # escala de una imagen que debe redibujarse (se ve hasta que llega la nueva)
-KEEP_RENDERED = 3                    # paginas dibujadas que se conservan fuera de la vista
-TILE_PX = 1024                       # lado de cada mosaico con zoom alto
-TILE_THRESHOLD_PX = 2_500_000        # paginas mas grandes que esto se dibujan por mosaicos
+KEEP_RENDERED = 3  # paginas dibujadas que se conservan fuera de la vista
+TILE_PX = 1024  # lado de cada mosaico con zoom alto
+TILE_THRESHOLD_PX = 2_500_000  # paginas mas grandes que esto se dibujan por mosaicos
 RESIZE_DEBOUNCE_MS = 120
 HIGHLIGHT = ("#F9D648", "#F9D648")
 HIGHLIGHT_CURRENT = ("#F28C28", "#FFA94D")
@@ -109,15 +109,21 @@ class PageView(ctk.CTkFrame):
         self._update_job: str | None = None
         self._resize_job: str | None = None
         self._last_size = (0, 0)
-        self._placeholder_icon = None
-        self._scrollbars_shown = (True, True)        # (horizontal, vertical)
-        self._scroll_values: dict[str, tuple] = {}   # ultimo valor enviado a cada barra
+        self._placeholder_icon: ImageTk.PhotoImage | None = None
+        self._scrollbars_shown = (True, True)  # (horizontal, vertical)
+        self._scroll_values: dict[str, tuple] = {}  # ultimo valor enviado a cada barra
         self.scheduler = RenderScheduler(self)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, highlightthickness=0, background=style.themed(style.CANVAS_BG),
-                                yscrollincrement=24, xscrollincrement=24, takefocus=1)
+        self.canvas = tk.Canvas(
+            self,
+            highlightthickness=0,
+            background=style.themed(style.CANVAS_BG),
+            yscrollincrement=24,
+            xscrollincrement=24,
+            takefocus=1,
+        )
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.vertical = ctk.CTkScrollbar(self, orientation="vertical", command=self.canvas.yview)
         self.vertical.grid(row=0, column=1, sticky="ns", padx=(2, 0))
@@ -134,13 +140,17 @@ class PageView(ctk.CTkFrame):
         canvas.bind("<Motion>", lambda e: self._dispatch("motion", e))
         canvas.bind("<Double-Button-1>", lambda e: self._dispatch("double", e))
         canvas.bind("<ButtonPress-2>", lambda e: canvas.scan_mark(e.x, e.y))
-        canvas.bind("<B2-Motion>", lambda e: (canvas.scan_dragto(e.x, e.y, gain=1), self._schedule_update()))
-        for key, action in (
-            ("<Prior>", lambda: self.scroll_pages(-1)), ("<Next>", lambda: self.scroll_pages(1)),
-            ("<Home>", lambda: self.go_to(0)), ("<End>", lambda: self.go_to(self.page_count - 1)),
-            ("<Up>", lambda: self._scroll_units(-2)), ("<Down>", lambda: self._scroll_units(2)),
-        ):
-            canvas.bind(key, lambda _e, run=action: run())
+        canvas.bind("<B2-Motion>", self._on_middle_drag)
+        keys: tuple[tuple[str, Callable[[], None]], ...] = (
+            ("<Prior>", lambda: self.scroll_pages(-1)),
+            ("<Next>", lambda: self.scroll_pages(1)),
+            ("<Home>", lambda: self.go_to(0)),
+            ("<End>", lambda: self.go_to(self.page_count - 1)),
+            ("<Up>", lambda: self._scroll_units(-2)),
+            ("<Down>", lambda: self._scroll_units(2)),
+        )
+        for key, action in keys:
+            canvas.bind(key, lambda _e, run=action: run())  # type: ignore[misc]
         ctk.AppearanceModeTracker.add(self._on_appearance_change, canvas)
         if on_drop is not None:
             enable_file_drop(canvas, on_drop, recursive=False)
@@ -283,7 +293,7 @@ class PageView(ctk.CTkFrame):
             hit = self.canvas_to_page(self.canvas.canvasx(anchor[0]), self.canvas.canvasy(anchor[1]))
         self.zoom_mode = mode
         self._relayout(keep_page=self.current_page if hit is None else None)
-        if hit is not None:
+        if hit is not None and anchor is not None:
             x, y = self.page_to_canvas(hit.page, hit.x, hit.y)
             self._scroll_canvas_to(x - anchor[0], y - anchor[1])
         debug_event("Visor", "Zoom: %s (%d%%)", mode if isinstance(mode, str) else f"{mode:.0f}%", self.zoom_percent)
@@ -356,7 +366,7 @@ class PageView(ctk.CTkFrame):
         if not self.continuous:
             return self.current_page
         index = max(bisect.bisect_right(self._tops, canvas_y) - 1, 0)
-        _x0, y0, _x1, y1 = self.layout[index]
+        _x0, _y0, _x1, y1 = self.layout[index]
         if canvas_y > y1 + GAP / 2 and index + 1 < len(self.layout):
             index += 1
         return index
@@ -368,8 +378,9 @@ class PageView(ctk.CTkFrame):
         self.canvas.configure(cursor=tool.cursor if tool else "")
         self.redraw_overlays()
 
-    def set_search_hits(self, hits: dict[int, list[pymupdf.Rect]],
-                        current: tuple[int, tuple[pymupdf.Rect, ...]] | None = None) -> None:
+    def set_search_hits(
+        self, hits: dict[int, list[pymupdf.Rect]], current: tuple[int, tuple[pymupdf.Rect, ...]] | None = None
+    ) -> None:
         self.search_hits = hits
         self.current_hit = current
         self.redraw_overlays()
@@ -387,15 +398,15 @@ class PageView(ctk.CTkFrame):
         highlight = style.themed(HIGHLIGHT)
         for page in visible:
             for rect in self.search_hits.get(page, ()):
-                self._draw_rect(page, rect, fill=highlight, stipple="gray50")
+                self.draw_rect(page, rect, fill=highlight, stipple="gray50")
         if self.current_hit and self.current_hit[0] in visible:
             for rect in self.current_hit[1]:
-                self._draw_rect(self.current_hit[0], rect, outline=style.themed(HIGHLIGHT_CURRENT), width=2.5, pad=2)
+                self.draw_rect(self.current_hit[0], rect, outline=style.themed(HIGHLIGHT_CURRENT), width=2.5, pad=2)
         selection = style.themed(SELECTION)
         for page, rects in self.selection.items():
             if page in visible:
                 for rect in rects:
-                    self._draw_rect(page, rect, fill=selection, stipple="gray50")
+                    self.draw_rect(page, rect, fill=selection, stipple="gray50")
         for painter in self._painters:
             painter(self)
         if self.tool is not None:
@@ -406,7 +417,7 @@ class PageView(ctk.CTkFrame):
         """Dibujo extra sobre las paginas (con la etiqueta "overlay"), sea cual sea la herramienta."""
         self._painters.append(painter)
 
-    def _draw_rect(self, page: int, rect: pymupdf.Rect, pad: float = 0, **options) -> None:
+    def draw_rect(self, page: int, rect: pymupdf.Rect, pad: float = 0, **options) -> None:
         x0, y0 = self.page_to_canvas(page, rect.x0, rect.y0)
         x1, y1 = self.page_to_canvas(page, rect.x1, rect.y1)
         options.setdefault("outline", "")
@@ -441,7 +452,7 @@ class PageView(ctk.CTkFrame):
         pages = range(self.page_count) if self.continuous else [self.current_page]
         self.layout = [(0.0, 0.0, 0.0, 0.0)] * self.page_count
         widest = max((self.sizes[p][0] for p in pages), default=0) * self.scale
-        y = MARGIN
+        y: float = MARGIN
         shadow, paper = style.themed(style.PAGE_SHADOW), "white"
         for page in pages:
             page_w, page_h = (value * self.scale for value in self.sizes[page])
@@ -450,7 +461,9 @@ class PageView(ctk.CTkFrame):
                 y = max(MARGIN, (height - page_h) / 2)
             self.layout[page] = (x, y, x + page_w, y + page_h)
             canvas.create_rectangle(x + 3, y + 3, x + page_w + 3, y + page_h + 3, fill=shadow, outline="", tags="frame")
-            canvas.create_rectangle(x, y, x + page_w, y + page_h, fill=paper, outline="", tags=("frame", f"paper{page}"))
+            canvas.create_rectangle(
+                x, y, x + page_w, y + page_h, fill=paper, outline="", tags=("frame", f"paper{page}")
+            )
             y += page_h + GAP
         self._tops = [self.layout[page][1] for page in range(self.page_count)] if self.continuous else []
         content_w = max(width, widest + 2 * MARGIN)
@@ -516,8 +529,9 @@ class PageView(ctk.CTkFrame):
                     entry = self._displayed.get((page, tile))
                     if entry is None or entry[2] != current_key:
                         self.scheduler.request(page, scale, self._place_image, priority, tile=tile, clip=clip)
-        self.scheduler.cancel_where(lambda p, s, t: s == scale_key(self.scale) and (p, t) in wanted_tiles,
-                                    callback=self._place_image)
+        self.scheduler.cancel_where(
+            lambda p, s, t: s == scale_key(self.scale) and (p, t) in wanted_tiles, callback=self._place_image
+        )
         for key in list(self._displayed):
             page, tile = key
             far = page < visible.start - KEEP_RENDERED or page >= visible.stop + KEEP_RENDERED
@@ -548,8 +562,10 @@ class PageView(ctk.CTkFrame):
                 if tile_left > right or tile_left + TILE_PX < left:
                     continue
                 clip = pymupdf.Rect(
-                    column * TILE_PX / self.scale, row * TILE_PX / self.scale,
-                    min((column + 1) * TILE_PX / self.scale, width), min((row + 1) * TILE_PX / self.scale, height),
+                    column * TILE_PX / self.scale,
+                    row * TILE_PX / self.scale,
+                    min((column + 1) * TILE_PX / self.scale, width),
+                    min((row + 1) * TILE_PX / self.scale, height),
                 )
                 yield (column, row), clip
 
@@ -592,6 +608,10 @@ class PageView(ctk.CTkFrame):
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(RESIZE_DEBOUNCE_MS, self._apply_resize)
 
+    def _on_middle_drag(self, event) -> None:
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+        self._schedule_update()
+
     def slide_offset(self, offset: float) -> None:
         """Desplaza todo el dibujo ``offset`` pixeles en horizontal (animaciones; 0 = en su lugar)."""
         delta = round(offset) - self._slide
@@ -618,7 +638,7 @@ class PageView(ctk.CTkFrame):
             self._relayout(keep_page=None)
             if anchor is not None:
                 page, fraction = anchor
-                x0, y0, _x1, y1 = self.layout[page]
+                _x0, y0, _x1, y1 = self.layout[page]
                 self._scroll_canvas_to(self.canvas.canvasx(0), y0 + fraction * (y1 - y0))
                 self._update_visible()
 
@@ -684,11 +704,26 @@ class PageView(ctk.CTkFrame):
             self._placeholder_icon = ImageTk.PhotoImage(icon.resize((round(52 * scaling),) * 2))
             canvas.create_image(center_x, center_y - 34 * scaling, image=self._placeholder_icon, anchor="center")
         title, subtitle = self.placeholder
-        canvas.create_text(center_x, center_y + 14 * scaling, text=title, anchor="center", justify="center",
-                           width=text_width, fill=style.themed(style.TEXT),
-                           font=(style.FONT_FAMILY, round(13 * scaling), "bold"))
-        canvas.create_text(center_x, center_y + 40 * scaling, text=subtitle, anchor="center", justify="center",
-                           width=text_width, fill=muted, font=(style.FONT_FAMILY, round(10 * scaling)))
+        canvas.create_text(
+            center_x,
+            center_y + 14 * scaling,
+            text=title,
+            anchor="center",
+            justify="center",
+            width=text_width,
+            fill=style.themed(style.TEXT),
+            font=(style.FONT_FAMILY, round(13 * scaling), "bold"),
+        )
+        canvas.create_text(
+            center_x,
+            center_y + 40 * scaling,
+            text=subtitle,
+            anchor="center",
+            justify="center",
+            width=text_width,
+            fill=muted,
+            font=(style.FONT_FAMILY, round(10 * scaling)),
+        )
 
     def set_placeholder(self, title: str, subtitle: str) -> None:
         self.placeholder = (title, subtitle)

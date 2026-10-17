@@ -84,8 +84,7 @@ def atomic_output(output_path: Path) -> Iterator[Path]:
             os.replace(temp_path, output_path)
         except PermissionError as error:
             raise OutputError(
-                f"No se pudo guardar '{output_path.name}'. "
-                "Verifique que no este abierto en otro programa."
+                f"No se pudo guardar '{output_path.name}'. Verifique que no este abierto en otro programa."
             ) from error
     finally:
         temp_path.unlink(missing_ok=True)

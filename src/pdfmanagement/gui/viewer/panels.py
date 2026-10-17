@@ -20,9 +20,9 @@ from ..events import log_event
 from ..widgets import icon_button, muted_label, secondary_button, set_enabled
 from .page_view import PageView
 
-SEARCH_BUDGET_MS = 15       # tiempo maximo de busqueda por ciclo de eventos
-PUBLISH_EVERY_MS = 150      # cada cuanto se actualizan los resaltados mientras se busca
-MAX_LISTED_RESULTS = 2000   # resultados en la lista (todos se resaltan igual)
+SEARCH_BUDGET_MS = 15  # tiempo maximo de busqueda por ciclo de eventos
+PUBLISH_EVERY_MS = 150  # cada cuanto se actualizan los resaltados mientras se busca
+MAX_LISTED_RESULTS = 2000  # resultados en la lista (todos se resaltan igual)
 
 
 class ThemedList(ctk.CTkFrame):
@@ -32,8 +32,14 @@ class ThemedList(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        self.listbox = tk.Listbox(self, activestyle="none", borderwidth=0, highlightthickness=0,
-                                  font=(style.FONT_FAMILY, 10), exportselection=False)
+        self.listbox = tk.Listbox(
+            self,
+            activestyle="none",
+            borderwidth=0,
+            highlightthickness=0,
+            font=(style.FONT_FAMILY, 10),
+            exportselection=False,
+        )
         self.listbox.grid(row=0, column=0, sticky="nsew")
         scrollbar = ctk.CTkScrollbar(self, orientation="vertical", command=self.listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -45,10 +51,15 @@ class ThemedList(ctk.CTkFrame):
 
     def _apply_colors(self, mode: str) -> None:
         dark = mode.lower() == "dark"
-        pick = (lambda pair: pair[1] if dark else pair[0])
+
+        def pick(pair):
+            return pair[1] if dark else pair[0]
+
         self.listbox.configure(
-            background=pick(style.CARD_BG), foreground=pick(style.TEXT),
-            selectbackground=pick(style.accent_color()), selectforeground="white",
+            background=pick(style.CARD_BG),
+            foreground=pick(style.TEXT),
+            selectbackground=pick(style.accent_color()),
+            selectforeground="white",
         )
 
     def _on_select(self, _event=None) -> None:
@@ -94,7 +105,7 @@ class OutlinePanel(ctk.CTkFrame):
             self.empty.pack(fill="x", padx=12, pady=12)
 
     def _go_to(self, index: int) -> None:
-        level, title, page = self.entries[index]
+        _level, title, page = self.entries[index]
         if page >= 1:
             log_event("Visor", "Marcador: %s", title, pagina=page)
             self.view.go_to(page - 1)
@@ -103,8 +114,14 @@ class OutlinePanel(ctk.CTkFrame):
 class AnnotationsPanel(ctk.CTkFrame):
     """Anotaciones del documento: ir a cada una, editar su texto o eliminarla."""
 
-    def __init__(self, master, *, on_select: Callable[[AnnotationInfo], None],
-                 on_edit: Callable[[], None], on_delete: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        master,
+        *,
+        on_select: Callable[[AnnotationInfo], None],
+        on_edit: Callable[[], None],
+        on_delete: Callable[[], None],
+    ) -> None:
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.on_select = on_select
         self.annotations: list[AnnotationInfo] = []
@@ -125,14 +142,21 @@ class AnnotationsPanel(ctk.CTkFrame):
         self.list.set_items([self._describe(info) for info in annotations])
         total = len(annotations)
         self.count.configure(
-            text="Sin anotaciones. Use la barra de anotacion sobre el visor." if not total
+            text="Sin anotaciones. Use la barra de anotacion sobre el visor."
+            if not total
             else f"{total} anotacion{'es' if total != 1 else ''} · clic para ir"
         )
         self.show_selected(selected)
 
     def show_selected(self, selected: AnnotationInfo | None) -> None:
-        index = next((i for i, info in enumerate(self.annotations)
-                      if selected is not None and (info.page, info.xref) == (selected.page, selected.xref)), None)
+        index = next(
+            (
+                i
+                for i, info in enumerate(self.annotations)
+                if selected is not None and (info.page, info.xref) == (selected.page, selected.xref)
+            ),
+            None,
+        )
         self.list.listbox.selection_clear(0, "end")
         if index is not None:
             self.list.listbox.selection_set(index)
@@ -184,9 +208,19 @@ class SearchPanel(ctk.CTkFrame):
         self.entry.bind("<Shift-Return>", lambda _e: self.previous())
         options = ctk.CTkFrame(self, fg_color="transparent")
         options.pack(fill="x", padx=8)
-        for text, variable in (("Distinguir mayusculas", self.match_case), ("Solo palabras completas", self.whole_words)):
-            ctk.CTkCheckBox(options, text=text, variable=variable, font=style.fonts().small, checkbox_width=18,
-                            checkbox_height=18, command=lambda: self.start() if self._query else None).pack(anchor="w", pady=2)
+        for text, variable in (
+            ("Distinguir mayusculas", self.match_case),
+            ("Solo palabras completas", self.whole_words),
+        ):
+            ctk.CTkCheckBox(
+                options,
+                text=text,
+                variable=variable,
+                font=style.fonts().small,
+                checkbox_width=18,
+                checkbox_height=18,
+                command=lambda: self.start() if self._query else None,
+            ).pack(anchor="w", pady=2)
         navigation = ctk.CTkFrame(self, fg_color="transparent")
         navigation.pack(fill="x", padx=8, pady=(6, 4))
         self.status = muted_label(navigation, "")
@@ -311,9 +345,16 @@ class SearchPanel(ctk.CTkFrame):
             self._iterator = None
             elapsed = (time.perf_counter() - self._started) * 1000
             self.status.configure(text=self._count_text() if self.hits else "Sin resultados")
-            log_event("Visor", "Busqueda: %s", self._query, resultados=len(self.hits), paginas=total,
-                      mayusculas=self._search_options.match_case, palabra_completa=self._search_options.whole_words,
-                      duracion=f"{elapsed:.0f} ms")
+            log_event(
+                "Visor",
+                "Busqueda: %s",
+                self._query,
+                resultados=len(self.hits),
+                paginas=total,
+                mayusculas=self._search_options.match_case,
+                palabra_completa=self._search_options.whole_words,
+                duracion=f"{elapsed:.0f} ms",
+            )
         else:
             self.status.configure(text=f"Buscando... {self._scanned}/{total} paginas · {len(self.hits)} resultados")
             self._job = self.after(1, self._step)
@@ -323,7 +364,11 @@ class SearchPanel(ctk.CTkFrame):
         by_page: dict[int, list[pymupdf.Rect]] = {}
         for hit in self.hits:
             by_page.setdefault(hit.page, []).extend(hit.rects)
-        current = (self.hits[self.current].page, self.hits[self.current].rects) if 0 <= self.current < len(self.hits) else None
+        current = (
+            (self.hits[self.current].page, self.hits[self.current].rects)
+            if 0 <= self.current < len(self.hits)
+            else None
+        )
         self.view.set_search_hits(by_page, current)
 
     def _go_to_hit(self, index: int) -> None:

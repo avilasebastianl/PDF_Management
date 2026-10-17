@@ -67,7 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
     sign.add_argument("--password", help="contrasena del PDF de origen")
 
     sign_cert = commands.add_parser(
-        "sign-cert", help="firma digital con certificado .pfx/.p12 (PAdES)",
+        "sign-cert",
+        help="firma digital con certificado .pfx/.p12 (PAdES)",
         description="Firma digital PAdES B-B sin conexion. Sin --x/--y la firma es invisible.",
     )
     sign_cert.add_argument("input", type=Path)
@@ -171,8 +172,14 @@ def _sign_cert(args: argparse.Namespace) -> Path:
     output = args.output or _default_output(args.input, "firmado")
     return _with_password_prompt(
         lambda password: core.sign_pdf_with_certificate(
-            args.input, output, args.cert, cert_password,
-            placement=placement, signature_image=args.image, reason=args.reason, location=args.location,
+            args.input,
+            output,
+            args.cert,
+            cert_password,
+            placement=placement,
+            signature_image=args.image,
+            reason=args.reason,
+            location=args.location,
             password=password,
         ),
         args.password,

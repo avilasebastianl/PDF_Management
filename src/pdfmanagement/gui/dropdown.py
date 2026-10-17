@@ -10,7 +10,8 @@ que lo adapta a la aplicacion:
 - Aparece al instante (sin el fundido que bloqueaba la interfaz ~100 ms) y sin
   mostrar la barra de titulo la primera vez.
 - Alto exacto para ``max_visible`` opciones (como mucho ``MAX_VISIBLE`` = 5);
-  la barra de desplazamiento, con colores visibles, aparece si hay mas. Mide lo mismo que el control con cualquier escala de
+  la barra de desplazamiento, con colores visibles, aparece si hay mas. Mide lo mismo que el
+  control con cualquier escala de
   interfaz y se abre hacia arriba si no cabe debajo.
 - Resalta la opcion actual y se desplaza hasta ella.
 - Colores de la aplicacion en modo claro y oscuro.
@@ -31,10 +32,10 @@ from . import style
 from .events import area_of, debug_event
 from .widgets import hide, show
 
-ROW_HEIGHT = 30        # alto de cada opcion (pixeles logicos)
-ROW_SPACING = 4        # el original separa cada opcion con pady=2
-FRAME_PADDING = 14     # borde y margen interno del marco desplazable
-MAX_VISIBLE = 5        # opciones visibles como maximo; las demas, con la barra
+ROW_HEIGHT = 30  # alto de cada opcion (pixeles logicos)
+ROW_SPACING = 4  # el original separa cada opcion con pady=2
+FRAME_PADDING = 14  # borde y margen interno del marco desplazable
+MAX_VISIBLE = 5  # opciones visibles como maximo; las demas, con la barra
 SCROLLBAR = ("gray58", "gray45")  # barra de la lista: visible sobre el fondo de la tarjeta
 SCROLLBAR_HOVER = ("gray45", "gray60")
 SELECTED = ("gray85", "gray30")
@@ -73,7 +74,8 @@ class _ScrollablePopup(CTkScrollableDropdown):
         if self.winfo_viewable():
             self.withdraw()
         self.event_generate("<<Closed>>")
-        self.hide = True
+        # El original usa ``hide`` como metodo y como bandera a la vez.
+        self.hide = True  # type: ignore[method-assign,assignment]
 
     def _on_root_configure(self, event) -> None:
         # Al cerrar la ventana el control ancla se destruye antes que la raiz,
@@ -169,7 +171,7 @@ class _DropdownController:
             # El original deja ``hide=False`` al construirse, por lo que su primer
             # _iconify solo "ocultaria" la lista; se marca oculta para abrirla ya.
             # Los clics siguientes los atiende su propio _iconify (ya enlazado).
-            self.popup.hide = True
+            self.popup.hide = True  # type: ignore[method-assign,assignment]
         self.popup._iconify()  # noqa: SLF001
 
     def _select(self, value: str) -> None:

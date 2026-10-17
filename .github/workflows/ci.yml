@@ -1,0 +1,42 @@
+# Calidad y pruebas en Windows (la aplicacion es de escritorio para Windows).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Estilo y errores (ruff)
+        run: |
+          python -m ruff check src tests
+          python -m ruff format --check src tests
+
+      - name: Tipos (mypy)
+        run: python -m mypy
+
+      - name: Pruebas con cobertura
+        # Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen);
+        # las de Office se omiten solas si no esta instalado.
+        run: python -m pytest --cov --cov-report=term --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cobertura
+          path: coverage.xml

@@ -63,16 +63,28 @@ class StatusBar(ctk.CTkFrame):
         self.message.grid(row=0, column=2, sticky="w", padx=(0, 14))
 
         self.reveal_button = secondary_button(
-            self, "Mostrar en carpeta", lambda: self._use_result("Mostrar en carpeta", reveal_in_folder), "folder",
+            self,
+            "Mostrar en carpeta",
+            lambda: self._use_result("Mostrar en carpeta", reveal_in_folder),
+            "folder",
             width=150,
         )
         self.on_view = on_view
         self.view_button = secondary_button(
-            self, "Ver en el visor", lambda: self._use_result("Ver en el visor", self.on_view), "eye", width=150,
+            self,
+            "Ver en el visor",
+            lambda: self._use_result("Ver en el visor", self.on_view),
+            "eye",
+            width=150,
         )
         ToolTip(self.view_button, "Abre el archivo generado en la seccion Visor", above=True)
         self.open_button = ctk.CTkButton(
-            self, text="Abrir", width=80, height=34, corner_radius=8, font=style.fonts().body,
+            self,
+            text="Abrir",
+            width=80,
+            height=34,
+            corner_radius=8,
+            font=style.fonts().body,
             command=lambda: self._use_result("Abrir", open_path),
         )
         ToolTip(self.reveal_button, "Abre el explorador con el archivo seleccionado", above=True)
@@ -93,8 +105,7 @@ class StatusBar(ctk.CTkFrame):
         self._apply(
             "busy",
             f"{description}...{queued}",
-            f"Operacion en curso: {description}.\n"
-            "Puede seguir trabajando; el resultado aparecera aqui al terminar.",
+            f"Operacion en curso: {description}.\nPuede seguir trabajando; el resultado aparecera aqui al terminar.",
         )
         self._hide_actions()
 

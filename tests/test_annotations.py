@@ -6,8 +6,8 @@ deshacer/rehacer y Guardar como.
 
 import pymupdf
 import pytest
-
 from conftest import make_pdf
+
 from pdfmanagement import core
 from pdfmanagement.core.editing import AnnotationStyle, DocumentSession
 from pdfmanagement.core.editing import annotations as annots
@@ -25,7 +25,7 @@ def session(request, tmp_path):
 
 
 def close_to(rect, expected, tolerance=6):
-    return all(abs(a - b) <= tolerance for a, b in zip(tuple(rect), tuple(expected)))
+    return all(abs(a - b) <= tolerance for a, b in zip(tuple(rect), tuple(expected), strict=True))
 
 
 def only(session, page=0):
@@ -56,7 +56,7 @@ def test_markup_from_selected_words(session):
     page = session.document[0]
     quads = annots.find(page, info.xref).vertices  # 4 puntos por palabra, en coordenadas del PDF
     for index, rect in enumerate(rects):
-        corners = [pymupdf.Point(point) * page.rotation_matrix for point in quads[index * 4:index * 4 + 4]]
+        corners = [pymupdf.Point(point) * page.rotation_matrix for point in quads[index * 4 : index * 4 + 4]]
         assert close_to(pymupdf.Rect(corners[0], corners[0]) | corners[1] | corners[2] | corners[3], rect, tolerance=1)
     assert session.history.undo_label == "Resaltar texto (pagina 1)"
     session.add_markup(0, "strikeout", rects[:1], AnnotationStyle(color=RED))
@@ -198,7 +198,9 @@ def test_free_text_font_size_and_fitting(session):
     assert session.history.undo_label == "Cambiar tamano de texto"
     session.set_annotation_text(0, xref, "Un texto bastante mas largo que ya no cabe en una sola linea del cuadro")
     longer = only(session)
-    assert longer.rect.height > bigger.rect.height * 1.8 and longer.rect.width == pytest.approx(bigger.rect.width, abs=1)
+    assert longer.rect.height > bigger.rect.height * 1.8 and longer.rect.width == pytest.approx(
+        bigger.rect.width, abs=1
+    )
     session.undo()
     session.undo()
     assert only(session).font_size == 14

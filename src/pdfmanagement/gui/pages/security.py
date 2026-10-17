@@ -24,7 +24,10 @@ class SecurityPage(BasePage):
 
     def build(self) -> None:
         self.mode = ctk.CTkSegmentedButton(
-            self.body, values=[LOCK, UNLOCK], command=lambda value: (self.log("Accion: %s", value), self._apply_mode()), height=36,
+            self.body,
+            values=[LOCK, UNLOCK],
+            command=self._on_mode_selected,
+            height=36,
             font=style.fonts().body,
         )
         self.mode.set(LOCK)
@@ -33,7 +36,10 @@ class SecurityPage(BasePage):
         source = Card(self.body, "Documento")
         source.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
         self.source_field = FileField(
-            source, source.row(0), "PDF", on_change=self._on_source_selected,
+            source,
+            source.row(0),
+            "PDF",
+            on_change=self._on_source_selected,
             placeholder="Seleccione o arrastre un PDF",
         )
         self.source_info = muted_label(source)
@@ -48,8 +54,9 @@ class SecurityPage(BasePage):
 
         output = Card(self.body, "Resultado")
         output.grid(row=3, column=0, sticky="ew", pady=(0, style.GAP))
-        self.output_field = FileField(output, output.row(0), "Guardar como", mode="save",
-                                      initial_dir=lambda: self.app.settings.output_path)
+        self.output_field = FileField(
+            output, output.row(0), "Guardar como", mode="save", initial_dir=lambda: self.app.settings.output_path
+        )
 
         self.run_button = primary_button(self.body, "", self._run, "lock", width=190)
         self.run_button.grid(row=4, column=0, sticky="e", pady=(4, style.PAD))
@@ -59,17 +66,25 @@ class SecurityPage(BasePage):
     def locking(self) -> bool:
         return self.mode.get() == LOCK
 
+    def _on_mode_selected(self, value: str) -> None:
+        self.log("Accion: %s", value)
+        self._apply_mode()
+
     def _apply_mode(self) -> None:
         if self.locking:
             self.confirmation.show()
-            self.hint.configure(text=f"Minimo {core.MIN_PASSWORD_LENGTH} caracteres. Guardela en un lugar seguro: no se puede recuperar.")
+            self.hint.configure(
+                text=f"Minimo {core.MIN_PASSWORD_LENGTH} caracteres. "
+                "Guardela en un lugar seguro: no se puede recuperar."
+            )
             self.run_button.configure(text="Proteger PDF", image=icon("lock", 16, style.WHITE))
         else:
             self.confirmation.hide()
             self.hint.configure(text="Ingrese la contrasena actual del documento.")
             self.run_button.configure(text="Quitar contrasena", image=icon("unlock", 16, style.WHITE))
-        if self.source_field.path and self.output_field.auto:
-            self._set_default_output(self.resolved(self.source_field.path))
+        source = self.resolved(self.source_field.path)
+        if source is not None and self.output_field.auto:
+            self._set_default_output(source)
 
     def _on_source_selected(self, path: Path) -> None:
         try:
@@ -80,11 +95,15 @@ class SecurityPage(BasePage):
             return
         state = "Protegido con contrasena" if info.encrypted else "Sin proteccion"
         self.log(
-            "PDF listo: %s (%s)", info.path.name, state.lower(),
+            "PDF listo: %s (%s)",
+            info.path.name,
+            state.lower(),
             accion_sugerida=UNLOCK if info.encrypted else LOCK,
         )
         pages = f"{info.page_count} paginas  ·  " if info.page_count is not None else ""
-        self.source_info.configure(text=f"{pages}{format_size(info.size_bytes)}  ·  {state}", text_color=style.TEXT_MUTED)
+        self.source_info.configure(
+            text=f"{pages}{format_size(info.size_bytes)}  ·  {state}", text_color=style.TEXT_MUTED
+        )
         self.mode.set(UNLOCK if info.encrypted else LOCK)
         self._apply_mode()
         self._set_default_output(info.path)
@@ -112,8 +131,13 @@ class SecurityPage(BasePage):
                 operation = lambda passwords: core.unlock_pdf(source, output, passwords.get(source, password))  # noqa: E731
                 title, description = "Proteccion eliminada", "Quitando proteccion"
             self.log("%s solicitado: %s", description, source.name, salida=output)
-            self.run_task(description, title, operation, button=self.run_button,
-                          on_success=lambda _result: self._clear_passwords())
+            self.run_task(
+                description,
+                title,
+                operation,
+                button=self.run_button,
+                on_success=lambda _result: self._clear_passwords(),
+            )
 
         self.guard(start)
 

@@ -65,9 +65,7 @@ def _export_word(client, source: Path, target: Path) -> None:
     try:
         word.Visible = False
         word.DisplayAlerts = 0
-        document = word.Documents.Open(
-            str(source), ConfirmConversions=False, ReadOnly=True, AddToRecentFiles=False
-        )
+        document = word.Documents.Open(str(source), ConfirmConversions=False, ReadOnly=True, AddToRecentFiles=False)
         document.SaveAs(str(target), FileFormat=_WD_FORMAT_PDF)
     finally:
         if document is not None:
@@ -92,4 +90,3 @@ def _export_excel(client, source: Path, target: Path) -> None:
 def is_supported(file_path: str | Path) -> bool:
     """Indica si la extension del archivo puede convertirse."""
     return Path(file_path).suffix.lower() in OFFICE_EXTENSIONS
-

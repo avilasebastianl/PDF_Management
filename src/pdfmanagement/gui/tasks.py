@@ -78,7 +78,8 @@ class TaskRunner:
         if self._tasks:
             logger.warning(
                 "Cierre con %d tarea(s) sin terminar: %s",
-                len(self._tasks), ", ".join(f"#{task.number} {task.description}" for task in self._tasks),
+                len(self._tasks),
+                ", ".join(f"#{task.number} {task.description}" for task in self._tasks),
             )
         self._executor.shutdown(wait=False, cancel_futures=True)
 
@@ -90,12 +91,16 @@ class TaskRunner:
             elapsed = time.perf_counter() - task.started
             try:
                 result = task.future.result()
-            except BaseException as error:  # noqa: BLE001 - se reporta al usuario
+            except BaseException as error:
                 expected = isinstance(error, core.PdfManagementError)
                 logger.log(
                     logging.INFO if expected else logging.ERROR,
                     "Tarea #%d '%s' fallo en %.2f s: %s: %s",
-                    task.number, task.description, elapsed, type(error).__name__, one_line(error),
+                    task.number,
+                    task.description,
+                    elapsed,
+                    type(error).__name__,
+                    one_line(error),
                 )
                 task.on_error(error)
             else:

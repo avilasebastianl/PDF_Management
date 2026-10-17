@@ -33,7 +33,9 @@ class ViewerToolbar(ctk.CTkFrame):
         navigation = ctk.CTkFrame(self, fg_color="transparent")
         navigation.pack(side="left")
         self.first = icon_button(navigation, "first", lambda: view.go_to(0), "Primera pagina (Inicio)")
-        self.previous = icon_button(navigation, "previous", lambda: view.go_to(view.current_page - 1), "Pagina anterior (RePag)")
+        self.previous = icon_button(
+            navigation, "previous", lambda: view.go_to(view.current_page - 1), "Pagina anterior (RePag)"
+        )
         self.first.pack(side="left", padx=1)
         self.previous.pack(side="left", padx=1)
         if page_entry:
@@ -48,7 +50,9 @@ class ViewerToolbar(ctk.CTkFrame):
             self.page_label = ctk.CTkLabel(navigation, text="", width=118, font=style.fonts().body)
             self.page_label.pack(side="left", padx=2)
             self.total = None
-        self.next = icon_button(navigation, "next", lambda: view.go_to(view.current_page + 1), "Pagina siguiente (AvPag)")
+        self.next = icon_button(
+            navigation, "next", lambda: view.go_to(view.current_page + 1), "Pagina siguiente (AvPag)"
+        )
         self.last = icon_button(navigation, "last", lambda: view.go_to(view.page_count - 1), "Ultima pagina (Fin)")
         self.next.pack(side="left", padx=1)
         self.last.pack(side="left", padx=1)
@@ -60,7 +64,7 @@ class ViewerToolbar(ctk.CTkFrame):
         if zoom_menu:
             self.zoom_menu = dropdown_menu(zoom, list(ZOOM_OPTIONS), self._choose_zoom, width=128, height=28)
             self.zoom_menu.pack(side="left", padx=4)
-            self.zoom_label = None
+            self.zoom_label: ctk.CTkLabel | None = None
         else:
             self.zoom_menu = None
             self.zoom_label = ctk.CTkLabel(zoom, text="", width=52, font=style.fonts().body)
@@ -112,11 +116,13 @@ class ViewerToolbar(ctk.CTkFrame):
         text = f"{view.zoom_percent}%" if has_document else "—"
         if self.zoom_menu is not None:
             mode = view.zoom_mode
-            label = next((name for name, value in ZOOM_OPTIONS.items() if value == mode and isinstance(mode, str)), text)
+            label = next(
+                (name for name, value in ZOOM_OPTIONS.items() if value == mode and isinstance(mode, str)), text
+            )
             if self.zoom_menu.get() != label:
                 self.zoom_menu.set(label)
             menu_state = "normal" if has_document else "disabled"
             if self.zoom_menu.cget("state") != menu_state:
                 self.zoom_menu.configure(state=menu_state)
-        else:
+        elif self.zoom_label is not None:
             self.zoom_label.configure(text=text)

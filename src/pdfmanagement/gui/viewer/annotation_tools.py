@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import pymupdf
 
+from ...core.editing import AnnotationInfo
 from .. import style
 from .page_view import PageHit, PageView, Tool
 from .tools import TextSelectTool
@@ -22,7 +23,8 @@ DRAG_THRESHOLD = 4  # pixeles: menos es un clic
 
 
 def tk_color(color: tuple[float, float, float]) -> str:
-    return "#%02x%02x%02x" % tuple(round(max(0.0, min(1.0, value)) * 255) for value in color)
+    red, green, blue = (round(max(0.0, min(1.0, value)) * 255) for value in color)
+    return f"#{red:02x}{green:02x}{blue:02x}"
 
 
 class MarkupTool(TextSelectTool):
@@ -61,8 +63,13 @@ class DragTool(Tool):
 
     cursor = "crosshair"
 
-    def __init__(self, kind: str, on_done: Callable[[str, int, Point, Point], None],
-                 color: Callable[[], tuple[float, float, float]], width: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        kind: str,
+        on_done: Callable[[str, int, Point, Point], None],
+        color: Callable[[], tuple[float, float, float]],
+        width: Callable[[], float],
+    ) -> None:
         self.kind = kind
         self.on_done = on_done
         self.color = color
@@ -101,14 +108,23 @@ class DragTool(Tool):
         color = tk_color(self.color())
         width = max(1.0, self.width() * view.scale)
         if self.kind in ("rect", "free_text"):
-            dash = (4, 3) if self.kind == "free_text" else None
+            dash = (4, 3) if self.kind == "free_text" else ()
             view.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=width, dash=dash, tags="overlay")
         elif self.kind == "ellipse":
             view.canvas.create_oval(x0, y0, x1, y1, outline=color, width=width, tags="overlay")
         else:
-            arrow = "last" if self.kind == "arrow" else None
-            view.canvas.create_line(x0, y0, x1, y1, fill=color, width=width, arrow=arrow,
-                                    arrowshape=(10 + width * 2, 12 + width * 2, 4 + width), tags="overlay")
+            arrow = "last" if self.kind == "arrow" else "none"
+            view.canvas.create_line(  # type: ignore[call-overload]  # arrowshape admite tres numeros
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=color,
+                width=width,
+                arrow=arrow,
+                arrowshape=(round(10 + width * 2), round(12 + width * 2), round(4 + width)),
+                tags="overlay",
+            )
 
 
 class InkTool(Tool):
@@ -116,8 +132,12 @@ class InkTool(Tool):
 
     cursor = "pencil"
 
-    def __init__(self, on_done: Callable[[int, list[Point]], None],
-                 color: Callable[[], tuple[float, float, float]], width: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        on_done: Callable[[int, list[Point]], None],
+        color: Callable[[], tuple[float, float, float]],
+        width: Callable[[], float],
+    ) -> None:
         self.on_done = on_done
         self.color = color
         self.width = width
@@ -141,8 +161,16 @@ class InkTool(Tool):
                 (ax, ay), (bx, by) = self._points[-2], self._points[-1]
                 x0, y0 = view.page_to_canvas(self._page, ax, ay)
                 x1, y1 = view.page_to_canvas(self._page, bx, by)
-                view.canvas.create_line(x0, y0, x1, y1, fill=tk_color(self.color()), capstyle="round",
-                                        width=max(1.0, self.width() * view.scale), tags=("overlay", "ink"))
+                view.canvas.create_line(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    fill=tk_color(self.color()),
+                    capstyle="round",
+                    width=max(1.0, self.width() * view.scale),
+                    tags=("overlay", "ink"),
+                )
 
     def release(self, view: PageView, event, hit: PageHit | None) -> None:
         page, points = self._page, self._points
@@ -155,8 +183,14 @@ class InkTool(Tool):
         if self._page is None or len(self._points) < 2:
             return
         coords = [value for x, y in self._points for value in view.page_to_canvas(self._page, x, y)]
-        view.canvas.create_line(*coords, fill=tk_color(self.color()), capstyle="round", joinstyle="round",
-                                width=max(1.0, self.width() * view.scale), tags=("overlay", "ink"))
+        view.canvas.create_line(
+            *coords,
+            fill=tk_color(self.color()),
+            capstyle="round",
+            joinstyle="round",
+            width=max(1.0, self.width() * view.scale),
+            tags=("overlay", "ink"),
+        )
 
 
 class NoteTool(Tool):
@@ -180,15 +214,22 @@ class SelectTool(TextSelectTool):
     texto (resaltado, subrayado...) arrastrar sigue seleccionando el texto.
     """
 
-    def __init__(self, words_for, on_change, *, hit_annotation: Callable[[PageHit], object | None],
-                 on_select: Callable[[object | None], None], on_move: Callable[[object, float, float], None],
-                 on_edit: Callable[[object], None]) -> None:
+    def __init__(
+        self,
+        words_for,
+        on_change,
+        *,
+        hit_annotation: Callable[[PageHit], AnnotationInfo | None],
+        on_select: Callable[[AnnotationInfo | None], None],
+        on_move: Callable[[AnnotationInfo, float, float], None],
+        on_edit: Callable[[AnnotationInfo], None],
+    ) -> None:
         super().__init__(words_for, on_change)
         self.hit_annotation = hit_annotation
         self.on_select = on_select
         self.on_move = on_move
         self.on_edit = on_edit
-        self._grabbed = None  # anotacion bajo el clic
+        self._grabbed: AnnotationInfo | None = None  # anotacion bajo el clic
         self._grab_hit: PageHit | None = None
         self._press_xy = (0, 0)
         self._offset: Point | None = None  # desplazamiento de la vista previa
@@ -248,5 +289,11 @@ class SelectTool(TextSelectTool):
         if self._grabbed is None or self._offset is None:
             return
         rect = self._grabbed.rect + (self._offset[0], self._offset[1], self._offset[0], self._offset[1])
-        view._draw_rect(self._grabbed.page, rect, pad=3, outline=style.themed(style.accent_color()),  # noqa: SLF001
-                        width=2, dash=(5, 3))
+        view.draw_rect(
+            self._grabbed.page,
+            rect,
+            pad=3,
+            outline=style.themed(style.accent_color()),
+            width=2,
+            dash=(5, 3),
+        )

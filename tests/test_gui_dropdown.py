@@ -4,9 +4,9 @@ Listas desplegables con desplazamiento (``gui/dropdown.py``).
 Requiere una pantalla (se omite si Tk no puede crear ventanas).
 """
 
+from conftest import pump
 from PIL import Image, ImageDraw
 
-from conftest import pump
 from pdfmanagement import paths
 
 
@@ -134,7 +134,7 @@ def test_about_shows_author_and_links(gui_app, monkeypatch):
         for child in widget.winfo_children():
             try:
                 texts.append(child.cget("text"))
-            except Exception:  # noqa: BLE001 - no todos tienen texto
+            except Exception:
                 pass
             collect(child)
 

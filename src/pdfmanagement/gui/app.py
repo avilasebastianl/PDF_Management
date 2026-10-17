@@ -18,11 +18,10 @@ from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import Settings
-from . import style
+from . import icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
 from .dialogs import HelpWindow
 from .events import debug_event, log_event
-from . import icons
 from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
@@ -33,12 +32,12 @@ from .widgets import ToolTip, hide, show
 
 logger = logging.getLogger(__name__)
 
-PREBUILD_DELAY_MS = 600      # espera tras el arranque antes de precargar paginas
-PREBUILD_INTERVAL_MS = 150   # pausa entre paginas precargadas o reapiladas
-RESTACK_DELAY_MS = 400       # espera tras redimensionar antes de reapilar paginas
-SIDEBAR_ANIMATION_MS = 260   # duracion de contraer/expandir el menu lateral
-SIDEBAR_FRAME_MS = 6         # pausa entre cuadros (cada cuadro se pinta enseguida)
-RESIZE_LOG_DELAY_MS = 600    # se registra el tamano final, no cada paso del arrastre
+PREBUILD_DELAY_MS = 600  # espera tras el arranque antes de precargar paginas
+PREBUILD_INTERVAL_MS = 150  # pausa entre paginas precargadas o reapiladas
+RESTACK_DELAY_MS = 400  # espera tras redimensionar antes de reapilar paginas
+SIDEBAR_ANIMATION_MS = 260  # duracion de contraer/expandir el menu lateral
+SIDEBAR_FRAME_MS = 6  # pausa entre cuadros (cada cuadro se pinta enseguida)
+RESIZE_LOG_DELAY_MS = 600  # se registra el tamano final, no cada paso del arrastre
 
 # Nombres legibles de las preferencias para el registro de cambios.
 SETTING_LABELS = {
@@ -108,6 +107,7 @@ class MainWindow:
         self._restack_job: str | None = None
         self._resize_log_job: str | None = None
         self._sidebar_animation: tuple[float, int, int, float] | None = None
+        self._help: HelpWindow | None = None
         self.settings_listeners: list = []  # se llaman tras guardar con las claves que cambiaron
 
         self._build_sidebar()
@@ -120,7 +120,10 @@ class MainWindow:
     def _log_session_start(self) -> None:
         settings = self.settings
         log_event(
-            "Sesion", "Inicio de %s %s", __app_name__, __version__,
+            "Sesion",
+            "Inicio de %s %s",
+            __app_name__,
+            __version__,
             python=platform.python_version(),
             sistema=platform.platform(terse=True),
             pantalla=f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}",
@@ -153,15 +156,28 @@ class MainWindow:
         header = ctk.CTkFrame(sidebar, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=12, pady=(18, 14))
         self.sidebar_toggle = ctk.CTkButton(
-            header, text="", image=icon("menu", 18), width=40, height=40, corner_radius=8,
-            fg_color="transparent", hover_color=style.HOVER, command=self.toggle_sidebar,
+            header,
+            text="",
+            image=icon("menu", 18),
+            width=40,
+            height=40,
+            corner_radius=8,
+            fg_color="transparent",
+            hover_color=style.HOVER,
+            command=self.toggle_sidebar,
         )
         self.sidebar_toggle.pack(side="left")
-        ToolTip(self.sidebar_toggle, lambda: "Expandir el menu" if self.settings.sidebar_collapsed else "Contraer el menu")
+        ToolTip(
+            self.sidebar_toggle, lambda: "Expandir el menu" if self.settings.sidebar_collapsed else "Contraer el menu"
+        )
         self._brand = ctk.CTkFrame(header, fg_color="transparent")
         ctk.CTkLabel(self._brand, text=__app_name__, font=style.fonts().brand, anchor="w").pack(anchor="w")
         ctk.CTkLabel(
-            self._brand, text=f"Version {__version__}", font=style.fonts().small, text_color=style.TEXT_MUTED, anchor="w"
+            self._brand,
+            text=f"Version {__version__}",
+            font=style.fonts().small,
+            text_color=style.TEXT_MUTED,
+            anchor="w",
         ).pack(anchor="w")
 
         for index, page_class in enumerate(PAGES, start=1):
@@ -176,9 +192,12 @@ class MainWindow:
             )
             button.grid(row=index, column=0, sticky="ew", padx=12, pady=2)
             # Contraido solo se ven los iconos: el tooltip dice el nombre de la seccion.
-            ToolTip(button, lambda page=page_class, key=index: (
-                f"{page.name}  (Ctrl+{key})" if self.settings.sidebar_collapsed else f"{page.title}  (Ctrl+{key})"
-            ))
+            ToolTip(
+                button,
+                lambda page=page_class, key=index: (  # type: ignore[misc]
+                    f"{page.name}  (Ctrl+{key})" if self.settings.sidebar_collapsed else f"{page.title}  (Ctrl+{key})"
+                ),
+            )
             self.nav_buttons[page_class.name] = button
 
         footer = ctk.CTkFrame(sidebar, fg_color="transparent")
@@ -193,10 +212,14 @@ class MainWindow:
             "text_color": style.TEXT,
             "font": style.fonts().body,
         }
-        self.theme_button = ctk.CTkButton(footer, text="", image=icon("moon", 18), command=self.toggle_appearance, **footer_style)
+        self.theme_button = ctk.CTkButton(
+            footer, text="", image=icon("moon", 18), command=self.toggle_appearance, **footer_style
+        )
         self.theme_button.grid(row=0, column=0, sticky="ew")
         ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
-        self.help_button = ctk.CTkButton(footer, text="  Ayuda", image=icon("help", 18), command=self.open_help, **footer_style)
+        self.help_button = ctk.CTkButton(
+            footer, text="  Ayuda", image=icon("help", 18), command=self.open_help, **footer_style
+        )
         self.help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         ToolTip(self.help_button, "Guia de uso (F1)")
         self._apply_sidebar_mode()
@@ -253,7 +276,7 @@ class MainWindow:
         end = style.SIDEBAR_COLLAPSED_WIDTH if collapsed else style.SIDEBAR_WIDTH
         final_width = self.root.winfo_width() - round(end * ctk.ScalingTracker.get_widget_scaling(self.sidebar))
         self._unstack_hidden_pages()
-        page = self.pages.get(self.current_page)
+        page = self.pages.get(self.current_page or "")
         old_width = self.main.winfo_width()
         with frozen_redraw(self.root):
             if not collapsed:  # el menu completo queda debajo y el contenido lo va descubriendo
@@ -271,13 +294,15 @@ class MainWindow:
         self._sidebar_step()
 
     def _sidebar_step(self) -> None:
+        if self._sidebar_animation is None:
+            return
         started, start, end, shift = self._sidebar_animation
         progress = min(1.0, (time.perf_counter() - started) * 1000 / SIDEBAR_ANIMATION_MS)
         eased = 1 - (1 - progress) ** 3  # arranca rapido y frena suave
         scaling = ctk.ScalingTracker.get_widget_scaling(self.sidebar)
         width = start / scaling + (end - start / scaling) * eased
         tk.Frame.place_configure(self.main, x=round(width * scaling))
-        page = self.pages.get(self.current_page)
+        page = self.pages.get(self.current_page or "")
         if shift and page is not None:
             page.slide_content(shift * (1 - eased))  # las paginas centradas acompanan el movimiento
         self.root.update_idletasks()  # cada cuadro se pinta ya, a ritmo parejo
@@ -357,7 +382,9 @@ class MainWindow:
             started = time.perf_counter()
             self.pages[name] = page_class(self.content, self)
             self._stack(self.pages[name], front=False)
-            debug_event("Interfaz", "Pagina %s construida %s (%.0f ms)", name, reason, (time.perf_counter() - started) * 1000)
+            debug_event(
+                "Interfaz", "Pagina %s construida %s (%.0f ms)", name, reason, (time.perf_counter() - started) * 1000
+            )
         return self.pages[name]
 
     def _stack(self, page: BasePage, front: bool) -> None:
@@ -372,7 +399,7 @@ class MainWindow:
         """Muestra la pagina ``name`` (la construye si la precarga aun no lo hizo)."""
         if name != self.current_page:
             log_event("Navegacion", "%s -> %s", self.current_page or "(inicio)", name, origen=source)
-        previous = self.pages.get(self.current_page)
+        previous = self.pages.get(self.current_page or "")
         if previous is not None and self.current_page != name:
             previous.on_hide()
         page = self._ensure_page(name)
@@ -421,7 +448,10 @@ class MainWindow:
         self._resize_log_job = None
         if self.root.winfo_exists():
             debug_event(
-                "Ventana", "Tamano %sx%s", self.root.winfo_width(), self.root.winfo_height(),
+                "Ventana",
+                "Tamano %sx%s",
+                self.root.winfo_width(),
+                self.root.winfo_height(),
                 estado="maximizada" if self.root.state() == "zoomed" else "normal",
             )
 
@@ -429,8 +459,7 @@ class MainWindow:
         """Vuelve a apilar, de a una, las paginas desmontadas al redimensionar."""
         self._restack_job = None
         unmounted = [
-            page for name, page in self.pages.items()
-            if name != self.current_page and page.winfo_manager() != "grid"
+            page for name, page in self.pages.items() if name != self.current_page and page.winfo_manager() != "grid"
         ]
         if unmounted:
             self._stack(unmounted[0], front=False)
@@ -533,15 +562,17 @@ class MainWindow:
         """Muestra un error. Los inesperados se registran con su traza completa."""
         if isinstance(error, core.PdfManagementError):
             log_event(
-                self.current_page or "General", "Aviso mostrado al usuario: %s", error,
-                level=logging.WARNING, tipo=type(error).__name__,
+                self.current_page or "General",
+                "Aviso mostrado al usuario: %s",
+                error,
+                level=logging.WARNING,
+                tipo=type(error).__name__,
             )
             message = str(error)
         else:
             logger.error("Error inesperado", exc_info=(type(error), error, error.__traceback__))
             message = (
-                f"Ocurrio un error inesperado:\n{error}\n\n"
-                f"El detalle quedo registrado en {paths.LOG_DIR / 'error.log'}"
+                f"Ocurrio un error inesperado:\n{error}\n\nEl detalle quedo registrado en {paths.LOG_DIR / 'error.log'}"
             )
         self.status_bar.set_error(str(error))
         messagebox.showerror("No se pudo completar la operacion", message, parent=self.root)
@@ -557,7 +588,7 @@ class MainWindow:
     def open_help(self, section: str | None = None, source: str = "boton Ayuda") -> None:
         """Abre la guia de uso (o la trae al frente), opcionalmente en ``section``."""
         log_event("Ayuda", "Guia abierta", seccion=section or "inicio", origen=source)
-        if getattr(self, "_help", None) is not None and self._help.winfo_exists():
+        if self._help is not None and self._help.winfo_exists():
             if section:
                 self._help.show_section(section)
             self._help.focus()

@@ -86,7 +86,9 @@ def test_save_as_keeps_original_and_history(text_pdf, tmp_path):
     assert pymupdf.open(output)[0].rotation == 90
     assert pymupdf.open(text_pdf)[0].rotation == 0, "el original no se modifica"
     assert not session.modified
-    assert session.history.undo() == "Rotar" and session.document[0].rotation == 0, "se puede deshacer despues de guardar"
+    assert session.history.undo() == "Rotar" and session.document[0].rotation == 0, (
+        "se puede deshacer despues de guardar"
+    )
     with pytest.raises(core.InvalidInputError):
         session.save_as(text_pdf)  # nunca sobre el original
     session.close()
@@ -109,10 +111,10 @@ def test_search_modes(text_pdf):
     def count(query, **options):
         return sum(len(hits) for _page, hits in iter_search(document, query, SearchOptions(**options)))
 
-    assert count("contrato") == 9          # Contrato, CONTRATO y Subcontrato en 3 paginas
+    assert count("contrato") == 9  # Contrato, CONTRATO y Subcontrato en 3 paginas
     assert count("contrato", whole_words=True) == 6
     assert count("Contrato", match_case=True) == 3
-    assert count("CONTRATO tiene", match_case=True) == 3   # frase
+    assert count("CONTRATO tiene", match_case=True) == 3  # frase
     assert count("inexistente") == 0
     first = next(iter_search(document, "vigencia"))
     assert first[0] == 0 and first[1][0].context

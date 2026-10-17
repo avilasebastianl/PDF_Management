@@ -102,6 +102,7 @@ class AnnotationInfo:
 
 # * Consultas -----------------------------------------------------------------
 
+
 def list_annotations(page: pymupdf.Page, index: int) -> list[AnnotationInfo]:
     """Anotaciones visibles de la pagina (sin ventanas emergentes, enlaces ni campos)."""
     result = []
@@ -111,12 +112,17 @@ def list_annotations(page: pymupdf.Page, index: int) -> list[AnnotationInfo]:
             continue
         stroke = annot.colors.get("stroke") or annot.colors.get("fill")
         color = tuple(stroke[:3]) if stroke and len(stroke) >= 3 else None
-        result.append(AnnotationInfo(
-            page=index, xref=annot.xref, kind=kind, rect=annot.rect * page.rotation_matrix,
-            content=(annot.info.get("content") or "").strip(),
-            color=_free_text_color(annot) or color if kind == "FreeText" else color,
-            font_size=font_size(annot) if kind == "FreeText" else None,
-        ))
+        result.append(
+            AnnotationInfo(
+                page=index,
+                xref=annot.xref,
+                kind=kind,
+                rect=annot.rect * page.rotation_matrix,
+                content=(annot.info.get("content") or "").strip(),
+                color=_free_text_color(annot) or color if kind == "FreeText" else color,
+                font_size=font_size(annot) if kind == "FreeText" else None,
+            )
+        )
     return result
 
 
@@ -128,6 +134,7 @@ def find(page: pymupdf.Page, xref: int) -> pymupdf.Annot:
 
 
 # * Crear ---------------------------------------------------------------------
+
 
 def add_markup(page: pymupdf.Page, kind: str, rects: Sequence[pymupdf.Rect], style: AnnotationStyle) -> int:
     """Resalta, subraya o tacha el texto que ocupan ``rects`` (una por palabra o linea)."""
@@ -148,8 +155,9 @@ def add_note(page: pymupdf.Page, point: Point, text: str, style: AnnotationStyle
     return annot.xref
 
 
-def add_free_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str, style: AnnotationStyle,
-                  fontsize: float = DEFAULT_FONT_SIZE) -> int:
+def add_free_text(
+    page: pymupdf.Page, rect: pymupdf.Rect, text: str, style: AnnotationStyle, fontsize: float = DEFAULT_FONT_SIZE
+) -> int:
     """
     Texto escrito sobre la pagina, derecho aunque la pagina este girada. El
     cuadro se ajusta al texto: si ``rect`` es angosto (un clic) toma el ancho
@@ -159,7 +167,12 @@ def add_free_text(page: pymupdf.Page, rect: pymupdf.Rect, text: str, style: Anno
         raise InvalidInputError("Escriba el texto que desea agregar.")
     rect = fit_text_rect(page, pymupdf.Rect(rect), text, fontsize, keep_width=pymupdf.Rect(rect).width >= 40)
     annot = page.add_freetext_annot(
-        _to_pdf(page, rect), text, fontsize=fontsize, fontname="helv", text_color=style.color, rotate=page.rotation,
+        _to_pdf(page, rect),
+        text,
+        fontsize=fontsize,
+        fontname="helv",
+        text_color=style.color,
+        rotate=page.rotation,
     )
     if style.opacity < 1:
         annot.set_opacity(style.opacity)
@@ -199,6 +212,7 @@ def add_ink(page: pymupdf.Page, strokes: Iterable[Sequence[Point]], style: Annot
 
 
 # * Editar --------------------------------------------------------------------
+
 
 def move(page: pymupdf.Page, xref: int, dx: float, dy: float) -> int:
     """
@@ -280,8 +294,9 @@ def text_lines(text: str, fontsize: float, width: float) -> list[str]:
     return lines
 
 
-def fit_text_rect(page: pymupdf.Page, rect: pymupdf.Rect, text: str, fontsize: float,
-                  keep_width: bool = True) -> pymupdf.Rect:
+def fit_text_rect(
+    page: pymupdf.Page, rect: pymupdf.Rect, text: str, fontsize: float, keep_width: bool = True
+) -> pymupdf.Rect:
     """
     Cuadro (visible) para ``text``: conserva la esquina superior izquierda y,
     si ``keep_width``, el ancho; el alto es el que necesitan las lineas.
@@ -309,6 +324,7 @@ def _refit(page: pymupdf.Page, annot: pymupdf.Annot, text: str, size: float) -> 
 
 # * Utilidades ----------------------------------------------------------------
 
+
 def _to_pdf(page: pymupdf.Page, rect: pymupdf.Rect) -> pymupdf.Rect:
     result = (pymupdf.Rect(rect) * page.derotation_matrix).normalize()
     if result.width < 4 or result.height < 4:
@@ -332,7 +348,10 @@ def _free_text_color(annot: pymupdf.Annot) -> Color | None:
     appearance = annot.parent.parent.xref_get_key(annot.xref, "DA")[1]
     numbers = appearance.split(" rg")[0].split()[-3:] if " rg" in appearance else []
     try:
-        return tuple(float(value) for value in numbers) if len(numbers) == 3 else None
+        if len(numbers) != 3:
+            return None
+        red, green, blue = (float(value) for value in numbers)
+        return red, green, blue
     except ValueError:
         return None
 
@@ -362,8 +381,9 @@ def _recreate_moved(page: pymupdf.Page, annot: pymupdf.Annot, delta: pymupdf.Poi
         if line_ends:
             new.set_line_ends(*line_ends)
     else:
-        new = page.add_ink_annot([[tuple(pymupdf.Point(point) + delta) for point in stroke_points]
-                                  for stroke_points in vertices])
+        new = page.add_ink_annot(
+            [[tuple(pymupdf.Point(point) + delta) for point in stroke_points] for stroke_points in vertices]
+        )
     new.set_colors(stroke=tuple(stroke[:3]))
     new.set_border(width=width)
     if opacity < 1:

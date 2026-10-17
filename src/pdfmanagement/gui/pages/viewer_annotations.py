@@ -22,7 +22,7 @@ from .. import style
 from ..dialogs import ask_text
 from ..dropdown import dropdown_menu
 from ..viewer.annotation_tools import DragTool, InkTool, MarkupTool, NoteTool, line_rects, tk_color
-from ..viewer.page_view import PageHit
+from ..viewer.page_view import PageHit, Tool
 from ..viewer.panels import AnnotationsPanel
 from ..widgets import ToolTip, icon_button, muted_label
 
@@ -65,14 +65,15 @@ class ViewerAnnotations:
         self.view = page.view
         self.color = COLORS["Amarillo"]
         self.width = WIDTHS["Medio"]
-        self.font_size = DEFAULT_FONT_SIZE
+        self.font_size: float = DEFAULT_FONT_SIZE
         self.active: str | None = None
         self.selected: AnnotationInfo | None = None
         self._cache: dict[int, list[AnnotationInfo]] = {}
         self._panel_dirty = True
         self.bar = self._build_bar(bar_parent)
-        self.panel = AnnotationsPanel(panel_parent, on_select=self._select_from_panel,
-                                      on_edit=self.edit_text, on_delete=self.delete_selected)
+        self.panel = AnnotationsPanel(
+            panel_parent, on_select=self._select_from_panel, on_edit=self.edit_text, on_delete=self._delete_from_panel
+        )
         self.view.add_overlay_painter(self._paint_selection)
 
     # * Construccion ----------------------------------------------------------
@@ -91,20 +92,31 @@ class ViewerAnnotations:
         ctk.CTkFrame(bar, width=1, height=22, fg_color=style.CARD_BORDER).pack(side="left", padx=6)
         self.swatches: dict[str, ctk.CTkButton] = {}
         for name, rgb in COLORS.items():
-            swatch = ctk.CTkButton(bar, text="", width=20, height=20, corner_radius=10, fg_color=tk_color(rgb),
-                                   hover_color=tk_color(rgb), border_width=0, command=lambda n=name: self.set_color(n))
+            swatch = ctk.CTkButton(
+                bar,
+                text="",
+                width=20,
+                height=20,
+                corner_radius=10,
+                fg_color=tk_color(rgb),
+                hover_color=tk_color(rgb),
+                border_width=0,
+                command=lambda n=name: self.set_color(n),
+            )
             swatch.pack(side="left", padx=2)
             ToolTip(swatch, f"Color {name.lower()} (tambien cambia la anotacion seleccionada)")
             self.swatches[name] = swatch
-        self.width_selector = ctk.CTkSegmentedButton(bar, values=list(WIDTHS), command=self._set_width,
-                                                     font=style.fonts().small)
+        self.width_selector = ctk.CTkSegmentedButton(
+            bar, values=list(WIDTHS), command=self._set_width, font=style.fonts().small
+        )
         self.width_selector.set("Medio")
         self.width_selector.pack(side="left", padx=(10, 0))
         for value, button in self.width_selector._buttons_dict.items():  # noqa: SLF001 (no admite bind)
             ToolTip(button, f"Grosor {value.lower()} para formas, lineas y dibujos")
         muted_label(bar, "Letra").pack(side="left", padx=(12, 4))
-        self.size_menu = dropdown_menu(bar, [str(size) for size in FONT_SIZES], self._set_font_size,
-                                       width=64, height=28)
+        self.size_menu = dropdown_menu(
+            bar, [str(size) for size in FONT_SIZES], self._set_font_size, width=64, height=28
+        )
         self.size_menu.set(str(DEFAULT_FONT_SIZE))
         self.size_menu.pack(side="left")
         ToolTip(self.size_menu, "Tamano de letra del texto nuevo o del cuadro de texto seleccionado")
@@ -133,6 +145,7 @@ class ViewerAnnotations:
             "note": lambda: NoteTool(self._note_done),
             "ink": lambda: InkTool(self._ink_done, lambda: self.color, lambda: self.width),
         }
+        tool: Tool
         if key in MARKUP:
             tool = MarkupTool(key, page._words_for, self._markup)  # noqa: SLF001
         elif key in tools:
@@ -169,15 +182,21 @@ class ViewerAnnotations:
         self._refresh_swatches()
         if self.selected is not None:
             info = self.selected
-            self._run(lambda session: session.set_annotation_color(info.page, info.xref, self.color),
-                      info.page, select=info.xref)
+            self._run(
+                lambda session: session.set_annotation_color(info.page, info.xref, self.color),
+                info.page,
+                select=info.xref,
+            )
 
     def _set_font_size(self, value: str) -> None:
         self.font_size = float(value)
         info = self.selected
         if info is not None and info.kind == "FreeText" and info.font_size != self.font_size:
-            self._run(lambda session: session.set_annotation_font_size(info.page, info.xref, self.font_size),
-                      info.page, select=info.xref)
+            self._run(
+                lambda session: session.set_annotation_font_size(info.page, info.xref, self.font_size),
+                info.page,
+                select=info.xref,
+            )
 
     def _set_width(self, name: str) -> None:
         self.width = WIDTHS[name]
@@ -219,15 +238,18 @@ class ViewerAnnotations:
             if text is None:
                 self.page.log_debug("Texto cancelado")
                 return
-            self._run(lambda session: session.add_free_text(page_index, rect, text, self.style(), self.font_size),
-                      page_index)
+            self._run(
+                lambda session: session.add_free_text(page_index, rect, text, self.style(), self.font_size), page_index
+            )
             return
         if kind in ("line", "arrow"):
             if abs(end[0] - start[0]) + abs(end[1] - start[1]) < 4:
                 self.page.selection_label.configure(text="Arrastre para dibujar la linea  ·  Esc para terminar")
                 return
-            self._run(lambda session: session.add_line(page_index, start, end, self.style(), arrow=kind == "arrow"),
-                      page_index)
+            self._run(
+                lambda session: session.add_line(page_index, start, end, self.style(), arrow=kind == "arrow"),
+                page_index,
+            )
             return
         if rect.width < 4 or rect.height < 4:
             self.page.selection_label.configure(text="Arrastre para dibujar la forma  ·  Esc para terminar")
@@ -244,9 +266,13 @@ class ViewerAnnotations:
 
     def hit(self, hit: PageHit) -> AnnotationInfo | None:
         """Anotacion bajo el punto; si hay varias, la mas pequena (la que esta encima)."""
-        candidates = [info for info in self.annotations_on(hit.page)
-                      if (info.rect + (-HIT_TOLERANCE, -HIT_TOLERANCE, HIT_TOLERANCE, HIT_TOLERANCE)).contains(
-                          pymupdf.Point(hit.x, hit.y))]
+        candidates = [
+            info
+            for info in self.annotations_on(hit.page)
+            if (info.rect + (-HIT_TOLERANCE, -HIT_TOLERANCE, HIT_TOLERANCE, HIT_TOLERANCE)).contains(
+                pymupdf.Point(hit.x, hit.y)
+            )
+        ]
         return min(candidates, key=lambda info: info.rect.width * info.rect.height, default=None)
 
     def select(self, info: AnnotationInfo | None) -> None:
@@ -270,8 +296,11 @@ class ViewerAnnotations:
 
     def move(self, info: AnnotationInfo, dx: float, dy: float) -> None:
         result: list[int] = []
-        self._run(lambda session: result.append(session.move_annotation(info.page, info.xref, dx, dy)),
-                  info.page, select=lambda: result[0] if result else None)
+        self._run(
+            lambda session: result.append(session.move_annotation(info.page, info.xref, dx, dy)),
+            info.page,
+            select=lambda: result[0] if result else None,
+        )
 
     def edit_text(self, info: AnnotationInfo | None = None) -> None:
         info = info or self.selected
@@ -289,6 +318,9 @@ class ViewerAnnotations:
         self.selected = None
         return self._run(lambda session: session.delete_annotation(info.page, info.xref), info.page)
 
+    def _delete_from_panel(self) -> None:
+        self.delete_selected()
+
     def _select_from_panel(self, info: AnnotationInfo) -> None:
         self.view.reveal(info.page, info.rect)
         self.selected = None
@@ -297,8 +329,14 @@ class ViewerAnnotations:
     def _paint_selection(self, view) -> None:
         info = self.selected
         if info is not None and info.page in view.visible_pages():
-            view._draw_rect(info.page, info.rect, pad=3, outline=style.themed(style.accent_color()),  # noqa: SLF001
-                            width=2, dash=(5, 3))
+            view.draw_rect(
+                info.page,
+                info.rect,
+                pad=3,
+                outline=style.themed(style.accent_color()),
+                width=2,
+                dash=(5, 3),
+            )
 
     # * Menu contextual -------------------------------------------------------
 
@@ -307,11 +345,22 @@ class ViewerAnnotations:
             menu.add_command(label=f"Editar texto de la {info.label.lower()}...", command=lambda: self.edit_text(info))
         colors = tk.Menu(menu, tearoff=0)
         for name in COLORS:
-            colors.add_command(label=name, command=lambda n=name: (self.select(info), self.set_color(n)))
+            colors.add_command(label=name, command=lambda n=name: self._recolor(info, n))  # type: ignore[misc]
         menu.add_cascade(label="Color", menu=colors)
-        menu.add_command(label=f"Eliminar {info.label.lower()}", accelerator="Supr",
-                         command=lambda: (self.select(info), self.delete_selected()))
+        menu.add_command(
+            label=f"Eliminar {info.label.lower()}",
+            accelerator="Supr",
+            command=lambda: self._delete(info),
+        )
         menu.add_separator()
+
+    def _recolor(self, info: AnnotationInfo, name: str) -> None:
+        self.select(info)
+        self.set_color(name)
+
+    def _delete(self, info: AnnotationInfo) -> None:
+        self.select(info)
+        self.delete_selected()
 
     # * Aplicar cambios -------------------------------------------------------
 
@@ -345,7 +394,9 @@ class ViewerAnnotations:
         """El documento cambio por completo (abrir, deshacer, editar paginas)."""
         self._cache.clear()
         if self.selected is not None and self.page.session is not None:
-            current = self.annotations_on(self.selected.page) if self.selected.page < self.page.session.page_count else []
+            current = (
+                self.annotations_on(self.selected.page) if self.selected.page < self.page.session.page_count else []
+            )
             self.selected = next((info for info in current if info.xref == self.selected.xref), None)
         else:
             self.selected = None

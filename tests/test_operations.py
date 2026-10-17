@@ -4,13 +4,13 @@ Pruebas de las operaciones del nucleo sobre PDFs reales generados al vuelo.
 
 import pymupdf
 import pytest
+from conftest import page_texts
 from pypdf import PdfReader
 
-from conftest import page_texts
 from pdfmanagement import core
 
-
 # * Unir ---------------------------------------------------------------------
+
 
 def test_merge_keeps_order(pdf_factory, tmp_path):
     first = pdf_factory("a.pdf", 2)
@@ -59,6 +59,7 @@ def test_failed_operation_does_not_leave_partial_files(pdf_factory, tmp_path):
 
 # * Extraer -------------------------------------------------------------------
 
+
 def test_extract_selected_pages_in_order(pdf_factory, tmp_path):
     source = pdf_factory("a.pdf", 5)
     result = core.extract_pages(source, tmp_path / "out.pdf", "4, 1-2")
@@ -83,6 +84,7 @@ def test_extract_with_passwords(pdf_factory, tmp_path):
 
 
 # * Proteger -----------------------------------------------------------------
+
 
 def test_lock_and_unlock_roundtrip(pdf_factory, tmp_path):
     source = pdf_factory("a.pdf", 2)
@@ -116,6 +118,7 @@ def test_unlock_validations(pdf_factory, tmp_path):
 
 
 # * Firmar -------------------------------------------------------------------
+
 
 def _image_bbox(pdf_path, page_index=0, password=None):
     with pymupdf.open(pdf_path) as document:
@@ -201,11 +204,15 @@ def test_sign_keeps_encryption(pdf_factory, signature_png, tmp_path):
 def test_sign_rejects_missing_page(pdf_factory, signature_png, tmp_path):
     with pytest.raises(core.InvalidInputError):
         core.sign_pdf_with_image(
-            pdf_factory("a.pdf", 2), tmp_path / "out.pdf", signature_png, core.SignaturePlacement(x=0, y=0, page_number=5)
+            pdf_factory("a.pdf", 2),
+            tmp_path / "out.pdf",
+            signature_png,
+            core.SignaturePlacement(x=0, y=0, page_number=5),
         )
 
 
 # * Informacion y utilidades --------------------------------------------------
+
 
 def test_pdf_info(pdf_factory, tmp_path):
     info = core.get_pdf_info(pdf_factory("a.pdf", 4))

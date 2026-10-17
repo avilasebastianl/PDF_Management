@@ -48,8 +48,9 @@ def move_pages(document: pymupdf.Document, pages: Iterable[int], target: int) ->
     return list(range(position, position + len(moving)))
 
 
-def insert_document(document: pymupdf.Document, source: pymupdf.Document, at: int,
-                    pages: Sequence[int] | None = None) -> int:
+def insert_document(
+    document: pymupdf.Document, source: pymupdf.Document, at: int, pages: Sequence[int] | None = None
+) -> int:
     """
     Inserta las paginas ``pages`` de ``source`` (todas si es ``None``) antes de
     ``at``. Copia contenido, recursos, rotacion y anotaciones; los enlaces a

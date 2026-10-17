@@ -72,7 +72,7 @@ class TextSelectTool(Tool):
             words = self.words_for(page)
             first = start[1] if page == start[0] else 0
             last = end[1] if page == end[0] else len(words) - 1
-            selected.extend((page, word) for word in words[first:last + 1])
+            selected.extend((page, word) for word in words[first : last + 1])
         return selected
 
     def selected_text(self) -> str:

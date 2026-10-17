@@ -47,9 +47,9 @@ class _Event:
 
 
 def _drag(page, start, end):
-    page._on_press(_Event(page, *start))
-    page._on_drag(_Event(page, *end))
-    page._on_release(None)
+    page.on_pointer_press(_Event(page, *start))
+    page.on_pointer_drag(_Event(page, *end))
+    page.on_pointer_release(None)
 
 
 def test_dragging_a_corner_resizes_keeping_the_opposite_corner(sign_page):
@@ -96,12 +96,14 @@ def test_resized_signature_matches_the_pdf(sign_page, tmp_path):
     rect = sign_page._current_rect()
     output = tmp_path / "firmado.pdf"
     core.sign_pdf_with_image(
-        sign_page.document_path, output, sign_page.signature_paths[sign_page.signature_menu.get()],
+        sign_page.document_path,
+        output,
+        sign_page.signature_paths[sign_page.signature_menu.get()],
         sign_page._placement(),
     )
     with pymupdf.open(output) as document:
         box = pymupdf.Rect(document[sign_page.page_index].get_image_info()[0]["bbox"])
-    assert all(abs(a - b) < 1 for a, b in zip(box, rect))
+    assert all(abs(a - b) < 1 for a, b in zip(box, rect, strict=True))
 
 
 def test_certificate_guide_link_opens_its_section(window):
@@ -113,6 +115,7 @@ def test_certificate_guide_link_opens_its_section(window):
 
 
 # * Biblioteca de firmas y vista previa -----------------------------------------
+
 
 def _preview_tk_image(page) -> str:
     """Imagen que muestra realmente la etiqueta Tk interna de la vista previa."""

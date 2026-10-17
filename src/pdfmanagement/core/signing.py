@@ -62,7 +62,9 @@ def load_signature(image_path: str | Path) -> Image.Image:
         image = source.convert("RGBA")
     if image.getchannel("A").getextrema()[0] == 255:
         brightness = image.convert("L")
-        image.putalpha(brightness.point(lambda value: 0 if value >= PAPER_THRESHOLD else min(255, (PAPER_THRESHOLD - value) * 4)))
+        image.putalpha(
+            brightness.point(lambda value: 0 if value >= PAPER_THRESHOLD else min(255, (PAPER_THRESHOLD - value) * 4))
+        )
     bbox = image.getchannel("A").getbbox()
     if not bbox:
         raise InvalidInputError("La imagen de firma esta vacia.")

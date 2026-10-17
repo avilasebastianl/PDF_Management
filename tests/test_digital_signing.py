@@ -6,11 +6,11 @@ autofirmado generado al vuelo y validando el resultado con pyHanko.
 import pymupdf
 import pytest
 from asn1crypto import x509 as asn1_x509
+from conftest import CERTIFICATE_PASSWORD, make_certificate, page_texts
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko_certvalidator import ValidationContext
 
-from conftest import CERTIFICATE_PASSWORD, make_certificate, page_texts
 from pdfmanagement import core
 
 
@@ -36,6 +36,7 @@ def signature_widget_rect(pdf_path, page_index):
 
 
 # * Firma valida ---------------------------------------------------------------
+
 
 def test_signed_pdf_validates(pdf_factory, tmp_path, certificate):
     source = pdf_factory("contrato.pdf", 2)
@@ -100,10 +101,13 @@ def test_multiple_signatures_remain_valid(pdf_factory, tmp_path, certificate):
     second_certificate = make_certificate(tmp_path / "segundo.p12", name="Segundo Firmante")
     first = sign(pdf_factory("a.pdf", 1), tmp_path / "una.pdf", certificate)
     both = core.sign_pdf_with_certificate(
-        first, tmp_path / "dos.pdf", second_certificate[0], CERTIFICATE_PASSWORD,
+        first,
+        tmp_path / "dos.pdf",
+        second_certificate[0],
+        CERTIFICATE_PASSWORD,
         placement=core.SignaturePlacement(x=50, y=50),
     )
-    first_status, = validate(both, certificate[1])[:1]
+    (first_status,) = validate(both, certificate[1])[:1]
     second_status = validate(both, second_certificate[1])[1]
     assert first_status.intact and first_status.valid
     assert second_status.bottom_line
@@ -116,8 +120,9 @@ def test_sign_encrypted_pdf(pdf_factory, tmp_path, certificate):
     with pytest.raises(core.WrongPasswordError):
         sign(locked, tmp_path / "firmado.pdf", certificate, password="mala")
 
-    result = sign(locked, tmp_path / "firmado.pdf", certificate, password="secreta",
-                  placement=core.SignaturePlacement(x=50, y=50))
+    result = sign(
+        locked, tmp_path / "firmado.pdf", certificate, password="secreta", placement=core.SignaturePlacement(x=50, y=50)
+    )
     assert core.get_pdf_info(result).encrypted
     texts = page_texts(result, "secreta")
     assert texts[0] == "Pagina 1"
@@ -126,13 +131,14 @@ def test_sign_encrypted_pdf(pdf_factory, tmp_path, certificate):
 
 # * Modificaciones posteriores --------------------------------------------------
 
+
 def test_tampering_after_signing_breaks_integrity(pdf_factory, tmp_path, certificate):
     result = sign(pdf_factory("a.pdf", 1), tmp_path / "firmado.pdf", certificate)
     data = bytearray(result.read_bytes())
     # El texto "Pagina 1" esta en hexadecimal en el contenido; se cambia a "Pagina 9".
-    original = "Pagina 1".encode().hex().encode()
+    original = b"Pagina 1".hex().encode()
     position = data.index(original)
-    data[position:position + len(original)] = "Pagina 9".encode().hex().encode()
+    data[position : position + len(original)] = b"Pagina 9".hex().encode()
     result.write_bytes(bytes(data))
 
     [status] = validate(result, certificate[1])
@@ -152,6 +158,7 @@ def test_editing_after_signing_is_detected(pdf_factory, tmp_path, certificate):
 
 
 # * Errores ---------------------------------------------------------------------
+
 
 def test_wrong_certificate_password(pdf_factory, tmp_path, certificate):
     source = pdf_factory("a.pdf", 1)

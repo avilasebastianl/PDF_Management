@@ -55,9 +55,7 @@ def parse_page_selection(selection: str, total_pages: int) -> list[int]:
     unique_indexes = list(dict.fromkeys(indexes))
     out_of_range = [index + 1 for index in unique_indexes if index >= total_pages]
     if out_of_range:
-        raise InvalidInputError(
-            f"Paginas fuera de rango: {out_of_range}. El PDF tiene {total_pages} paginas."
-        )
+        raise InvalidInputError(f"Paginas fuera de rango: {out_of_range}. El PDF tiene {total_pages} paginas.")
     if not unique_indexes:
         raise InvalidInputError("No se encontraron paginas validas.")
     return unique_indexes

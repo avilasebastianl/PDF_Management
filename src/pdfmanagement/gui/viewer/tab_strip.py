@@ -33,8 +33,9 @@ class TabInfo:
 
 
 class TabStrip(ctk.CTkFrame):
-    def __init__(self, master, *, on_select: Callable[[int], None], on_close: Callable[[int], None],
-                 on_new: Callable[[], None]) -> None:
+    def __init__(
+        self, master, *, on_select: Callable[[int], None], on_close: Callable[[int], None], on_new: Callable[[], None]
+    ) -> None:
         super().__init__(master, fg_color="transparent", height=TAB_HEIGHT + 4)
         self.on_select = on_select
         self.on_close = on_close
@@ -73,7 +74,7 @@ class TabStrip(ctk.CTkFrame):
 
     def _fit(self, title: str) -> str:
         room = int((self._width - 74) / CHAR_WIDTH)  # icono, margenes y boton de cerrar
-        return title if len(title) <= room else title[:max(room - 1, 4)] + "…"
+        return title if len(title) <= room else title[: max(room - 1, 4)] + "…"
 
     def _render(self) -> None:
         for widget in self.winfo_children():
@@ -83,18 +84,27 @@ class TabStrip(ctk.CTkFrame):
         accent = style.accent_color()
         for index, info in enumerate(self.tabs):
             active = index == self.active
-            tab = ctk.CTkFrame(self, width=self._width, height=TAB_HEIGHT, corner_radius=8,
-                               fg_color=style.CARD_BG if active else "transparent",
-                               border_width=1 if active else 0, border_color=style.CARD_BORDER)
+            tab = ctk.CTkFrame(
+                self,
+                width=self._width,
+                height=TAB_HEIGHT,
+                corner_radius=8,
+                fg_color=style.CARD_BG if active else "transparent",
+                border_width=1 if active else 0,
+                border_color=style.CARD_BORDER,
+            )
             tab.pack(side="left", padx=(0, 4), pady=(2, 2))
             tab.pack_propagate(False)
             tab.grid_propagate(False)
-            glyph = ctk.CTkLabel(tab, text="", width=18,
-                                 image=icon("pdf", 16, accent if active else style.TEXT_MUTED))
+            glyph = ctk.CTkLabel(tab, text="", width=18, image=icon("pdf", 16, accent if active else style.TEXT_MUTED))
             glyph.place(x=10, rely=0.5, anchor="w")
-            title = ctk.CTkLabel(tab, text=self._fit(info.title), anchor="w",
-                                 font=style.fonts().body_bold if active else style.fonts().body,
-                                 text_color=style.TEXT if active else style.TEXT_MUTED)
+            title = ctk.CTkLabel(
+                tab,
+                text=self._fit(info.title),
+                anchor="w",
+                font=style.fonts().body_bold if active else style.fonts().body,
+                text_color=style.TEXT if active else style.TEXT_MUTED,
+            )
             title.place(x=34, rely=0.5, anchor="w")
             dot = ctk.CTkLabel(tab, text="●", width=20, font=style.fonts().small, text_color=accent)
             close = icon_button(tab, "clear", lambda i=index: self.on_close(i), "Cerrar pestana (Ctrl+W)", size=22)

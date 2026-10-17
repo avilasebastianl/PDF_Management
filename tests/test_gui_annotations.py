@@ -6,8 +6,8 @@ los haria el raton. Requiere una pantalla (se omite si Tk no puede crear ventana
 """
 
 import pytest
-
 from conftest import make_pdf, pump
+
 from pdfmanagement.gui.pages import viewer_annotations
 
 
@@ -104,7 +104,9 @@ def test_select_move_edit_and_delete(viewer, monkeypatch):
     before = session.annotations(0)[0].rect
     gesture(viewer, [(101, 230), (130, 250), (160, 270)])  # arrastrar el borde del rectangulo
     after = session.annotations(0)[0]
-    assert after.rect.x0 == pytest.approx(before.x0 + 60, abs=2) and after.rect.y0 == pytest.approx(before.y0 + 40, abs=2)
+    assert after.rect.x0 == pytest.approx(before.x0 + 60, abs=2) and after.rect.y0 == pytest.approx(
+        before.y0 + 40, abs=2
+    )
     assert annotations.selected is not None and annotations.selected.xref == after.xref
     annotations.set_color("Verde")  # cambia el color de la seleccionada
     assert session.history.undo_label == "Cambiar color de rectangulo"
@@ -146,7 +148,9 @@ def test_annotations_panel_and_context_menu(viewer, gui_app, monkeypatch):
     assert session.annotations(1)[0].content == "editada"
     assert panel.list.listbox.get(1) == "p. 2  ·  Nota: editada"
     menu = viewer._page_menu(from_view=True, annotation=viewer.annotations.selected)
-    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) in ("command", "cascade")]
+    labels = [
+        menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) in ("command", "cascade")
+    ]
     assert labels[:3] == ["Editar texto de la nota...", "Color", "Eliminar nota"]
     menu.destroy()
     viewer.side_tabs.set("Paginas")

@@ -14,8 +14,7 @@ def list_signatures() -> list[Path]:
     """Firmas guardadas, de la mas reciente a la mas antigua."""
     paths.SIGNATURES_DIR.mkdir(parents=True, exist_ok=True)
     signatures = [
-        file for file in paths.SIGNATURES_DIR.iterdir()
-        if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS
+        file for file in paths.SIGNATURES_DIR.iterdir() if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS
     ]
     return sorted(signatures, key=lambda file: file.stat().st_mtime, reverse=True)
 

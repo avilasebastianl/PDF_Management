@@ -50,8 +50,13 @@ class DocumentProperties:
 class DocumentSession:
     """Documento abierto, con historial y guardado seguro."""
 
-    def __init__(self, document: pymupdf.Document, path: Path, password: str | None = None,
-                 on_change: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        document: pymupdf.Document,
+        path: Path,
+        password: str | None = None,
+        on_change: Callable[[], None] | None = None,
+    ) -> None:
         self.document = document
         self.path = path
         self.password = password
@@ -63,8 +68,9 @@ class DocumentSession:
         self._words: dict[int, list[tuple]] = {}
 
     @classmethod
-    def open(cls, pdf_file: str | Path, password: str | None = None,
-             on_change: Callable[[], None] | None = None) -> "DocumentSession":
+    def open(
+        cls, pdf_file: str | Path, password: str | None = None, on_change: Callable[[], None] | None = None
+    ) -> "DocumentSession":
         """
         Abre un PDF. Lanza ``PasswordRequiredError`` / ``WrongPasswordError``
         si esta protegido y la contrasena falta o no es correcta.
@@ -157,7 +163,9 @@ class DocumentSession:
     def delete(self, pages: Iterable[int]) -> str:
         pages = self._valid_pages(pages)
         if len(pages) >= self.page_count:
-            raise InvalidInputError("No se pueden eliminar todas las paginas: el documento debe conservar al menos una.")
+            raise InvalidInputError(
+                "No se pueden eliminar todas las paginas: el documento debe conservar al menos una."
+            )
         return self._edit(f"Eliminar {_describe(pages)}", page_ops.delete_pages, pages)
 
     def move(self, pages: Iterable[int], target: int) -> list[int]:
@@ -173,8 +181,9 @@ class DocumentSession:
         if pages == list(range(position, position + len(pages))):
             return pages  # ya estan ahi
         result: list[int] = []
-        self._edit(f"Mover {_describe(pages)}",
-                   lambda document: result.extend(page_ops.move_pages(document, pages, target)))
+        self._edit(
+            f"Mover {_describe(pages)}", lambda document: result.extend(page_ops.move_pages(document, pages, target))
+        )
         return result
 
     def insert_pdf(self, source_file: str | Path, at: int, password: str | None = None) -> int:
@@ -227,10 +236,12 @@ class DocumentSession:
     def add_note(self, page: int, point, text: str, style: AnnotationStyle) -> int:
         return self._annotate(f"Agregar nota (pagina {page + 1})", page, annots.add_note, point, text, style)
 
-    def add_free_text(self, page: int, rect, text: str, style: AnnotationStyle,
-                      fontsize: float = annots.DEFAULT_FONT_SIZE) -> int:
-        return self._annotate(f"Agregar texto (pagina {page + 1})", page, annots.add_free_text, rect, text, style,
-                              fontsize)
+    def add_free_text(
+        self, page: int, rect, text: str, style: AnnotationStyle, fontsize: float = annots.DEFAULT_FONT_SIZE
+    ) -> int:
+        return self._annotate(
+            f"Agregar texto (pagina {page + 1})", page, annots.add_free_text, rect, text, style, fontsize
+        )
 
     def add_shape(self, page: int, shape: str, rect, style: AnnotationStyle) -> int:
         name = "rectangulo" if shape == "rect" else "elipse"
@@ -315,7 +326,9 @@ class DocumentSession:
         options: dict = {"garbage": 3, "deflate": True}
         if keep_encryption and self.password:
             options.update(
-                encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw=self.password, owner_pw=self.password,
+                encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                user_pw=self.password,
+                owner_pw=self.password,
             )
         try:
             with atomic_output(output) as temp_path:
@@ -368,7 +381,9 @@ def _pdf_date(value: str) -> str:
     digits = value.removeprefix("D:")[:14]
     for pattern in ("%Y%m%d%H%M%S", "%Y%m%d%H%M", "%Y%m%d"):
         try:
-            return datetime.strptime(digits[: len(datetime.now().strftime(pattern))], pattern).strftime("%d/%m/%Y %H:%M")
+            return datetime.strptime(digits[: len(datetime.now().strftime(pattern))], pattern).strftime(
+                "%d/%m/%Y %H:%M"
+            )
         except ValueError:
             continue
     return value or ""

@@ -102,8 +102,8 @@ def _to_rgb(color: str) -> tuple[int, int, int]:
     """Convierte colores de PIL y los grises de Tk (``gray0``-``gray100``)."""
     name = color.lower()
     for prefix in ("gray", "grey"):
-        if name.startswith(prefix) and name[len(prefix):].isdigit():
-            level = round(int(name[len(prefix):]) * 2.55)
+        if name.startswith(prefix) and name[len(prefix) :].isdigit():
+            level = round(int(name[len(prefix) :]) * 2.55)
             return level, level, level
     return ImageColor.getrgb(color)[:3]
 

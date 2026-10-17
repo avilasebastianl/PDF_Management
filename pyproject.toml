@@ -11,3 +11,49 @@ authors = [{ name = "Sebastian Avila" }]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["src/pdfmanagement/_vendor"]
+
+[tool.ruff.lint]
+# Errores, estilo, imports ordenados, errores comunes (bugbear), sintaxis moderna,
+# simplificaciones, comprensiones y reglas propias de ruff.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF", "SLF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # caracteres "ambiguos" (·, •, ✓) son intencionales en textos de la interfaz
+    "SIM105",                       # contextlib.suppress no siempre es mas claro
+    "B008",                         # valores por defecto inmutables (dataclasses congeladas)
+    "RUF005",                       # rect + (dx, dy, dx, dy) es aritmetica de pymupdf.Rect, no concatenar
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "SIM117", "SLF001"]
+
+[tool.coverage.run]
+source = ["src/pdfmanagement"]
+omit = ["src/pdfmanagement/_vendor/*"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = false
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/pdfmanagement"]
+exclude = ["src/pdfmanagement/_vendor/"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["pdfmanagement._vendor.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Los tipos de PyMuPDF estan incompletos (constantes PDF_*, Document iterable): se usa como Any.
+module = ["pymupdf", "pymupdf.*"]
+follow_imports = "skip"

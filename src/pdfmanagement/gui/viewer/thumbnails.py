@@ -36,10 +36,15 @@ SHIFT_MASK = 0x0001
 class ThumbnailStrip(ctk.CTkFrame):
     """Lista vertical de miniaturas sincronizada con un ``PageView``."""
 
-    def __init__(self, master, view: PageView, *,
-                 on_move: Callable[[list[int], int], None] | None = None,
-                 on_context: Callable[[int, object], None] | None = None,
-                 on_selection: Callable[[list[int]], None] | None = None) -> None:
+    def __init__(
+        self,
+        master,
+        view: PageView,
+        *,
+        on_move: Callable[[list[int], int], None] | None = None,
+        on_context: Callable[[int, object], None] | None = None,
+        on_selection: Callable[[list[int]], None] | None = None,
+    ) -> None:
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.view = view
         self.on_move = on_move  # (paginas, destino): soltar delante de ``destino``
@@ -47,14 +52,20 @@ class ThumbnailStrip(ctk.CTkFrame):
         self.on_selection = on_selection
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, highlightthickness=0, background=style.themed(style.CARD_BG),
-                                width=THUMB_WIDTH + 2 * PADDING, yscrollincrement=20)
+        self.canvas = tk.Canvas(
+            self,
+            highlightthickness=0,
+            background=style.themed(style.CARD_BG),
+            width=THUMB_WIDTH + 2 * PADDING,
+            yscrollincrement=20,
+        )
         self.canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar = ctk.CTkScrollbar(self, orientation="vertical", command=self.canvas.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
-        self.canvas.configure(yscrollcommand=lambda a, b: (scrollbar.set(a, b), self._schedule()))
+        self._scrollbar = scrollbar
+        self.canvas.configure(yscrollcommand=self._on_yscroll)
         self.canvas.bind("<Configure>", lambda _e: self._schedule())
-        self.canvas.bind("<MouseWheel>", lambda e: (self.canvas.yview_scroll(-3 if e.delta > 0 else 3, "units"), self._schedule()))
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
@@ -75,6 +86,14 @@ class ThumbnailStrip(ctk.CTkFrame):
         view.on_page_changed(self._on_page_changed)
         view.on_layout_changed(self._on_layout_changed)
 
+    def _on_yscroll(self, first, last) -> None:
+        self._scrollbar.set(first, last)
+        self._schedule()
+
+    def _on_wheel(self, event) -> None:
+        self.canvas.yview_scroll(-3 if event.delta > 0 else 3, "units")
+        self._schedule()
+
     def _on_layout_changed(self) -> None:
         if len(self._slots) != self.view.page_count:
             self.rebuild(keep_scroll=True)
@@ -88,7 +107,7 @@ class ThumbnailStrip(ctk.CTkFrame):
         self._stale.clear()
         self._slots = []
         self.selected = {page for page in self.selected if page < self.view.page_count}
-        y = PADDING
+        y: float = PADDING
         muted = style.themed(style.TEXT_MUTED)
         for page, (width, height) in enumerate(self.view.sizes):
             scale = THUMB_WIDTH / width
@@ -99,10 +118,24 @@ class ThumbnailStrip(ctk.CTkFrame):
             thumb_w = width * scale
             x = PADDING + (THUMB_WIDTH - thumb_w) / 2
             self._slots.append((x, y, x + thumb_w, y + thumb_h, scale))
-            canvas.create_rectangle(x, y, x + thumb_w, y + thumb_h, fill="white", outline=style.themed(style.CARD_BORDER),
-                                    tags=("slot", f"slot{page}"))
-            canvas.create_text(PADDING + THUMB_WIDTH / 2, y + thumb_h + 4, text=str(page + 1), anchor="n",
-                               fill=muted, font=(style.FONT_FAMILY, 9), tags="label")
+            canvas.create_rectangle(
+                x,
+                y,
+                x + thumb_w,
+                y + thumb_h,
+                fill="white",
+                outline=style.themed(style.CARD_BORDER),
+                tags=("slot", f"slot{page}"),
+            )
+            canvas.create_text(
+                PADDING + THUMB_WIDTH / 2,
+                y + thumb_h + 4,
+                text=str(page + 1),
+                anchor="n",
+                fill=muted,
+                font=(style.FONT_FAMILY, 9),
+                tags="label",
+            )
             y += thumb_h + LABEL_HEIGHT + PADDING
         self._tops = [slot[1] for slot in self._slots]
         canvas.configure(scrollregion=(0, 0, THUMB_WIDTH + 2 * PADDING, y))
@@ -153,8 +186,9 @@ class ThumbnailStrip(ctk.CTkFrame):
         self.canvas.delete("current")
         if page < len(self._slots):
             x0, y0, x1, y1, _scale = self._slots[page]
-            self.canvas.create_rectangle(x0 - 4, y0 - 4, x1 + 4, y1 + 4, outline=style.themed(style.accent_color()),
-                                         width=3, tags="current")
+            self.canvas.create_rectangle(
+                x0 - 4, y0 - 4, x1 + 4, y1 + 4, outline=style.themed(style.accent_color()), width=3, tags="current"
+            )
 
     def _draw_selection(self) -> None:
         """Fondo resaltado detras de las paginas seleccionadas (si hay mas de una o difiere de la actual)."""
@@ -166,9 +200,17 @@ class ThumbnailStrip(ctk.CTkFrame):
         accent = style.themed(style.accent_color())
         for page in sorted(self.selected):
             if page < len(self._slots):
-                x0, y0, x1, y1, _scale = self._slots[page]
-                canvas.create_rectangle(PADDING - 8, y0 - 8, PADDING + THUMB_WIDTH + 8, y1 + LABEL_HEIGHT + 2,
-                                        fill=fill, outline=accent, width=1, tags="selected")
+                _x0, y0, _x1, y1, _scale = self._slots[page]
+                canvas.create_rectangle(
+                    PADDING - 8,
+                    y0 - 8,
+                    PADDING + THUMB_WIDTH + 8,
+                    y1 + LABEL_HEIGHT + 2,
+                    fill=fill,
+                    outline=accent,
+                    width=1,
+                    tags="selected",
+                )
         canvas.tag_lower("selected")
 
     # * Seleccion -----------------------------------------------------------

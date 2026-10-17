@@ -92,8 +92,15 @@ class RenderScheduler:
         self._cache.move_to_end(key)
         return entry[0]
 
-    def request(self, page: int, scale: float, callback: RenderCallback, priority: float = 0.0,
-                tile: Tile = None, clip: pymupdf.Rect | None = None) -> None:
+    def request(
+        self,
+        page: int,
+        scale: float,
+        callback: RenderCallback,
+        priority: float = 0.0,
+        tile: Tile = None,
+        clip: pymupdf.Rect | None = None,
+    ) -> None:
         """
         Pide la pagina (o el mosaico ``tile`` recortado a ``clip``, en puntos
         de la pagina visible) a ``scale``. Si esta en cache se responde
@@ -194,7 +201,12 @@ class RenderScheduler:
         self.rendered += 1
         logger.debug(
             "Pagina %d%s dibujada a escala %.2f en %.0f ms (%dx%d px, cache %.0f MB)",
-            page + 1, f" mosaico {tile}" if tile else "", scale, (time.perf_counter() - started) * 1000,
-            pixmap.width, pixmap.height, self._cache_bytes / 1_048_576,
+            page + 1,
+            f" mosaico {tile}" if tile else "",
+            scale,
+            (time.perf_counter() - started) * 1000,
+            pixmap.width,
+            pixmap.height,
+            self._cache_bytes / 1_048_576,
         )
         return photo

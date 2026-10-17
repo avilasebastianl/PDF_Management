@@ -24,12 +24,17 @@ class ConvertPage(BasePage):
 
     def build(self) -> None:
         source = Card(
-            self.body, "Documento",
+            self.body,
+            "Documento",
             "Formatos: " + ", ".join(core.OFFICE_EXTENSIONS) + "   ·   Requiere Microsoft Office instalado.",
         )
         source.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
         self.source_field = FileField(
-            source, source.row(0), "Archivo", filetypes=OFFICE_FILETYPES, on_change=self._on_source_selected,
+            source,
+            source.row(0),
+            "Archivo",
+            filetypes=OFFICE_FILETYPES,
+            on_change=self._on_source_selected,
             placeholder="Seleccione o arrastre un documento",
         )
         self.source_info = muted_label(source)
@@ -37,8 +42,9 @@ class ConvertPage(BasePage):
 
         output = Card(self.body, "Resultado")
         output.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
-        self.output_field = FileField(output, output.row(0), "Guardar como", mode="save",
-                                      initial_dir=lambda: self.app.settings.output_path)
+        self.output_field = FileField(
+            output, output.row(0), "Guardar como", mode="save", initial_dir=lambda: self.app.settings.output_path
+        )
 
         self.run_button = primary_button(self.body, "Convertir a PDF", self._convert, "convert", width=170)
         self.run_button.grid(row=2, column=0, sticky="e", pady=(4, style.PAD))

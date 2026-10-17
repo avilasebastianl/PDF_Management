@@ -3,10 +3,10 @@ Ventanas secundarias: contrasena, ayuda y creacion de firmas.
 """
 
 import tkinter as tk
-from tkinter import messagebox
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from tkinter import messagebox
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw
@@ -34,6 +34,7 @@ def _prepare_toplevel(window: ctk.CTkToplevel, parent, title: str, width: int, h
 
 
 # * Contrasena --------------------------------------------------------------
+
 
 def ask_password(parent, file_name: str, retry: bool = False) -> str | None:
     """Solicita la contrasena de un PDF en un dialogo modal. ``None`` si se cancela."""
@@ -121,6 +122,7 @@ def ask_text(parent, title: str, message: str, initial: str = "") -> str | None:
 
 # * Propiedades del documento -----------------------------------------------
 
+
 class DocumentPropertiesWindow(ctk.CTkToplevel):
     """Datos del PDF abierto en el visor (solo lectura)."""
 
@@ -148,7 +150,12 @@ class DocumentPropertiesWindow(ctk.CTkToplevel):
         ]
         if current_page_size:
             width, height = current_page_size
-            rows.append(("Pagina actual", f"{width:.0f} x {height:.0f} pt  ({width / 72 * 25.4:.0f} x {height / 72 * 25.4:.0f} mm)"))
+            rows.append(
+                (
+                    "Pagina actual",
+                    f"{width:.0f} x {height:.0f} pt  ({width / 72 * 25.4:.0f} x {height / 72 * 25.4:.0f} mm)",
+                )
+            )
         rows += [
             ("Version PDF", properties.pdf_version or "-"),
             ("Protegido", "Si, con contrasena" if properties.encrypted else "No"),
@@ -173,6 +180,7 @@ class DocumentPropertiesWindow(ctk.CTkToplevel):
 
 
 # * Ayuda -------------------------------------------------------------------
+
 
 class HelpWindow(ctk.CTkToplevel):
     """
@@ -237,8 +245,15 @@ class HelpWindow(ctk.CTkToplevel):
         code_background = style.themed(("gray92", "gray24"))
         native.tag_configure("code", font=("Consolas", size(10)), background=code_background)
         native.tag_configure(
-            "codeblock", font=("Consolas", size(9)), background=code_background, wrap="char",
-            lmargin1=14, lmargin2=14, rmargin=14, spacing1=2, spacing3=2,
+            "codeblock",
+            font=("Consolas", size(9)),
+            background=code_background,
+            wrap="char",
+            lmargin1=14,
+            lmargin2=14,
+            rmargin=14,
+            spacing1=2,
+            spacing3=2,
         )
 
         code_lines: list[str] | None = None
@@ -302,7 +317,12 @@ class HelpWindow(ctk.CTkToplevel):
         """Bloque de codigo con fondo propio y boton para copiarlo al portapapeles."""
         code = "\n".join(lines).strip("\n")
         button = ctk.CTkButton(
-            native, text="Copiar", width=70, height=24, corner_radius=6, font=style.fonts().small,
+            native,
+            text="Copiar",
+            width=70,
+            height=24,
+            corner_radius=6,
+            font=style.fonts().small,
         )
         button.configure(command=lambda: self._copy(code, button))
         native.window_create("end", window=button, padx=14, pady=4)
@@ -344,6 +364,7 @@ class HelpWindow(ctk.CTkToplevel):
 
 
 # * Crear firma -------------------------------------------------------------
+
 
 class SignaturePad(ctk.CTkToplevel):
     """
@@ -413,8 +434,15 @@ class SignaturePad(ctk.CTkToplevel):
         stroke = self.strokes[-1]
         last_x, last_y, width = stroke[-1]
         self.canvas.create_line(
-            last_x, last_y, event.x, event.y,
-            width=width, fill="black", capstyle="round", joinstyle="round", smooth=True,
+            last_x,
+            last_y,
+            event.x,
+            event.y,
+            width=width,
+            fill="black",
+            capstyle="round",
+            joinstyle="round",
+            smooth=True,
             tags=f"stroke{len(self.strokes)}",
         )
         stroke.append((event.x, event.y, width))
@@ -452,8 +480,12 @@ class SignaturePad(ctk.CTkToplevel):
         if bbox:
             margin = 6 * scale
             image = image.crop(
-                (max(bbox[0] - margin, 0), max(bbox[1] - margin, 0),
-                 min(bbox[2] + margin, image.width), min(bbox[3] + margin, image.height))
+                (
+                    max(bbox[0] - margin, 0),
+                    max(bbox[1] - margin, 0),
+                    min(bbox[2] + margin, image.width),
+                    min(bbox[3] + margin, image.height),
+                )
             )
 
         output = signature_path_for(self.name.get(), ".png")

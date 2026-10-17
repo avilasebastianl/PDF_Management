@@ -21,3 +21,10 @@ export/
 # Archivos de prueba locales
 pdf/
 origin/
+
+# Cobertura de pruebas
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/

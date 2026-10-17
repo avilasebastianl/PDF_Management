@@ -51,9 +51,9 @@ PLACEHOLDER_LOCKED = (
     "El documento esta protegido",
     "Seleccionelo de nuevo e ingrese su contrasena para verlo.",
 )
-HANDLE_SIZE = 9          # lado de las asas de redimensionado, en pixeles del visor
-SIZE_STEP = 10           # paso de los botones - / + del tamano, en puntos
-SIZE_SLIDER_MAX = 400    # ancho maximo del deslizador (se ajusta a la pagina)
+HANDLE_SIZE = 9  # lado de las asas de redimensionado, en pixeles del visor
+SIZE_STEP = 10  # paso de los botones - / + del tamano, en puntos
+SIZE_SLIDER_MAX = 400  # ancho maximo del deslizador (se ajusta a la pagina)
 _CORNER_CURSORS = {"nw": "size_nw_se", "se": "size_nw_se", "ne": "size_ne_sw", "sw": "size_ne_sw"}
 
 
@@ -66,19 +66,19 @@ class _SignatureTool(Tool):
         self.page = page
 
     def press(self, view, event, hit) -> None:
-        self.page._on_press(event)
+        self.page.on_pointer_press(event)
 
     def drag(self, view, event, hit) -> None:
-        self.page._on_drag(event)
+        self.page.on_pointer_drag(event)
 
     def release(self, view, event, hit) -> None:
-        self.page._on_release(event)
+        self.page.on_pointer_release(event)
 
     def motion(self, view, event, hit) -> None:
-        self.page._on_motion(event)
+        self.page.on_pointer_motion(event)
 
     def draw(self, view) -> None:
-        self.page._draw_overlay()
+        self.page.draw_overlay()
 
 
 class SignPage(BasePage):
@@ -103,7 +103,7 @@ class SignPage(BasePage):
         self._resize_corner: str | None = None
         self._resize_anchor: tuple[float, float] = (0.0, 0.0)
         self._syncing_size = False
-        self._overlay_photo = None
+        self._overlay_photo: ImageTk.PhotoImage | None = None
         self._redraw_pending = False
 
         self.body.grid_columnconfigure(0, weight=0)
@@ -126,7 +126,10 @@ class SignPage(BasePage):
         panel.grid_columnconfigure(0, weight=1)
 
         self.mode = ctk.CTkSegmentedButton(
-            panel, values=[VISUAL, DIGITAL], command=lambda value: (self.log("Tipo de firma: %s", value), self._apply_mode()), height=34,
+            panel,
+            values=[VISUAL, DIGITAL],
+            command=self._on_mode_selected,
+            height=34,
             font=style.fonts().body,
         )
         self.mode.set(VISUAL)
@@ -135,8 +138,12 @@ class SignPage(BasePage):
         document = Card(panel, "Documento")
         document.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
         self.source_field = FileField(
-            document, document.row(0), "PDF a firmar", on_change=self._open_document,
-            placeholder="Seleccione o arrastre un PDF", stacked=True,
+            document,
+            document.row(0),
+            "PDF a firmar",
+            on_change=self._open_document,
+            placeholder="Seleccione o arrastre un PDF",
+            stacked=True,
         )
 
         signature = Card(panel, "Firma")
@@ -147,17 +154,27 @@ class SignPage(BasePage):
         selector.grid_columnconfigure(0, weight=1)
         # Lista de la biblioteca de firmas: muestra 6 y se desplaza si hay mas.
         self.signature_menu = dropdown_menu(
-            selector, [NO_SIGNATURE], self._on_signature_selected, width=160, height=34,
+            selector,
+            [NO_SIGNATURE],
+            self._on_signature_selected,
+            width=160,
+            height=34,
         )
         self.signature_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         icon_button(selector, "edit", self._draw_signature, "Dibujar firma nueva").grid(row=0, column=1)
         icon_button(selector, "image", self._import_signature, "Importar imagen (PNG/JPG)").grid(row=0, column=2)
         icon_button(selector, "delete", self._delete_signature, "Borrar firma seleccionada").grid(row=0, column=3)
         self.signature_preview = ctk.CTkLabel(
-            signature, text="Sin firma seleccionada", height=96, corner_radius=8,
-            fg_color=("white", "gray92"), text_color="gray45",
+            signature,
+            text="Sin firma seleccionada",
+            height=96,
+            corner_radius=8,
+            fg_color=("white", "gray92"),
+            text_color="gray45",
         )
-        self.signature_preview.grid(row=signature.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(0, 4))
+        self.signature_preview.grid(
+            row=signature.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(0, 4)
+        )
         self.signature_hint = muted_label(
             signature, "Opcional: la imagen se muestra sobre la leyenda del certificado.", wraplength=290
         )
@@ -174,14 +191,18 @@ class SignPage(BasePage):
         self.width_var = tk.StringVar(value=str(int(core.DEFAULT_SIGNATURE_WIDTH)))
         self.x_var = tk.StringVar()
         self.y_var = tk.StringVar()
-        for index, (label, variable, tip) in enumerate((
-            ("Pagina", self.page_var, None),
-            ("Ancho", self.width_var, "pt"),
-            ("X", self.x_var, "pt"),
-            ("Y", self.y_var, "pt"),
-        )):
+        for index, (label, variable, _tip) in enumerate(
+            (
+                ("Pagina", self.page_var, None),
+                ("Ancho", self.width_var, "pt"),
+                ("X", self.x_var, "pt"),
+                ("Y", self.y_var, "pt"),
+            )
+        ):
             row, column = divmod(index, 2)
-            field_label(grid, label).grid(row=row, column=column * 2, sticky="w", padx=(0 if column == 0 else 12, 6), pady=4)
+            field_label(grid, label).grid(
+                row=row, column=column * 2, sticky="w", padx=(0 if column == 0 else 12, 6), pady=4
+            )
             ctk.CTkEntry(grid, textvariable=variable, width=70, height=30).grid(
                 row=row, column=column * 2 + 1, sticky="ew", pady=4
             )
@@ -189,23 +210,37 @@ class SignPage(BasePage):
         sizer = ctk.CTkFrame(grid, fg_color="transparent")
         sizer.grid(row=2, column=1, columnspan=3, sticky="ew", pady=(8, 4))
         sizer.grid_columnconfigure(1, weight=1)
-        icon_button(sizer, "minus", lambda: self._step_size(-SIZE_STEP), "Achicar la firma", size=28).grid(row=0, column=0)
+        icon_button(sizer, "minus", lambda: self._step_size(-SIZE_STEP), "Achicar la firma", size=28).grid(
+            row=0, column=0
+        )
         self.size_slider = ctk.CTkSlider(
-            sizer, from_=MIN_SIGNATURE_WIDTH, to=SIZE_SLIDER_MAX, command=self._on_size_slider, height=16,
+            sizer,
+            from_=MIN_SIGNATURE_WIDTH,
+            to=SIZE_SLIDER_MAX,
+            command=self._on_size_slider,
+            height=16,
         )
         self.size_slider.set(core.DEFAULT_SIGNATURE_WIDTH)
         self.size_slider.grid(row=0, column=1, sticky="ew", padx=4)
-        icon_button(sizer, "add", lambda: self._step_size(SIZE_STEP), "Agrandar la firma", size=28).grid(row=0, column=2)
+        icon_button(sizer, "add", lambda: self._step_size(SIZE_STEP), "Agrandar la firma", size=28).grid(
+            row=0, column=2
+        )
         self.all_pages = tk.BooleanVar(value=False)
         self.all_pages_check = ctk.CTkCheckBox(
-            position, text="Firmar todas las paginas", variable=self.all_pages, font=style.fonts().body,
-            command=lambda: (self.log("Firmar todas las paginas: %s", "si" if self.all_pages.get() else "no"),
-                             self._schedule_overlay()),
+            position,
+            text="Firmar todas las paginas",
+            variable=self.all_pages,
+            font=style.fonts().body,
+            command=self._on_all_pages_toggled,
         )
-        self.all_pages_check.grid(row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2))
-        muted_label(position, "Arrastre las esquinas del recuadro para cambiar el tamano. Medidas en puntos (72 pt = 1 pulgada).", wraplength=290).grid(
-            row=position.row(2), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD
+        self.all_pages_check.grid(
+            row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2)
         )
+        muted_label(
+            position,
+            "Arrastre las esquinas del recuadro para cambiar el tamano. Medidas en puntos (72 pt = 1 pulgada).",
+            wraplength=290,
+        ).grid(row=position.row(2), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
         for variable in (self.width_var, self.x_var, self.y_var):
             variable.trace_add("write", lambda *_: self._schedule_overlay())
         self.width_var.trace_add("write", lambda *_: self._sync_size_slider())
@@ -213,8 +248,14 @@ class SignPage(BasePage):
 
         output = Card(panel, "Resultado")
         output.grid(row=5, column=0, sticky="ew", pady=(0, style.GAP))
-        self.output_field = FileField(output, output.row(0), "Guardar como", mode="save", stacked=True,
-                                      initial_dir=lambda: self.app.settings.output_path)
+        self.output_field = FileField(
+            output,
+            output.row(0),
+            "Guardar como",
+            mode="save",
+            stacked=True,
+            initial_dir=lambda: self.app.settings.output_path,
+        )
 
         self.run_button = primary_button(sidebar, "Firmar PDF", self._sign, "sign")
         self.run_button.grid(row=1, column=0, sticky="ew", pady=(style.GAP, 0), padx=(0, 14))
@@ -232,8 +273,12 @@ class SignPage(BasePage):
         warning.configure(text_color=style.WARNING)
         warning.grid(row=card.row(0), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(4, 0))
         self.certificate_field = FileField(
-            card, card.row(1), "Archivo .pfx / .p12", filetypes=CERTIFICATE_FILETYPES,
-            placeholder="Seleccione su certificado", stacked=True,
+            card,
+            card.row(1),
+            "Archivo .pfx / .p12",
+            filetypes=CERTIFICATE_FILETYPES,
+            placeholder="Seleccione su certificado",
+            stacked=True,
         )
         # Acceso directo a la guia: una sola linea, no ocupa espacio en el panel.
         guide_link = ctk.CTkButton(
@@ -262,13 +307,15 @@ class SignPage(BasePage):
             )
         self.visible = tk.BooleanVar(value=True)
         ctk.CTkCheckBox(
-            card, text="Mostrar la firma en el documento", variable=self.visible, font=style.fonts().body,
-            command=lambda: (self.log("Firma digital visible: %s", "si" if self.visible.get() else "no"),
-                             self._schedule_overlay()),
+            card,
+            text="Mostrar la firma en el documento",
+            variable=self.visible,
+            font=style.fonts().body,
+            command=self._on_visible_toggled,
         ).grid(row=card.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 6))
-        muted_label(
-            card, "La contrasena del certificado se pide al firmar y nunca se guarda.", wraplength=290
-        ).grid(row=card.row(6), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD)
+        muted_label(card, "La contrasena del certificado se pide al firmar y nunca se guarda.", wraplength=290).grid(
+            row=card.row(6), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD
+        )
 
     def _build_viewer(self) -> None:
         viewer = Card(self.body)
@@ -281,9 +328,11 @@ class SignPage(BasePage):
         # Visor compartido (el mismo de la seccion Visor) en modo pagina unica;
         # la firma es una herramienta mas sobre la pagina.
         self.view = PageView(
-            viewer, continuous=False, placeholder=PLACEHOLDER_EMPTY,
+            viewer,
+            continuous=False,
+            placeholder=PLACEHOLDER_EMPTY,
             on_empty_click=lambda: self.source_field.browse(),
-            on_drop=lambda files: files and self.source_field.set(files[0]),
+            on_drop=self._on_drop,
         )
         self.viewer_toolbar = ViewerToolbar(viewer, self.view, page_entry=False, zoom_menu=False)
         self.viewer_toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 8))
@@ -354,11 +403,31 @@ class SignPage(BasePage):
             return self.visible.get()
         return self.signature_image is not None
 
+    # * Eventos de controles ---------------------------------------------------
+
+    def _on_mode_selected(self, value: str) -> None:
+        self.log("Tipo de firma: %s", value)
+        self._apply_mode()
+
+    def _on_all_pages_toggled(self) -> None:
+        self.log("Firmar todas las paginas: %s", "si" if self.all_pages.get() else "no")
+        self._schedule_overlay()
+
+    def _on_visible_toggled(self) -> None:
+        self.log("Firma digital visible: %s", "si" if self.visible.get() else "no")
+        self._schedule_overlay()
+
+    def _on_drop(self, files: list) -> None:
+        if files:
+            self.source_field.set(files[0])
+
     # * Documento -------------------------------------------------------------
 
     def _open_document(self, path: Path) -> None:
         self._close_document()
         source = self.resolved(path)
+        if source is None:
+            return
         password = self.passwords.get(source)
         retry = False
         while True:
@@ -366,7 +435,9 @@ class SignPage(BasePage):
                 self.document = core.open_document(source, password)
                 break
             except core.PasswordRequiredError as error:
-                self.log("El documento %s pide contrasena%s", source.name, " (la anterior no era correcta)" if retry else "")
+                self.log(
+                    "El documento %s pide contrasena%s", source.name, " (la anterior no era correcta)" if retry else ""
+                )
                 password = ask_password(self, source.name, retry=retry or isinstance(error, core.WrongPasswordError))
                 retry = True
                 if not password:
@@ -389,8 +460,11 @@ class SignPage(BasePage):
         if not self.x_var.get() or not self.y_var.get():
             self._place_default()
         self.log(
-            "Documento abierto: %s", source.name,
-            paginas=self.document.page_count, protegido=bool(password), pagina_mostrada=self.page_index + 1,
+            "Documento abierto: %s",
+            source.name,
+            paginas=self.document.page_count,
+            protegido=bool(password),
+            pagina_mostrada=self.page_index + 1,
         )
 
     def _close_document(self) -> None:
@@ -473,6 +547,7 @@ class SignPage(BasePage):
             filetypes=(("Imagenes", "*.png *.jpg *.jpeg"), ("PNG", "*.png"), ("JPG", "*.jpg *.jpeg")),
         )
         if chosen:
+
             def import_and_select() -> None:
                 stored = signatures.import_signature(chosen)
                 self.log("Firma importada: %s", Path(chosen).name, guardada_como=stored.name)
@@ -517,9 +592,7 @@ class SignPage(BasePage):
     def _set_position(self, x: float, y: float) -> None:
         placement = self._placement()
         width = placement.width if placement else core.DEFAULT_SIGNATURE_WIDTH
-        rect = core.signature_rect(
-            self.page_rect, core.SignaturePlacement(x=x, y=y, width=width), self.aspect_ratio
-        )
+        rect = core.signature_rect(self.page_rect, core.SignaturePlacement(x=x, y=y, width=width), self.aspect_ratio)
         self.x_var.set(f"{rect.x0:.1f}")
         self.y_var.set(f"{rect.y0:.1f}")
 
@@ -530,13 +603,15 @@ class SignPage(BasePage):
         except ValueError:
             width = core.DEFAULT_SIGNATURE_WIDTH
         margin = 54
-        self._set_position(self.page_rect.width - width - margin, self.page_rect.height - width * self.aspect_ratio - margin)
+        self._set_position(
+            self.page_rect.width - width - margin, self.page_rect.height - width * self.aspect_ratio - margin
+        )
 
     def _to_page_point(self, event) -> tuple[float, float]:
         hit = self.view.event_to_page(event, clamp=True)
         return (hit.x, hit.y) if hit is not None else (0.0, 0.0)
 
-    def _on_press(self, event) -> None:
+    def on_pointer_press(self, event) -> None:
         if self.document is None:
             self.source_field.browse()
             return
@@ -551,7 +626,7 @@ class SignPage(BasePage):
         x, y = self._to_page_point(event)
         rect = self._current_rect()
         corner = self._corner_at(x, y, rect)
-        if corner is not None:
+        if corner is not None and rect is not None:
             # La esquina opuesta queda fija mientras se arrastra.
             self._resize_corner = corner
             self._interaction = "redimensionar"
@@ -570,7 +645,7 @@ class SignPage(BasePage):
         self._drag_offset = (width / 2, height / 2)
         self._set_position(x - width / 2, y - height / 2)
 
-    def _on_drag(self, event) -> None:
+    def on_pointer_drag(self, event) -> None:
         if self.document is None:
             return
         x, y = self._to_page_point(event)
@@ -582,7 +657,7 @@ class SignPage(BasePage):
         elif self._drag_offset is not None:
             self._set_position(x - self._drag_offset[0], y - self._drag_offset[1])
 
-    def _on_release(self, _event) -> None:
+    def on_pointer_release(self, _event) -> None:
         if self._interaction:
             self._log_placement(self._interaction)
         self._interaction = None
@@ -594,11 +669,15 @@ class SignPage(BasePage):
         placement = self._placement()
         if placement is not None:
             self.log_debug(
-                "Firma %s", {"mover": "movida", "colocar": "colocada", "redimensionar": "redimensionada"}.get(action, action),
-                pagina=placement.page_number, x=placement.x, y=placement.y, ancho=placement.width,
+                "Firma %s",
+                {"mover": "movida", "colocar": "colocada", "redimensionar": "redimensionada"}.get(action, action),
+                pagina=placement.page_number,
+                x=placement.x,
+                y=placement.y,
+                ancho=placement.width,
             )
 
-    def _on_motion(self, event) -> None:
+    def on_pointer_motion(self, event) -> None:
         """Cursor segun lo que hay debajo: asa (redimensionar), firma (mover) o pagina."""
         if self.document is None:
             cursor = "hand2"
@@ -623,8 +702,10 @@ class SignPage(BasePage):
             return None
         tolerance = HANDLE_SIZE / self.scale
         for name, (corner_x, corner_y) in (
-            ("nw", (rect.x0, rect.y0)), ("ne", (rect.x1, rect.y0)),
-            ("sw", (rect.x0, rect.y1)), ("se", (rect.x1, rect.y1)),
+            ("nw", (rect.x0, rect.y0)),
+            ("ne", (rect.x1, rect.y0)),
+            ("sw", (rect.x0, rect.y1)),
+            ("se", (rect.x1, rect.y1)),
         ):
             if abs(x - corner_x) <= tolerance and abs(y - corner_y) <= tolerance:
                 return name
@@ -643,8 +724,10 @@ class SignPage(BasePage):
         aspect = self.aspect_ratio
         width = max(MIN_SIGNATURE_WIDTH, min(width, self.page_rect.width, self.page_rect.height / aspect))
         height = width * aspect
+        current = self._current_rect()
+        if current is None:
+            return
         if corner is None or anchor is None:
-            current = self._current_rect()
             center_x, center_y = (current.x0 + current.x1) / 2, (current.y0 + current.y1) / 2
             x, y = center_x - width / 2, center_y - height / 2
         else:
@@ -722,7 +805,7 @@ class SignPage(BasePage):
         self._redraw_pending = False
         self.view.redraw_overlays()  # borra la capa y llama a _SignatureTool.draw
 
-    def _draw_overlay(self) -> None:
+    def draw_overlay(self) -> None:
         """Dibuja la firma, su borde y las asas (el visor ya borro la capa anterior)."""
         rect = self._current_rect()
         if rect is None or not self._overlay_visible():
@@ -734,21 +817,35 @@ class SignPage(BasePage):
         image_height = height
         if self.digital:
             caption_height = rect.width * core.CAPTION_RATIO * self.scale
-            image_height = int(round(height - caption_height))
+            image_height = round(height - caption_height)
             self._draw_caption(x0, y0 + height, width, caption_height)
         if self.signature_image is not None and image_height > 0:
-            self._overlay_photo = ImageTk.PhotoImage(self.signature_image.resize((width, image_height), Image.LANCZOS))
+            self._overlay_photo = ImageTk.PhotoImage(
+                self.signature_image.resize((width, image_height), Image.Resampling.LANCZOS)
+            )
             self.canvas.create_image(x0, y0, anchor="nw", image=self._overlay_photo, tags="overlay")
         accent = style.themed(style.accent_color())
         self.canvas.create_rectangle(
-            x0 - 2, y0 - 2, x0 + width + 2, y0 + height + 2,
-            outline=accent, dash=(4, 3), width=1.5, tags="overlay",
+            x0 - 2,
+            y0 - 2,
+            x0 + width + 2,
+            y0 + height + 2,
+            outline=accent,
+            dash=(4, 3),
+            width=1.5,
+            tags="overlay",
         )
         half = HANDLE_SIZE / 2
         for corner_x, corner_y in ((x0, y0), (x0 + width, y0), (x0, y0 + height), (x0 + width, y0 + height)):
             self.canvas.create_rectangle(
-                corner_x - half, corner_y - half, corner_x + half, corner_y + half,
-                fill="white", outline=accent, width=1.5, tags="overlay",
+                corner_x - half,
+                corner_y - half,
+                corner_x + half,
+                corner_y + half,
+                fill="white",
+                outline=accent,
+                width=1.5,
+                tags="overlay",
             )
 
     def _draw_caption(self, x0: float, bottom: float, width: int, height: float) -> None:
@@ -761,8 +858,14 @@ class SignPage(BasePage):
         if size < 3:
             return
         self.canvas.create_text(
-            x0 + padding, bottom - padding, text="\n".join(lines), anchor="sw", justify="left",
-            fill="#26263A", font=("Courier New", -int(size)), tags="overlay",
+            x0 + padding,
+            bottom - padding,
+            text="\n".join(lines),
+            anchor="sw",
+            justify="left",
+            fill="#26263A",
+            font=("Courier New", -int(size)),
+            tags="overlay",
         )
 
     # * Accion ----------------------------------------------------------------
@@ -786,9 +889,15 @@ class SignPage(BasePage):
             source = self.document_path
             scope = "todas las paginas" if placement.all_pages else f"pagina {placement.page_number}"
             self.log(
-                "Firma visual solicitada: %s", source.name,
-                firma=signature.name, pagina=placement.page_number, todas=placement.all_pages,
-                x=placement.x, y=placement.y, ancho=placement.width, salida=output,
+                "Firma visual solicitada: %s",
+                source.name,
+                firma=signature.name,
+                pagina=placement.page_number,
+                todas=placement.all_pages,
+                x=placement.x,
+                y=placement.y,
+                ancho=placement.width,
+                salida=output,
             )
             self.run_task(
                 f"Firmando {scope}",
@@ -821,8 +930,11 @@ class SignPage(BasePage):
             return
         info, pfx_password = unlocked
         self.log(
-            "Certificado abierto: %s", certificate.name,
-            titular=info.subject, emisor=info.issuer, autofirmado=info.self_signed,
+            "Certificado abierto: %s",
+            certificate.name,
+            titular=info.subject,
+            emisor=info.issuer,
+            autofirmado=info.self_signed,
             vence=info.valid_until.date(),
         )
         self._certificate_holder = info.subject
@@ -837,20 +949,33 @@ class SignPage(BasePage):
             self.log("Firma digital cancelada: el usuario no acepto el certificado autofirmado")
             return
         source = self.document_path
+        if source is None:
+            return
         reason = self.reason_var.get().strip() or None
         location = self.location_var.get().strip() or None
         self.log(
-            "Firma digital solicitada: %s", source.name,
-            certificado=certificate.name, visible=placement is not None,
-            pagina=placement.page_number if placement else "-", imagen=signature.name if signature else "-",
-            motivo=reason or "-", lugar=location or "-", salida=output,
+            "Firma digital solicitada: %s",
+            source.name,
+            certificado=certificate.name,
+            visible=placement is not None,
+            pagina=placement.page_number if placement else "-",
+            imagen=signature.name if signature else "-",
+            motivo=reason or "-",
+            lugar=location or "-",
+            salida=output,
         )
         self.run_task(
             f"Firmando digitalmente como {info.subject}",
             "PDF firmado digitalmente",
             lambda passwords: core.sign_pdf_with_certificate(
-                source, output, certificate, pfx_password,
-                placement=placement, signature_image=signature, reason=reason, location=location,
+                source,
+                output,
+                certificate,
+                pfx_password,
+                placement=placement,
+                signature_image=signature,
+                reason=reason,
+                location=location,
                 password=passwords.get(source),
             ),
             button=self.run_button,

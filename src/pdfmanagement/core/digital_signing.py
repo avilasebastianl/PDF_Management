@@ -78,6 +78,7 @@ def digital_aspect_ratio(image_aspect: float | None) -> float:
 
 # * Certificado ----------------------------------------------------------------
 
+
 def _common_name(name: x509.Name) -> str:
     attributes = name.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
     return str(attributes[0].value) if attributes else name.rfc4514_string()
@@ -90,7 +91,7 @@ def _load_pkcs12(pfx_path: Path, password: str | None) -> tuple[bytes, bytes | N
     except OSError as error:
         raise InvalidInputError(f"No se pudo leer el certificado '{pfx_path.name}': {error}") from error
     try:
-        asn1_pkcs12.Pfx.load(data, strict=True)["auth_safe"]["content_type"].native
+        _ = asn1_pkcs12.Pfx.load(data, strict=True)["auth_safe"]["content_type"].native  # valida la estructura
     except (ValueError, TypeError, KeyError) as error:
         raise CertificateError(f"'{pfx_path.name}' no es un certificado .pfx/.p12 valido.") from error
 
@@ -102,7 +103,9 @@ def _load_pkcs12(pfx_path: Path, password: str | None) -> tuple[bytes, bytes | N
         except ValueError:
             continue
         if key is None or certificate is None:
-            raise CertificateError(f"El certificado '{pfx_path.name}' no contiene la clave privada necesaria para firmar.")
+            raise CertificateError(
+                f"El certificado '{pfx_path.name}' no contiene la clave privada necesaria para firmar."
+            )
         return data, secret, certificate
     raise WrongCertificatePasswordError(pfx_path)
 
@@ -228,6 +231,7 @@ def _unique_field_name(writer: IncrementalPdfFileWriter) -> str:
 
 # * Firma ----------------------------------------------------------------------
 
+
 def sign_pdf_with_certificate(
     input_file: str | Path,
     output_file: str | Path,
@@ -284,7 +288,8 @@ def sign_pdf_with_certificate(
                     raise WrongPasswordError(source)
             field_name = _unique_field_name(writer)
             if placement is not None:
-                field_spec = fields.SigFieldSpec(sig_field_name=field_name, on_page=page_index, box=box)
+                # pyHanko declara int pero acepta coordenadas reales (redondear desplazaria la firma)
+                field_spec = fields.SigFieldSpec(sig_field_name=field_name, on_page=page_index, box=box)  # type: ignore[arg-type]
             metadata = signers.PdfSignatureMetadata(
                 field_name=field_name,
                 reason=reason or None,

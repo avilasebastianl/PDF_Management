@@ -30,8 +30,9 @@ class SearchOptions:
     whole_words: bool = False
 
 
-def iter_search(document: pymupdf.Document, query: str, options: SearchOptions = SearchOptions(),
-                start_page: int = 0) -> Iterator[tuple[int, list[SearchHit]]]:
+def iter_search(
+    document: pymupdf.Document, query: str, options: SearchOptions = SearchOptions(), start_page: int = 0
+) -> Iterator[tuple[int, list[SearchHit]]]:
     """
     Recorre las paginas desde ``start_page`` (dando la vuelta al final) y
     produce ``(pagina, coincidencias)`` por cada una.
@@ -69,9 +70,11 @@ def _search_words(page: pymupdf.Page, index: int, query: str, options: SearchOpt
     ]
     hits: list[SearchHit] = []
     for start in range(len(words) - len(terms) + 1):
-        candidate = words[start:start + len(terms)]
-        if all(pattern.search(word[4]) for pattern, word in zip(patterns, candidate)):
-            if len(terms) > 1 and not all(_exact_inner(word[4], term, options) for word, term in zip(candidate[1:-1], terms[1:-1])):
+        candidate = words[start : start + len(terms)]
+        if all(pattern.search(word[4]) for pattern, word in zip(patterns, candidate, strict=True)):
+            if len(terms) > 1 and not all(
+                _exact_inner(word[4], term, options) for word, term in zip(candidate[1:-1], terms[1:-1], strict=True)
+            ):
                 continue
             rects = tuple(pymupdf.Rect(word[:4]) for word in candidate)
             hits.append(SearchHit(index, rects, _context_for(words, rects[0], start)))
@@ -90,12 +93,15 @@ def _context_for(words: list[tuple], rect: pymupdf.Rect, index: int | None = Non
         # ~100 veces mas lento y dominaba el tiempo de busqueda.
         center_x, center_y = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
         index = next(
-            (position for position, (x0, y0, x1, y1, *_rest) in enumerate(words)
-             if x0 <= center_x <= x1 and y0 <= center_y <= y1),
+            (
+                position
+                for position, (x0, y0, x1, y1, *_rest) in enumerate(words)
+                if x0 <= center_x <= x1 and y0 <= center_y <= y1
+            ),
             None,
         )
         if index is None:
             return ""
     start = max(index - span, 0)
-    snippet = " ".join(word[4] for word in words[start:index + span + 1])
+    snippet = " ".join(word[4] for word in words[start : index + span + 1])
     return ("..." if start else "") + snippet + ("..." if index + span + 1 < len(words) else "")

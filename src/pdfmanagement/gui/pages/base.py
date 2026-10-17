@@ -151,7 +151,9 @@ class BasePage(ctk.CTkFrame):
             f"'{output.name}' ya existe.\n\nDesea reemplazarlo?",
             parent=self,
         )
-        self.log("Archivo de salida existente: %s", "se reemplaza" if replace else "operacion cancelada", archivo=output.name)
+        self.log(
+            "Archivo de salida existente: %s", "se reemplaza" if replace else "operacion cancelada", archivo=output.name
+        )
         return output if replace else None
 
     def run_task(
@@ -184,7 +186,11 @@ class BasePage(ctk.CTkFrame):
                 button.configure(state="normal")
             if isinstance(error, core.PasswordRequiredError):
                 retry = isinstance(error, core.WrongPasswordError)
-                self.log("Se pide la contrasena de %s%s", error.file_path.name, " (la anterior no era correcta)" if retry else "")
+                self.log(
+                    "Se pide la contrasena de %s%s",
+                    error.file_path.name,
+                    " (la anterior no era correcta)" if retry else "",
+                )
                 password = ask_password(self, error.file_path.name, retry=retry)
                 self.log("Contrasena %s", "ingresada; se reintenta" if password else "cancelada por el usuario")
                 if password:
@@ -211,7 +217,7 @@ class BasePage(ctk.CTkFrame):
         """Ejecuta una accion de la interfaz mostrando los errores de validacion."""
         try:
             action()
-        except Exception as error:  # noqa: BLE001 - se informa al usuario
+        except Exception as error:
             self.app.show_error(error)
 
     @staticmethod

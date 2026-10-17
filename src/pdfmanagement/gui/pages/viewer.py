@@ -19,7 +19,8 @@ archivo original nunca se modifica.
 
 Atajos (con la seccion visible): Ctrl+O abrir (en una pestana nueva), Ctrl+W
 cerrar pestana, Ctrl+Tab / Ctrl+Mayus+Tab cambiar de pestana, Ctrl+Mayus+F
-visor en toda la ventana, F11 pantalla completa, Ctrl+E editar, Ctrl+S / Ctrl+Mayus+S guardar como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
+visor en toda la ventana, F11 pantalla completa, Ctrl+E editar, Ctrl+S / Ctrl+Mayus+S guardar
+como, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Mayus+Z rehacer, Ctrl+R / Ctrl+Mayus+R
 rotar a la derecha / izquierda, Supr eliminar paginas, Ctrl+F buscar, F3 /
 Mayus+F3 resultado siguiente / anterior, Ctrl+C copiar seleccion, Ctrl+A
 seleccionar la pagina, Ctrl + / Ctrl - zoom, Ctrl+0 ajustar al ancho, Esc
@@ -43,8 +44,8 @@ from ..icons import icon
 from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
 from ..viewer.annotation_tools import SelectTool
 from ..viewer.find_bar import FindBar
-from ..viewer.tab_strip import TabInfo, TabStrip
 from ..viewer.panels import OutlinePanel, SearchPanel
+from ..viewer.tab_strip import TabInfo, TabStrip
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
 from .viewer_annotations import ViewerAnnotations
@@ -56,7 +57,7 @@ RECENT_PLACEHOLDER = "Recientes"
 SEND_PLACEHOLDER = "Enviar a..."
 PLACEHOLDER = (
     "Haga clic aqui o arrastre un PDF para abrirlo",
-    "Tambien puede usar el boton \"Abrir\" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las paginas.",
+    'Tambien puede usar el boton "Abrir" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las paginas.',
 )
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
@@ -151,14 +152,17 @@ class ViewerPage(BasePage):
         self.file_info.pack(anchor="w")
         history = ctk.CTkFrame(bar, fg_color="transparent")
         history.grid(row=0, column=3, padx=(8, 4))
-        self.undo_button = icon_button(history, "undo", self.undo, lambda: self._history_tip("Deshacer", "Ctrl+Z"),
-                                       size=34, state="disabled")
+        self.undo_button = icon_button(
+            history, "undo", self.undo, lambda: self._history_tip("Deshacer", "Ctrl+Z"), size=34, state="disabled"
+        )
         self.undo_button.pack(side="left")
-        self.redo_button = icon_button(history, "redo", self.redo, lambda: self._history_tip("Rehacer", "Ctrl+Y"),
-                                       size=34, state="disabled")
+        self.redo_button = icon_button(
+            history, "redo", self.redo, lambda: self._history_tip("Rehacer", "Ctrl+Y"), size=34, state="disabled"
+        )
         self.redo_button.pack(side="left", padx=(2, 0))
-        self.properties_button = icon_button(history, "info", self.show_properties, "Propiedades del documento",
-                                             size=34, state="disabled")
+        self.properties_button = icon_button(
+            history, "info", self.show_properties, "Propiedades del documento", size=34, state="disabled"
+        )
         self.properties_button.pack(side="left", padx=(2, 0))
         self.save_button = secondary_button(bar, "Guardar como", self.save_as, "save_as", width=140)
         self.save_button.grid(row=0, column=4, padx=(4, 8))
@@ -168,18 +172,27 @@ class ViewerPage(BasePage):
 
     def _build_tab_bar(self) -> None:
         """Pestanas de los documentos abiertos (se muestra con al menos uno)."""
-        self.tab_bar = TabStrip(self.body, on_select=self.switch_to, on_close=self.close_tab, on_new=self.browse)
+        self.tab_bar = TabStrip(
+            self.body, on_select=self.switch_to, on_close=self._close_tab_clicked, on_new=self.browse
+        )
         self.tab_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         self.tab_bar.grid_remove()
 
     def _build_side_panel(self) -> None:
-        self.side = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
-                                 border_width=1, border_color=style.CARD_BORDER, width=272)
+        self.side = ctk.CTkFrame(
+            self.body,
+            corner_radius=style.CORNER,
+            fg_color=style.CARD_BG,
+            border_width=1,
+            border_color=style.CARD_BORDER,
+            width=272,
+        )
         self.side.grid(row=2, column=0, sticky="nsw", padx=(0, style.GAP), pady=(0, style.COMPACT_PAD))
         self.side.grid_propagate(False)
         self.side.pack_propagate(False)
-        self.side_tabs = ctk.CTkSegmentedButton(self.side, values=list(SIDE_TABS), command=self._show_side,
-                                                font=style.fonts().small)
+        self.side_tabs = ctk.CTkSegmentedButton(
+            self.side, values=list(SIDE_TABS), command=self._show_side, font=style.fonts().small
+        )
         self.side_tabs.set(SIDE_TABS[0])
         self.side_tabs.pack(fill="x", padx=8, pady=8)
         self.side_stack = ctk.CTkFrame(self.side, fg_color="transparent")
@@ -195,33 +208,49 @@ class ViewerPage(BasePage):
             icon_button(tools, "rotate_right", lambda: self.rotate_pages(90), "Rotar a la derecha (Ctrl+R)"),
             icon_button(tools, "delete", self.delete_pages, "Eliminar las paginas seleccionadas (Supr)"),
             icon_button(tools, "insert_pdf", self.insert_pdf, "Insertar otro PDF despues de la seleccion"),
-            icon_button(tools, "blank_page", self.insert_blank, "Insertar una pagina en blanco despues de la seleccion"),
+            icon_button(
+                tools, "blank_page", self.insert_blank, "Insertar una pagina en blanco despues de la seleccion"
+            ),
         ]
         for button in self.page_buttons:
             button.pack(side="left", padx=(0, 2))
         self.pages_hint = muted_label(panel, "")
         self.pages_hint.pack(fill="x", padx=10, pady=(0, 4))
-        self.thumbnails = ThumbnailStrip(panel, self.view, on_move=None,  # arrastrar reordena solo al editar
-                                         on_context=self._show_page_menu, on_selection=self._on_pages_selected)
+        self.thumbnails = ThumbnailStrip(
+            panel,
+            self.view,
+            on_move=None,  # arrastrar reordena solo al editar
+            on_context=self._show_page_menu,
+            on_selection=self._on_pages_selected,
+        )
         self.thumbnails.pack(fill="both", expand=True)
         return panel
 
     def _build_viewer(self) -> None:
-        card = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
-                            border_width=1, border_color=style.CARD_BORDER)
+        card = ctk.CTkFrame(
+            self.body,
+            corner_radius=style.CORNER,
+            fg_color=style.CARD_BG,
+            border_width=1,
+            border_color=style.CARD_BORDER,
+        )
         card.grid(row=2, column=1, sticky="nsew", pady=(0, style.COMPACT_PAD))
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(3, weight=1)
 
-        self.view = PageView(card, continuous=True, placeholder=PLACEHOLDER, on_empty_click=self.browse,
-                             on_drop=self._on_drop)
+        self.view = PageView(
+            card, continuous=True, placeholder=PLACEHOLDER, on_empty_click=self.browse, on_drop=self._on_drop
+        )
         top = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 6))
-        icon_button(top, "list", self.toggle_side_panel, "Mostrar u ocultar el panel lateral").pack(side="left", padx=(0, 6))
+        icon_button(top, "list", self.toggle_side_panel, "Mostrar u ocultar el panel lateral").pack(
+            side="left", padx=(0, 6)
+        )
         self.toolbar = ViewerToolbar(top, self.view)
         self.toolbar.pack(side="left", fill="x", expand=True)
-        self.tool_selector = ctk.CTkSegmentedButton(top, values=list(TOOLS), command=self._choose_tool,
-                                                    font=style.fonts().small)
+        self.tool_selector = ctk.CTkSegmentedButton(
+            top, values=list(TOOLS), command=self._choose_tool, font=style.fonts().small
+        )
         self.tool_selector.set(TOOLS[0])
         self.tool_selector.pack(side="left", padx=(10, 6))
         tips = {TOOLS[0]: "Seleccionar y copiar texto (Ctrl+C)", TOOLS[1]: "Arrastrar para mover la pagina"}
@@ -233,23 +262,37 @@ class ViewerPage(BasePage):
         self.edit_button = secondary_button(top, "Editar", self.toggle_edit_mode, "edit", width=92, height=30)
         self.edit_button.pack(side="left", padx=(6, 0))
         ToolTip(self.edit_button, "Mostrar u ocultar las herramientas para anotar y organizar paginas (Ctrl+E)")
-        self.window_button = icon_button(top, "window_mode", self.toggle_window_mode,
-                                         lambda: "Volver a la vista normal (Ctrl+Mayus+F o Esc)" if self.view_mode == WINDOW
-                                         else "Visor en toda la ventana para leer (Ctrl+Mayus+F)")
+        self.window_button = icon_button(
+            top,
+            "window_mode",
+            self.toggle_window_mode,
+            lambda: (
+                "Volver a la vista normal (Ctrl+Mayus+F o Esc)"
+                if self.view_mode == WINDOW
+                else "Visor en toda la ventana para leer (Ctrl+Mayus+F)"
+            ),
+        )
         self.window_button.pack(side="left", padx=(6, 0))
-        self.fullscreen_button = icon_button(top, "fullscreen", self.toggle_fullscreen,
-                                             lambda: "Salir de pantalla completa (F11 o Esc)" if self.fullscreen
-                                             else "Pantalla completa (F11)")
+        self.fullscreen_button = icon_button(
+            top,
+            "fullscreen",
+            self.toggle_fullscreen,
+            lambda: "Salir de pantalla completa (F11 o Esc)" if self.fullscreen else "Pantalla completa (F11)",
+        )
         self.fullscreen_button.pack(side="left", padx=(2, 0))
-        ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(row=2, column=0, sticky="ew", padx=1)
+        ctk.CTkFrame(card, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(
+            row=2, column=0, sticky="ew", padx=1
+        )
         self.view.grid(row=3, column=0, sticky="nsew", padx=8, pady=8)
         self.view.canvas.bind("<ButtonPress-3>", self._on_view_right_click, add="+")
         self.selection_label = muted_label(card, "")
         self.selection_label.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 6))
 
         self.text_tool = SelectTool(
-            self._words_for, self._on_selection_changed,
-            hit_annotation=lambda hit: self.annotations.hit(hit), on_select=lambda info: self.annotations.select(info),
+            self._words_for,
+            self._on_selection_changed,
+            hit_annotation=lambda hit: self.annotations.hit(hit),
+            on_select=lambda info: self.annotations.select(info),
             on_move=lambda info, dx, dy: self.annotations.move(info, dx, dy),
             on_edit=lambda info: self.annotations.edit_text(info),
         )
@@ -264,7 +307,8 @@ class ViewerPage(BasePage):
         self.annotations.bar.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
         self.annotations.bar.grid_remove()  # aparece con el boton Editar
         self.edit_mode = False
-        self._side_panels = dict(zip(SIDE_TABS, (self.pages_panel, self.outline, self.search, self.annotations.panel)))
+        panels = (self.pages_panel, self.outline, self.search, self.annotations.panel)
+        self._side_panels = dict(zip(SIDE_TABS, panels, strict=True))
         self._show_side(SIDE_TABS[0], log=False)
 
     def _bind_shortcuts(self) -> None:
@@ -304,7 +348,11 @@ class ViewerPage(BasePage):
         if self.app.current_page != self.name:
             return None
         focused = self.focus_get()
-        if event.keysym.lower() in TEXT_FIELD_KEYS and focused is not None and focused.winfo_class() in ("Entry", "Text"):
+        if (
+            event.keysym.lower() in TEXT_FIELD_KEYS
+            and focused is not None
+            and focused.winfo_class() in ("Entry", "Text")
+        ):
             return None  # copiar, deshacer o borrar dentro del campo, como siempre
         action()
         return "break"
@@ -343,12 +391,14 @@ class ViewerPage(BasePage):
             self.log("Documento ya abierto: se muestra su pestana", archivo=path.name, origen=source)
             return True
         if len(self.tabs) >= MAX_TABS:
-            self.app.show_error(core.InvalidInputError(
-                f"Puede tener hasta {MAX_TABS} documentos abiertos. Cierre alguna pestana (Ctrl+W) para abrir otro."
-            ))
+            self.app.show_error(
+                core.InvalidInputError(
+                    f"Puede tener hasta {MAX_TABS} documentos abiertos. Cierre alguna pestana (Ctrl+W) para abrir otro."
+                )
+            )
             return False
         password = self._ask_password_until_valid(path)
-        if password is False:
+        if password is False or password is True:
             return False
         try:
             session = DocumentSession.open(path, password)
@@ -362,9 +412,14 @@ class ViewerPage(BasePage):
         self.recent_menu.set(RECENT_PLACEHOLDER)
         self._refresh_file_state()
         self.log(
-            "Documento abierto: %s", session.name, origen=source, paginas=session.page_count,
-            protegido=session.encrypted, firmas_digitales=session.has_signatures(),
-            marcadores=len(session.table_of_contents()), pestanas=len(self.tabs),
+            "Documento abierto: %s",
+            session.name,
+            origen=source,
+            paginas=session.page_count,
+            protegido=session.encrypted,
+            firmas_digitales=session.has_signatures(),
+            marcadores=len(session.table_of_contents()),
+            pestanas=len(self.tabs),
         )
         return True
 
@@ -385,12 +440,15 @@ class ViewerPage(BasePage):
             self._remember_view()
             self.active = index
             self._load_tab()
-            self.log_debug("Pestana: %s", self.tab.path.name, posicion=index + 1, total=len(self.tabs))
+            self.log_debug("Pestana: %s", self.tabs[index].path.name, posicion=index + 1, total=len(self.tabs))
         self._render_tabs()
 
     def cycle_tab(self, step: int) -> None:
         if len(self.tabs) > 1:
             self.switch_to((self.active + step) % len(self.tabs))
+
+    def _close_tab_clicked(self, index: int) -> None:
+        self.close_tab(index)
 
     def close_current_tab(self) -> None:
         if self.tab is not None:
@@ -513,17 +571,19 @@ class ViewerPage(BasePage):
         else:
             self.tab_bar.grid_remove()
         self.app.root.attributes("-fullscreen", mode == FULLSCREEN)
-        for button, name, active in ((self.window_button, "window_mode", mode == WINDOW),
-                                     (self.fullscreen_button, "fullscreen", mode == FULLSCREEN)):
+        for button, name, active in (
+            (self.window_button, "window_mode", mode == WINDOW),
+            (self.fullscreen_button, "fullscreen", mode == FULLSCREEN),
+        ):
             icon_name = f"exit_{name}" if active else name
-            button._icon_name = icon_name  # noqa: SLF001 (lo usa set_enabled)
+            button.icon_key = icon_name
             button.configure(image=icon(icon_name, 16, style.TEXT))
         self.log("Modo de vista: %s", mode)
 
     def on_hide(self) -> None:
         self.set_view_mode(NORMAL)
 
-    def _ask_password_until_valid(self, path: Path) -> str | None | bool:
+    def _ask_password_until_valid(self, path: Path) -> str | bool | None:
         """
         Comprueba si ``path`` necesita contrasena y la pide hasta que sea
         correcta. Devuelve la contrasena (``None`` si no hace falta) o
@@ -578,7 +638,8 @@ class ViewerPage(BasePage):
             return False
         pages = pages or self.thumbnails.selection()
         if len(pages) > 1 and not messagebox.askyesno(
-            "Eliminar paginas", f"Se eliminaran {len(pages)} paginas. Puede deshacerlo con Ctrl+Z.\n\nContinuar?",
+            "Eliminar paginas",
+            f"Se eliminaran {len(pages)} paginas. Puede deshacerlo con Ctrl+Z.\n\nContinuar?",
             parent=self,
         ):
             self.log_debug("Eliminar paginas cancelado", paginas=len(pages))
@@ -586,11 +647,15 @@ class ViewerPage(BasePage):
         after = max(0, min(min(pages), self.session.page_count - len(pages) - 1))
         return self._edit(lambda session: session.delete(pages), select=[after], page=after)
 
+    def _move_dragged_pages(self, pages: list[int], target: int) -> None:
+        self.move_pages(pages, target)
+
     def move_pages(self, pages: list[int], target: int) -> bool:
         """Mueve ``pages`` delante de la pagina que hoy esta en ``target`` (arrastre de miniaturas)."""
         moved: list[int] = []
-        return self._edit(lambda session: moved.extend(session.move(pages, target)),
-                          select=lambda: moved, page=lambda: moved[0])
+        return self._edit(
+            lambda session: moved.extend(session.move(pages, target)), select=lambda: moved, page=lambda: moved[0]
+        )
 
     def insert_pdf(self, at: int | None = None) -> bool:
         """Pide un PDF y lo inserta despues de la seleccion (o antes de ``at``)."""
@@ -607,11 +672,14 @@ class ViewerPage(BasePage):
             return False
         at = self._insert_position() if at is None else at
         password = self._ask_password_until_valid(Path(source))
-        if password is False:
+        if password is False or password is True:
             return False
         count: list[int] = []
-        return self._edit(lambda session: count.append(session.insert_pdf(source, at, password)),
-                          select=lambda: list(range(at, at + count[0])), page=at)
+        return self._edit(
+            lambda session: count.append(session.insert_pdf(source, at, password)),
+            select=lambda: list(range(at, at + count[0])),
+            page=at,
+        )
 
     def insert_blank(self, at: int | None = None) -> bool:
         if self.session is None:
@@ -665,6 +733,8 @@ class ViewerPage(BasePage):
     def _after_edit(self, select: list[int], page: int) -> None:
         """Tras cambiar la estructura: visor, miniaturas, marcadores y busqueda al dia."""
         session = self.session
+        if session is None:
+            return
         self.view.refresh(page=page)
         self.thumbnails.rebuild(keep_scroll=True)
         self.thumbnails.set_selection(select, anchor=select[0] if select else None)
@@ -682,7 +752,8 @@ class ViewerPage(BasePage):
             "Documento firmado",
             "Este PDF tiene firmas digitales. Cualquier cambio en las paginas hara que las firmas "
             "dejen de ser validas en la copia que guarde (el original no se modifica).\n\nDesea continuar?",
-            icon="warning", parent=self,
+            icon="warning",
+            parent=self,
         )
         self.log("Aviso de firmas digitales: %s", "continuar" if confirmed else "cancelado", archivo=self.session.name)
         self._signatures_confirmed = confirmed
@@ -696,8 +767,12 @@ class ViewerPage(BasePage):
             return False
         suggested = self.saved_path or self.default_output(self.session.path, "editado")
         chosen = filedialog.asksaveasfilename(
-            title="Guardar como", defaultextension=".pdf", filetypes=(("Archivos PDF", "*.pdf"),),
-            initialdir=str(suggested.parent), initialfile=suggested.name, parent=self,
+            title="Guardar como",
+            defaultextension=".pdf",
+            filetypes=(("Archivos PDF", "*.pdf"),),
+            initialdir=str(suggested.parent),
+            initialfile=suggested.name,
+            parent=self,
         )
         if not chosen:
             self.log_debug("Guardar como: dialogo cancelado")
@@ -715,8 +790,13 @@ class ViewerPage(BasePage):
             return False
         self.saved_path = saved
         self._refresh_file_state()
-        self.log("Documento guardado como: %s", saved.name, carpeta=saved.parent, paginas=session.page_count,
-                 protegido=bool(session.password))
+        self.log(
+            "Documento guardado como: %s",
+            saved.name,
+            carpeta=saved.parent,
+            paginas=session.page_count,
+            protegido=bool(session.password),
+        )
         self.app.notify_success("Documento guardado", saved)
         return True
 
@@ -730,7 +810,8 @@ class ViewerPage(BasePage):
             f"{session.name} tiene cambios sin guardar.\n\n"
             f"Desea guardarlos en un archivo nuevo antes de {action}?\n\n"
             "Si: Guardar como...\nNo: descartar los cambios\nCancelar: seguir editando",
-            icon="warning", parent=self,
+            icon="warning",
+            parent=self,
         )
         decision = {True: "guardar", False: "descartar", None: "cancelar"}[answer]
         self.log("Cambios sin guardar antes de %s: %s", action, decision, archivo=session.name)
@@ -838,7 +919,7 @@ class ViewerPage(BasePage):
             self.annotations.select(None)
             self.annotations.bar.grid_remove()
             self.page_tools.pack_forget()
-        self.thumbnails.on_move = self.move_pages if enabled else None
+        self.thumbnails.on_move = self._move_dragged_pages if enabled else None
         accent = style.accent_color()
         self.edit_button.configure(
             text="Listo" if enabled else "Editar",
@@ -904,10 +985,14 @@ class ViewerPage(BasePage):
         if from_view and self.text_tool.selected_text():
             menu.add_command(label="Copiar texto", accelerator="Ctrl+C", command=self.copy_selection)
             menu.add_separator()
-        menu.add_command(label=f"Rotar {subject} a la derecha", accelerator="Ctrl+R",
-                         command=lambda: self.rotate_pages(90, pages))
-        menu.add_command(label=f"Rotar {subject} a la izquierda", accelerator="Ctrl+Mayus+R",
-                         command=lambda: self.rotate_pages(-90, pages))
+        menu.add_command(
+            label=f"Rotar {subject} a la derecha", accelerator="Ctrl+R", command=lambda: self.rotate_pages(90, pages)
+        )
+        menu.add_command(
+            label=f"Rotar {subject} a la izquierda",
+            accelerator="Ctrl+Mayus+R",
+            command=lambda: self.rotate_pages(-90, pages),
+        )
         menu.add_command(label=f"Eliminar {subject}", accelerator="Supr", command=lambda: self.delete_pages(pages))
         menu.add_separator()
         menu.add_command(label="Insertar PDF antes...", command=lambda: self.insert_pdf(min(pages)))

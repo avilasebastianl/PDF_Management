@@ -34,16 +34,26 @@ class ExtractPage(BasePage):
         source = Card(self.body, "Documento de origen")
         source.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
         self.source_field = FileField(
-            source, source.row(0), "PDF", on_change=self._on_source_selected,
-            placeholder="Seleccione o arrastre un PDF", initial_dir=lambda: self.app.settings.output_path,
+            source,
+            source.row(0),
+            "PDF",
+            on_change=self._on_source_selected,
+            placeholder="Seleccione o arrastre un PDF",
+            initial_dir=lambda: self.app.settings.output_path,
         )
         self.source_info = muted_label(source)
         self.source_info.grid(row=source.row(1), column=1, columnspan=2, sticky="ew", padx=(0, style.CARD_PAD))
 
-        selection = Card(self.body, "Paginas", "Paginas desde 1, separadas por comas. Ejemplos: 1-3, 8, 10-   ·   todo   ·   impar   ·   par")
+        selection = Card(
+            self.body,
+            "Paginas",
+            "Paginas desde 1, separadas por comas. Ejemplos: 1-3, 8, 10-   ·   todo   ·   impar   ·   par",
+        )
         selection.grid(row=1, column=0, sticky="ew", pady=(0, style.GAP))
         self.selection = tk.StringVar()
-        field_label(selection, "Seleccion").grid(row=selection.row(0), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=8)
+        field_label(selection, "Seleccion").grid(
+            row=selection.row(0), column=0, sticky="w", padx=(style.CARD_PAD, style.GAP), pady=8
+        )
         ctk.CTkEntry(selection, textvariable=self.selection, placeholder_text="Ej: 1-3, 8, 10-", height=34).grid(
             row=selection.row(0), column=1, sticky="ew", pady=8
         )
@@ -57,13 +67,18 @@ class ExtractPage(BasePage):
 
         security = Card(self.body, "Contrasenas (opcional)")
         security.grid(row=2, column=0, sticky="ew", pady=(0, style.GAP))
-        self.source_password = PasswordField(security, security.row(0), "PDF de origen", "Solo si el PDF esta protegido")
-        self.output_password = PasswordField(security, security.row(1), "Proteger resultado", "Deje vacio para no proteger")
+        self.source_password = PasswordField(
+            security, security.row(0), "PDF de origen", "Solo si el PDF esta protegido"
+        )
+        self.output_password = PasswordField(
+            security, security.row(1), "Proteger resultado", "Deje vacio para no proteger"
+        )
 
         output = Card(self.body, "Resultado")
         output.grid(row=3, column=0, sticky="ew", pady=(0, style.GAP))
-        self.output_field = FileField(output, output.row(0), "Guardar como", mode="save",
-                                      initial_dir=lambda: self.app.settings.output_path)
+        self.output_field = FileField(
+            output, output.row(0), "Guardar como", mode="save", initial_dir=lambda: self.app.settings.output_path
+        )
         self.run_button = primary_button(self.body, "Extraer paginas", self._extract, "extract", width=170)
         self.run_button.grid(row=4, column=0, sticky="e", pady=(4, style.PAD))
 
@@ -80,7 +95,9 @@ class ExtractPage(BasePage):
         self.log("Origen listo: %s", info.path.name, paginas=info.page_count or "?", protegido=info.encrypted)
         pages = f"{info.page_count} paginas" if info.page_count is not None else "Protegido con contrasena"
         lock = "  ·  protegido" if info.encrypted and info.page_count is not None else ""
-        self.source_info.configure(text=f"{pages}  ·  {format_size(info.size_bytes)}{lock}", text_color=style.TEXT_MUTED)
+        self.source_info.configure(
+            text=f"{pages}  ·  {format_size(info.size_bytes)}{lock}", text_color=style.TEXT_MUTED
+        )
         self.output_field.set(self.default_output(info.path, "paginas"), auto=True)
         self._update_preview()
 
@@ -118,14 +135,20 @@ class ExtractPage(BasePage):
             typed_password = self.source_password.get() or None
             output_password = self.output_password.get() or None
             self.log(
-                "Extraer paginas solicitado: %s", source.name, seleccion=selection.strip(),
-                clave_origen=typed_password, proteger_resultado=bool(output_password), salida=output,
+                "Extraer paginas solicitado: %s",
+                source.name,
+                seleccion=selection.strip(),
+                clave_origen=typed_password,
+                proteger_resultado=bool(output_password),
+                salida=output,
             )
             self.run_task(
                 "Extrayendo paginas",
                 "Paginas extraidas",
                 lambda passwords: core.extract_pages(
-                    source, output, selection,
+                    source,
+                    output,
+                    selection,
                     password=passwords.get(source, typed_password),
                     output_password=output_password,
                 ),

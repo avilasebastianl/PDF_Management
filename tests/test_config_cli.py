@@ -3,8 +3,8 @@ Pruebas de preferencias (incluida la migracion del formato anterior) y de la CLI
 """
 
 import pytest
-
 from conftest import CERTIFICATE_PASSWORD, page_texts
+
 from pdfmanagement import cli, config, core, paths
 
 
@@ -84,10 +84,24 @@ def test_cli_sign_cert(isolated_paths, pdf_factory, tmp_path, certificate, signa
     assert cli.main([*arguments, "--cert-password", "mala"]) == 1
     assert "no es correcta" in capsys.readouterr().err
 
-    assert cli.main([
-        *arguments, "--cert-password", CERTIFICATE_PASSWORD, "--image", str(signature_png),
-        "--x", "100", "--y", "600", "--reason", "Aprobado",
-    ]) == 0
+    assert (
+        cli.main(
+            [
+                *arguments,
+                "--cert-password",
+                CERTIFICATE_PASSWORD,
+                "--image",
+                str(signature_png),
+                "--x",
+                "100",
+                "--y",
+                "600",
+                "--reason",
+                "Aprobado",
+            ]
+        )
+        == 0
+    )
     with open(output, "rb") as stream:
         [signature] = PdfFileReader(stream, strict=False).embedded_signatures
         assert signature.sig_object["/Reason"] == "Aprobado"

@@ -6,8 +6,8 @@ contrasenas nunca queden escritas.
 import logging
 
 import pytest
-
 from conftest import pump
+
 from pdfmanagement import logging_setup
 from pdfmanagement.gui import events
 
@@ -69,10 +69,14 @@ def test_passwords_are_redacted_and_events_fit_in_one_line(caplog):
 
 
 def test_describe_files_shortens_long_lists():
-    assert events.describe_files([f"doc_{index}.pdf" for index in range(8)], limit=3) == "doc_0.pdf, doc_1.pdf, doc_2.pdf (+5 mas)"
+    assert (
+        events.describe_files([f"doc_{index}.pdf" for index in range(8)], limit=3)
+        == "doc_0.pdf, doc_1.pdf, doc_2.pdf (+5 mas)"
+    )
 
 
 # * Eventos de la interfaz (requiere pantalla) -------------------------------
+
 
 def test_gui_logs_navigation_settings_and_tasks(gui_app, caplog, pdf_factory):
     caplog.set_level(logging.DEBUG, logger="pdfmanagement")

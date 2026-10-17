@@ -28,6 +28,7 @@ from ..icons import icon
 from ..widgets import (
     Card,
     FileField,
+    ToolTip,
     enable_file_drop,
     format_size,
     hide,
@@ -37,7 +38,6 @@ from ..widgets import (
     secondary_button,
     set_enabled,
     show,
-    ToolTip,
 )
 from .base import BasePage
 
@@ -49,7 +49,7 @@ BOOKMARKS_HELP = (
     "anidados dentro del marcador de su archivo.\n"
     "Si lo deja desactivado, el resultado conserva solo los marcadores originales."
 )
-ROWS_PER_BATCH = 3      # filas construidas por ciclo (~50 ms cada una en CustomTkinter)
+ROWS_PER_BATCH = 3  # filas construidas por ciclo (~50 ms cada una en CustomTkinter)
 DESTROY_PER_BATCH = 10  # filas destruidas por ciclo al vaciar la lista
 
 
@@ -69,14 +69,20 @@ class _FileRow:
         # Los widgets se crean con su estado final: cada configure posterior
         # obliga a CustomTkinter a redibujar.
         self.entry = entry
-        self._index = index
+        self._index: int | None = index
         self._edges = (index == 0, index == total - 1)
 
         self.frame = ctk.CTkFrame(page.list_frame, corner_radius=8, fg_color=style.ROW_BG)
         self.frame.grid_columnconfigure(2, weight=1)
         self.badge = ctk.CTkLabel(
-            self.frame, text=str(index + 1), width=28, height=28, corner_radius=14,
-            fg_color=style.accent_color(), text_color=style.WHITE, font=style.fonts().small,
+            self.frame,
+            text=str(index + 1),
+            width=28,
+            height=28,
+            corner_radius=14,
+            fg_color=style.accent_color(),
+            text_color=style.WHITE,
+            font=style.fonts().small,
         )
         self.badge.grid(row=0, column=0, rowspan=2, padx=(12, 10), pady=10)
         self.kind = ctk.CTkLabel(self.frame, text="", image=icon("pdf", 20, style.TEXT_MUTED))
@@ -90,11 +96,17 @@ class _FileRow:
         actions = ctk.CTkFrame(self.frame, fg_color="transparent")
         actions.grid(row=0, column=3, rowspan=2, padx=8)
         self.up = icon_button(
-            actions, "up", lambda: page.move_entry(entry, -1), "Subir",
+            actions,
+            "up",
+            lambda: page.move_entry(entry, -1),
+            "Subir",
             state="disabled" if self._edges[0] else "normal",
         )
         self.down = icon_button(
-            actions, "down", lambda: page.move_entry(entry, 1), "Bajar",
+            actions,
+            "down",
+            lambda: page.move_entry(entry, 1),
+            "Bajar",
             state="disabled" if self._edges[1] else "normal",
         )
         remove = icon_button(actions, "delete", lambda: page.remove_entry(entry), "Quitar de la lista")
@@ -134,6 +146,9 @@ class MergePage(BasePage):
     icon_name = "merge"
     scrollable = False
 
+    def _on_bookmarks_toggled(self) -> None:
+        self.log("Marcador por archivo: %s", "activado" if self.bookmarks.get() else "desactivado")
+
     def build(self) -> None:
         self.entries: list[_Entry] = []
         self._rows_to_build: deque[_Entry] = deque()
@@ -151,8 +166,11 @@ class MergePage(BasePage):
         self.summary.grid(row=0, column=3, sticky="e")
 
         self.list_frame = ctk.CTkScrollableFrame(
-            self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
-            border_width=1, border_color=style.CARD_BORDER,
+            self.body,
+            corner_radius=style.CORNER,
+            fg_color=style.CARD_BG,
+            border_width=1,
+            border_color=style.CARD_BORDER,
         )
         self.list_frame.grid(row=1, column=0, sticky="nsew")
         self.list_frame.grid_columnconfigure(0, weight=1)
@@ -167,8 +185,10 @@ class MergePage(BasePage):
         options.grid(row=output.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(4, 0))
         options.grid_columnconfigure(0, weight=1)
         self.bookmarks = ctk.CTkCheckBox(
-            options, text="Crear un marcador por cada archivo", font=style.fonts().body,
-            command=lambda: self.log("Marcador por archivo: %s", "activado" if self.bookmarks.get() else "desactivado"),
+            options,
+            text="Crear un marcador por cada archivo",
+            font=style.fonts().body,
+            command=self._on_bookmarks_toggled,
         )
         self.bookmarks.grid(row=0, column=0, sticky="w")
         ToolTip(self.bookmarks, BOOKMARKS_HELP, above=True)  # la casilla esta al pie de la seccion
@@ -187,8 +207,10 @@ class MergePage(BasePage):
     def _build_empty_state(self) -> None:
         self.empty_state = ctk.CTkFrame(self.list_frame, fg_color="transparent")
         ctk.CTkLabel(self.empty_state, text="", image=icon("pdf", 48, style.TEXT_MUTED)).pack()
-        ctk.CTkLabel(self.empty_state, text="Arrastre aqui sus archivos PDF", font=style.fonts().section).pack(pady=(12, 2))
-        muted_label(self.empty_state, "o use el boton \"Agregar PDFs\". Tambien puede soltar carpetas.").pack()
+        ctk.CTkLabel(self.empty_state, text="Arrastre aqui sus archivos PDF", font=style.fonts().section).pack(
+            pady=(12, 2)
+        )
+        muted_label(self.empty_state, 'o use el boton "Agregar PDFs". Tambien puede soltar carpetas.').pack()
         self.empty_state.grid(row=0, column=0, sticky="nsew", pady=80)
 
     def on_show(self) -> None:
@@ -223,7 +245,9 @@ class MergePage(BasePage):
             new_entries.append(_Entry(path))
         if new_entries:
             self.log(
-                "Agregados %d archivos: %s", len(new_entries), describe_files(entry.path for entry in new_entries),
+                "Agregados %d archivos: %s",
+                len(new_entries),
+                describe_files(entry.path for entry in new_entries),
                 total=len(self.entries) + len(new_entries),
             )
             previous_last = len(self.entries) - 1
@@ -273,7 +297,8 @@ class MergePage(BasePage):
         self._refresh_summary()
         valid = [result for result in results.values() if isinstance(result, core.PdfInfo)]
         self.log_debug(
-            "Metadatos leidos: %d PDFs", len(valid),
+            "Metadatos leidos: %d PDFs",
+            len(valid),
             paginas=sum(info.page_count or 0 for info in valid),
             protegidos=sum(1 for info in valid if info.encrypted),
         )
@@ -405,8 +430,11 @@ class MergePage(BasePage):
             sources = self.files
             add_bookmarks = bool(self.bookmarks.get())
             self.log(
-                "Unir PDFs solicitado: %s", describe_files(sources, limit=10),
-                archivos=len(sources), marcadores=add_bookmarks, salida=output,
+                "Unir PDFs solicitado: %s",
+                describe_files(sources, limit=10),
+                archivos=len(sources),
+                marcadores=add_bookmarks,
+                salida=output,
             )
             self.run_task(
                 "Uniendo PDFs",

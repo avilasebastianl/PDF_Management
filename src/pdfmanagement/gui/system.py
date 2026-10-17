@@ -17,7 +17,7 @@ def open_path(path: Path) -> None:
         return
     try:
         if sys.platform.startswith("win"):
-            os.startfile(path)  # noqa: S606
+            os.startfile(path)
         else:
             subprocess.Popen(["xdg-open" if sys.platform != "darwin" else "open", str(path)])
     except OSError as error:
