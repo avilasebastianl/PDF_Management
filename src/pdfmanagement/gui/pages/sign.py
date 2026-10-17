@@ -88,6 +88,9 @@ class SignPage(BasePage):
         self._certificate_holder = CERTIFICATE_HOLDER
         self._drag_offset: tuple[float, float] | None = None
         # Redimensionado con las asas: esquina tomada y esquina opuesta fija (en puntos).
+        self._interaction: str | None = None  # "mover", "colocar" o "redimensionar" (para el registro)
+        self._logged_signature: str | None = None
+        self._size_log_job: str | None = None
         self._resize_corner: str | None = None
         self._resize_anchor: tuple[float, float] = (0.0, 0.0)
         self._syncing_size = False
@@ -117,7 +120,7 @@ class SignPage(BasePage):
         panel.grid_columnconfigure(0, weight=1)
 
         self.mode = ctk.CTkSegmentedButton(
-            panel, values=[VISUAL, DIGITAL], command=lambda _value: self._apply_mode(), height=34,
+            panel, values=[VISUAL, DIGITAL], command=lambda value: (self.log("Tipo de firma: %s", value), self._apply_mode()), height=34,
             font=style.fonts().body,
         )
         self.mode.set(VISUAL)
@@ -190,7 +193,8 @@ class SignPage(BasePage):
         self.all_pages = tk.BooleanVar(value=False)
         self.all_pages_check = ctk.CTkCheckBox(
             position, text="Firmar todas las paginas", variable=self.all_pages, font=style.fonts().body,
-            command=self._schedule_overlay,
+            command=lambda: (self.log("Firmar todas las paginas: %s", "si" if self.all_pages.get() else "no"),
+                             self._schedule_overlay()),
         )
         self.all_pages_check.grid(row=position.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 2))
         muted_label(position, "Arrastre las esquinas del recuadro para cambiar el tamano. Medidas en puntos (72 pt = 1 pulgada).", wraplength=290).grid(
@@ -236,7 +240,7 @@ class SignPage(BasePage):
             hover_color=style.HOVER,
             text_color=style.link_color(),
             font=style.fonts().small,
-            command=lambda: self.app.open_help(CERTIFICATE_GUIDE_SECTION),
+            command=lambda: self.app.open_help(CERTIFICATE_GUIDE_SECTION, source="enlace de Certificado digital"),
         )
         guide_link.grid(row=card.row(3), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD - 6, pady=(6, 0))
         ToolTip(guide_link, "Abre la guia: certificados reales y de prueba, y como verificar la firma")
@@ -253,7 +257,8 @@ class SignPage(BasePage):
         self.visible = tk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             card, text="Mostrar la firma en el documento", variable=self.visible, font=style.fonts().body,
-            command=self._schedule_overlay,
+            command=lambda: (self.log("Firma digital visible: %s", "si" if self.visible.get() else "no"),
+                             self._schedule_overlay()),
         ).grid(row=card.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 6))
         muted_label(
             card, "La contrasena del certificado se pide al firmar y nunca se guarda.", wraplength=290
@@ -369,9 +374,11 @@ class SignPage(BasePage):
                 self.document = core.open_document(source, password)
                 break
             except core.PasswordRequiredError as error:
+                self.log("El documento %s pide contrasena%s", source.name, " (la anterior no era correcta)" if retry else "")
                 password = ask_password(self, source.name, retry=retry or isinstance(error, core.WrongPasswordError))
                 retry = True
                 if not password:
+                    self.log("Apertura cancelada: no se ingreso la contrasena", documento=source.name)
                     self._draw_placeholder(PLACEHOLDER_LOCKED)
                     return
             except core.PdfManagementError as error:
@@ -388,6 +395,10 @@ class SignPage(BasePage):
         self._render_page()
         if not self.x_var.get() or not self.y_var.get():
             self._place_default()
+        self.log(
+            "Documento abierto: %s", source.name,
+            paginas=self.document.page_count, protegido=bool(password), pagina_mostrada=self.page_index + 1,
+        )
 
     def _close_document(self) -> None:
         if self.document is not None:
@@ -422,6 +433,9 @@ class SignPage(BasePage):
         self._on_signature_selected(name)
 
     def _on_signature_selected(self, name: str) -> None:
+        if name != self._logged_signature:
+            self._logged_signature = name
+            self.log("Firma seleccionada: %s", name)
         path = self.signature_paths.get(name)
         if path is None:
             self.signature_image = None
@@ -432,7 +446,8 @@ class SignPage(BasePage):
         try:
             self.signature_image = core.load_signature(path)
             self.image_aspect = core.image_aspect_ratio(self.signature_image)
-        except (OSError, core.PdfManagementError):
+        except (OSError, core.PdfManagementError) as error:
+            self.log("No se pudo cargar la firma %s: %s", name, error)
             self.signature_image = None
             self.image_aspect = None
             self._show_preview(None, "No se pudo cargar la imagen")
@@ -450,7 +465,12 @@ class SignPage(BasePage):
         self._preview_image = image
 
     def _draw_signature(self) -> None:
-        SignaturePad(self, on_saved=lambda path: self._refresh_signatures(select=path))
+        self.log("Lienzo para dibujar firma abierto")
+        SignaturePad(self, on_saved=self._on_signature_drawn)
+
+    def _on_signature_drawn(self, path: Path) -> None:
+        self.log("Firma dibujada y guardada: %s", path.name)
+        self._refresh_signatures(select=path)
 
     def _import_signature(self) -> None:
         chosen = filedialog.askopenfilename(
@@ -458,14 +478,23 @@ class SignPage(BasePage):
             filetypes=(("Imagenes", "*.png *.jpg *.jpeg"), ("PNG", "*.png"), ("JPG", "*.jpg *.jpeg")),
         )
         if chosen:
-            self.guard(lambda: self._refresh_signatures(select=signatures.import_signature(chosen)))
+            def import_and_select() -> None:
+                stored = signatures.import_signature(chosen)
+                self.log("Firma importada: %s", Path(chosen).name, guardada_como=stored.name)
+                self._refresh_signatures(select=stored)
+
+            self.guard(import_and_select)
+        else:
+            self.log_debug("Importar firma: dialogo cancelado")
 
     def _delete_signature(self) -> None:
         name = self.signature_menu.get()
         path = self.signature_paths.get(name)
         if path is None:
             return
-        if messagebox.askyesno("Borrar firma", f"Desea borrar la firma '{name}'?", parent=self):
+        confirmed = messagebox.askyesno("Borrar firma", f"Desea borrar la firma '{name}'?", parent=self)
+        self.log("Borrar firma %s: %s", name, "confirmado" if confirmed else "cancelado")
+        if confirmed:
             signatures.delete_signature(path)
             self.signature_menu.set(NO_SIGNATURE)
             self._refresh_signatures()
@@ -531,6 +560,7 @@ class SignPage(BasePage):
         if corner is not None:
             # La esquina opuesta queda fija mientras se arrastra.
             self._resize_corner = corner
+            self._interaction = "redimensionar"
             self._resize_anchor = (
                 rect.x1 if "w" in corner else rect.x0,
                 rect.y1 if "n" in corner else rect.y0,
@@ -538,7 +568,9 @@ class SignPage(BasePage):
             return
         if rect is not None and rect.contains(pymupdf.Point(x, y)):
             self._drag_offset = (x - rect.x0, y - rect.y0)
+            self._interaction = "mover"
             return
+        self._interaction = "colocar"
         width = rect.width if rect is not None else core.DEFAULT_SIGNATURE_WIDTH
         height = rect.height if rect is not None else width * self.aspect_ratio
         self._drag_offset = (width / 2, height / 2)
@@ -557,8 +589,20 @@ class SignPage(BasePage):
             self._set_position(x - self._drag_offset[0], y - self._drag_offset[1])
 
     def _on_release(self, _event) -> None:
+        if self._interaction:
+            self._log_placement(self._interaction)
+        self._interaction = None
         self._drag_offset = None
         self._resize_corner = None
+
+    def _log_placement(self, action: str) -> None:
+        """Posicion y tamano de la firma tras una accion del usuario (modo detallado)."""
+        placement = self._placement()
+        if placement is not None:
+            self.log_debug(
+                "Firma %s", {"mover": "movida", "colocar": "colocada", "redimensionar": "redimensionada"}.get(action, action),
+                pagina=placement.page_number, x=placement.x, y=placement.y, ancho=placement.width,
+            )
 
     def _on_motion(self, event) -> None:
         """Cursor segun lo que hay debajo: asa (redimensionar), firma (mover) o pagina."""
@@ -623,10 +667,19 @@ class SignPage(BasePage):
         except ValueError:
             width = core.DEFAULT_SIGNATURE_WIDTH
         self._apply_size(width + delta)
+        self._log_placement(f"redimensionada con boton {'+' if delta > 0 else '-'}")
 
     def _on_size_slider(self, value: float) -> None:
         if not self._syncing_size:
             self._apply_size(value)
+            # El deslizador avisa en cada paso: se registra solo el valor final.
+            if self._size_log_job:
+                self.after_cancel(self._size_log_job)
+            self._size_log_job = self.after(400, self._log_slider_size)
+
+    def _log_slider_size(self) -> None:
+        self._size_log_job = None
+        self._log_placement("redimensionada con el deslizador")
 
     def _sync_size_slider(self) -> None:
         """Refleja en el deslizador el ancho escrito o arrastrado."""
@@ -648,6 +701,7 @@ class SignPage(BasePage):
         self.page_index = index
         self.page_var.set(str(index + 1))
         self._render_page()
+        self.log_debug("Visor: pagina %d de %d", index + 1, self._page_count())
 
     def _on_page_typed(self) -> None:
         try:
@@ -660,6 +714,7 @@ class SignPage(BasePage):
     def _set_zoom(self, zoom: float) -> None:
         self.zoom = max(ZOOM_LIMITS[0], min(zoom, ZOOM_LIMITS[1]))
         self._render_page()
+        self.log_debug("Visor: zoom %.0f%%", self.zoom * 100)
 
     def _on_wheel(self, event) -> None:
         if event.state & 0x0004:  # Ctrl
@@ -847,6 +902,11 @@ class SignPage(BasePage):
                 return
             source = self.document_path
             scope = "todas las paginas" if placement.all_pages else f"pagina {placement.page_number}"
+            self.log(
+                "Firma visual solicitada: %s", source.name,
+                firma=signature.name, pagina=placement.page_number, todas=placement.all_pages,
+                x=placement.x, y=placement.y, ancho=placement.width, salida=output,
+            )
             self.run_task(
                 f"Firmando {scope}",
                 "PDF firmado",
@@ -874,8 +934,14 @@ class SignPage(BasePage):
             return
         unlocked = self._unlock_certificate(certificate)
         if unlocked is None:
+            self.log("Firma digital cancelada: no se ingreso la contrasena del certificado")
             return
         info, pfx_password = unlocked
+        self.log(
+            "Certificado abierto: %s", certificate.name,
+            titular=info.subject, emisor=info.issuer, autofirmado=info.self_signed,
+            vence=info.valid_until.date(),
+        )
         self._certificate_holder = info.subject
         self._schedule_overlay()
         if info.self_signed and not messagebox.askyesno(
@@ -885,10 +951,17 @@ class SignPage(BasePage):
             "identidad del firmante como desconocida.\n\nDesea continuar?",
             parent=self,
         ):
+            self.log("Firma digital cancelada: el usuario no acepto el certificado autofirmado")
             return
         source = self.document_path
         reason = self.reason_var.get().strip() or None
         location = self.location_var.get().strip() or None
+        self.log(
+            "Firma digital solicitada: %s", source.name,
+            certificado=certificate.name, visible=placement is not None,
+            pagina=placement.page_number if placement else "-", imagen=signature.name if signature else "-",
+            motivo=reason or "-", lugar=location or "-", salida=output,
+        )
         self.run_task(
             f"Firmando digitalmente como {info.subject}",
             "PDF firmado digitalmente",
@@ -904,10 +977,12 @@ class SignPage(BasePage):
         """Pide la contrasena del certificado hasta que sea correcta. ``None`` si se cancela."""
         retry = False
         while True:
+            self.log_debug("Se pide la contrasena del certificado %s", certificate.name)
             pfx_password = ask_certificate_password(self, certificate.name, retry=retry)
             if pfx_password is None:
                 return None
             try:
                 return core.load_certificate(certificate, pfx_password), pfx_password
             except core.WrongCertificatePasswordError:
+                self.log("Contrasena del certificado incorrecta; se vuelve a pedir", certificado=certificate.name)
                 retry = True

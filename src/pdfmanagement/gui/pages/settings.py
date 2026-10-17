@@ -10,15 +10,21 @@ from tkinter import filedialog
 import customtkinter as ctk
 from PIL import Image
 
-from ... import __app_name__, __version__, paths
+from ... import __app_name__, __version__, logging_setup, paths
 from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_themes
 from .. import style
 from ..dropdown import dropdown_menu
 from ..system import open_path
-from ..widgets import Card, field_label, hide, muted_label, primary_button, secondary_button, show
+from ..widgets import Card, ToolTip, field_label, hide, muted_label, primary_button, secondary_button, show
 from .base import BasePage
 
 MODE_LABELS = {"System": "Sistema", "Light": "Claro", "Dark": "Oscuro"}
+DEBUG_LOGGING_HELP = (
+    "Registro detallado\n"
+    "Guarda en log/app.log cada accion con mas detalle (paginas del visor, zoom, posicion "
+    "de la firma, desplegables, tiempos internos). Util para diagnosticar un problema; "
+    "se aplica al instante, sin reiniciar. Las contrasenas nunca se registran."
+)
 
 
 class SettingsPage(BasePage):
@@ -82,7 +88,19 @@ class SettingsPage(BasePage):
             ("Firmas", lambda: paths.SIGNATURES_DIR),
             ("Registros", lambda: paths.LOG_DIR),
         ):
-            secondary_button(folders, text, lambda f=folder: self._open_folder(f()), "folder", width=110).pack(side="left", padx=(0, 8))
+            secondary_button(
+                folders, text, lambda f=folder, t=text: self._open_folder(f(), t), "folder", width=110,
+            ).pack(side="left", padx=(0, 8))
+
+        diagnostics = ctk.CTkFrame(data, fg_color="transparent")
+        diagnostics.grid(row=data.row(1), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(12, 0))
+        self.debug_switch = ctk.CTkSwitch(
+            diagnostics, text="Registro detallado (para depurar)", font=style.fonts().body,
+            command=self._on_debug_logging,
+        )
+        self.debug_switch.pack(side="left")
+        ToolTip(self.debug_switch, DEBUG_LOGGING_HELP)
+        secondary_button(diagnostics, "Ver registro", self._open_log, "open", width=120).pack(side="left", padx=(12, 0))
 
         # * Acerca de
         about = Card(self.body, "Acerca de")
@@ -116,7 +134,7 @@ class SettingsPage(BasePage):
         settings = self.app.settings
         snapshot = (
             settings.appearance_mode, settings.color_theme, settings.ui_scaling,
-            settings.initial_page, settings.open_after_save, str(settings.output_path),
+            settings.initial_page, settings.open_after_save, str(settings.output_path), settings.debug_logging,
         )
         if snapshot == getattr(self, "_shown", None):
             return  # nada cambio desde la ultima vez: evita redibujar los controles
@@ -130,6 +148,10 @@ class SettingsPage(BasePage):
         else:
             self.open_after.deselect()
         self.output_dir.configure(text=str(settings.output_path))
+        if settings.debug_logging:
+            self.debug_switch.select()
+        else:
+            self.debug_switch.deselect()
 
     # * Eventos -------------------------------------------------------------
 
@@ -155,6 +177,8 @@ class SettingsPage(BasePage):
 
     def _choose_output_dir(self) -> None:
         chosen = filedialog.askdirectory(title="Carpeta de salida", initialdir=str(self.app.settings.output_path))
+        if not chosen:
+            self.log_debug("Carpeta de salida: dialogo cancelado")
         if chosen:
             self.app.settings.output_dir = chosen
             self.app.save_settings()
@@ -165,7 +189,15 @@ class SettingsPage(BasePage):
         self.app.save_settings()
         self.on_show()
 
-    @staticmethod
-    def _open_folder(folder) -> None:
+    def _open_folder(self, folder, label: str) -> None:
+        self.log("Carpeta abierta: %s", label, ruta=folder)
         folder.mkdir(parents=True, exist_ok=True)
         open_path(folder)
+
+    def _on_debug_logging(self) -> None:
+        self.app.set_debug_logging(bool(self.debug_switch.get()))
+
+    def _open_log(self) -> None:
+        log_file = logging_setup.app_log_file()
+        self.log("Registro abierto", archivo=log_file)
+        open_path(log_file)

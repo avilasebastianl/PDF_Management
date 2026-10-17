@@ -24,7 +24,7 @@ class SecurityPage(BasePage):
 
     def build(self) -> None:
         self.mode = ctk.CTkSegmentedButton(
-            self.body, values=[LOCK, UNLOCK], command=lambda _value: self._apply_mode(), height=36,
+            self.body, values=[LOCK, UNLOCK], command=lambda value: (self.log("Accion: %s", value), self._apply_mode()), height=36,
             font=style.fonts().body,
         )
         self.mode.set(LOCK)
@@ -75,9 +75,14 @@ class SecurityPage(BasePage):
         try:
             info = core.get_pdf_info(path)
         except core.PdfManagementError as error:
+            self.log("PDF no valido: %s", error)
             self.source_info.configure(text=str(error), text_color=style.DANGER)
             return
         state = "Protegido con contrasena" if info.encrypted else "Sin proteccion"
+        self.log(
+            "PDF listo: %s (%s)", info.path.name, state.lower(),
+            accion_sugerida=UNLOCK if info.encrypted else LOCK,
+        )
         pages = f"{info.page_count} paginas  ·  " if info.page_count is not None else ""
         self.source_info.configure(text=f"{pages}{format_size(info.size_bytes)}  ·  {state}", text_color=style.TEXT_MUTED)
         self.mode.set(UNLOCK if info.encrypted else LOCK)
@@ -106,6 +111,7 @@ class SecurityPage(BasePage):
             else:
                 operation = lambda passwords: core.unlock_pdf(source, output, passwords.get(source, password))  # noqa: E731
                 title, description = "Proteccion eliminada", "Quitando proteccion"
+            self.log("%s solicitado: %s", description, source.name, salida=output)
             self.run_task(description, title, operation, button=self.run_button,
                           on_success=lambda _result: self._clear_passwords())
 

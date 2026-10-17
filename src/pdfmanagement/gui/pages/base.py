@@ -15,6 +15,7 @@ import customtkinter as ctk
 from ... import core
 from .. import style
 from ..dialogs import ask_password
+from ..events import debug_event, log_event
 from ..widgets import FileField, PageHeader
 
 if TYPE_CHECKING:
@@ -38,6 +39,7 @@ class BasePage(ctk.CTkFrame):
     def __init__(self, master, app: MainWindow) -> None:
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.app = app
+        self.log_area = self.name  # seccion para el registro de eventos (ver events.area_of)
         self.passwords: Passwords = {}
 
         PageHeader(self, self.title, self.subtitle).pack(fill="x", padx=style.PAD, pady=(style.PAD, style.GAP))
@@ -60,6 +62,16 @@ class BasePage(ctk.CTkFrame):
 
     def on_close(self) -> None:
         """Se invoca al cerrar la aplicacion (liberar recursos)."""
+
+    # * Registro --------------------------------------------------------------
+
+    def log(self, message: str, *args, **details) -> None:
+        """Evento de esta seccion (nivel INFO)."""
+        log_event(self.log_area, message, *args, **details)
+
+    def log_debug(self, message: str, *args, **details) -> None:
+        """Evento de esta seccion visible solo en modo detallado."""
+        debug_event(self.log_area, message, *args, **details)
 
     # * Utilidades ----------------------------------------------------------
 
@@ -87,14 +99,17 @@ class BasePage(ctk.CTkFrame):
         if field.auto:
             output = core.unique_path(output)
             field.set(output, auto=True, notify=False)
+            self.log_debug("Salida sugerida ya existia; se usa un nombre libre", archivo=output.name)
             return output
         if field.confirmed_path and field.confirmed_path.resolve() == output.resolve():
+            self.log_debug("Se reemplazara el archivo confirmado en 'Guardar como'", archivo=output.name)
             return output
         replace = messagebox.askyesno(
             "Archivo existente",
             f"'{output.name}' ya existe.\n\nDesea reemplazarlo?",
             parent=self,
         )
+        self.log("Archivo de salida existente: %s", "se reemplaza" if replace else "operacion cancelada", archivo=output.name)
         return output if replace else None
 
     def run_task(
@@ -126,9 +141,10 @@ class BasePage(ctk.CTkFrame):
             if button is not None:
                 button.configure(state="normal")
             if isinstance(error, core.PasswordRequiredError):
-                password = ask_password(
-                    self, error.file_path.name, retry=isinstance(error, core.WrongPasswordError)
-                )
+                retry = isinstance(error, core.WrongPasswordError)
+                self.log("Se pide la contrasena de %s%s", error.file_path.name, " (la anterior no era correcta)" if retry else "")
+                password = ask_password(self, error.file_path.name, retry=retry)
+                self.log("Contrasena %s", "ingresada; se reintenta" if password else "cancelada por el usuario")
                 if password:
                     self.passwords[error.file_path] = password
                     self.run_task(description, success_title, operation, button=button, on_success=on_success)

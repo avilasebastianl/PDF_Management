@@ -31,6 +31,7 @@ _LAYOUT: dict[str, tuple[str, tuple[str, str] | None]] = {
     "initial_page": ("General", ("App", "initial_window")),
     "open_after_save": ("General", ("Display", "open_after_save")),
     "output_dir": ("General", None),
+    "debug_logging": ("General", None),
 }
 
 # Nombres de pestanas usados por versiones anteriores.
@@ -62,6 +63,7 @@ class Settings:
     initial_page: str = "Unir"
     open_after_save: bool = True
     output_dir: str = ""
+    debug_logging: bool = False  # registro detallado (DEBUG) en log/app.log
 
     @property
     def output_path(self) -> Path:

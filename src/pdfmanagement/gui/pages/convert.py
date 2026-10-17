@@ -45,8 +45,10 @@ class ConvertPage(BasePage):
 
     def _on_source_selected(self, path: Path) -> None:
         if path.suffix.lower() not in core.OFFICE_EXTENSIONS:
+            self.log("Formato no admitido: %s", path.name)
             self.source_info.configure(text="Formato no admitido.", text_color=style.DANGER)
             return
+        self.log_debug("Documento listo para convertir: %s", path.name, formato=path.suffix.lower())
         self.source_info.configure(text="", text_color=style.TEXT_MUTED)
         self.output_field.set(self.default_output(path, ""), auto=True)
 
@@ -58,6 +60,7 @@ class ConvertPage(BasePage):
             output = self.resolve_output(self.output_field)
             if output is None:
                 return
+            self.log("Convertir solicitado: %s", source.name, salida=output)
             self.run_task(
                 f"Convirtiendo {source.name}",
                 "Documento convertido",

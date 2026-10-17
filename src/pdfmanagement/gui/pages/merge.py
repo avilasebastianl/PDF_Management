@@ -23,6 +23,7 @@ import customtkinter as ctk
 
 from ... import core
 from .. import style
+from ..events import describe_files
 from ..icons import icon
 from ..widgets import (
     Card,
@@ -36,9 +37,18 @@ from ..widgets import (
     secondary_button,
     set_enabled,
     show,
+    ToolTip,
 )
 from .base import BasePage
 
+BOOKMARKS_HELP = (
+    "Marcador por cada archivo\n"
+    "El PDF unido tendra un marcador (el indice lateral que muestran los lectores de PDF) "
+    "por cada archivo de origen, con su nombre. Asi puede saltar directo al inicio de cada "
+    "documento dentro del PDF final. Los marcadores que ya traian los PDFs se conservan, "
+    "anidados dentro del marcador de su archivo.\n"
+    "Si lo deja desactivado, el resultado conserva solo los marcadores originales."
+)
 ROWS_PER_BATCH = 3      # filas construidas por ciclo (~50 ms cada una en CustomTkinter)
 DESTROY_PER_BATCH = 10  # filas destruidas por ciclo al vaciar la lista
 
@@ -156,8 +166,12 @@ class MergePage(BasePage):
         options = ctk.CTkFrame(output, fg_color="transparent")
         options.grid(row=output.row(1), column=0, columnspan=3, sticky="ew", padx=style.CARD_PAD, pady=(4, 0))
         options.grid_columnconfigure(0, weight=1)
-        self.bookmarks = ctk.CTkCheckBox(options, text="Crear un marcador por cada archivo", font=style.fonts().body)
+        self.bookmarks = ctk.CTkCheckBox(
+            options, text="Crear un marcador por cada archivo", font=style.fonts().body,
+            command=lambda: self.log("Marcador por archivo: %s", "activado" if self.bookmarks.get() else "desactivado"),
+        )
         self.bookmarks.grid(row=0, column=0, sticky="w")
+        ToolTip(self.bookmarks, BOOKMARKS_HELP, above=True)  # la casilla esta al pie de la seccion
         self.run_button = primary_button(options, "Unir PDFs", self._merge, "merge", width=150)
         self.run_button.grid(row=0, column=1, sticky="e")
 
@@ -197,14 +211,21 @@ class MergePage(BasePage):
         known = {entry.path for entry in self.entries}
         new_entries: list[_Entry] = []
         rejected: list[str] = []
+        duplicated = 0
         for path in self._expand(files):
             if path.suffix.lower() != ".pdf" or not path.is_file():
                 rejected.append(path.name)
                 continue
-            if path not in known:
-                known.add(path)
-                new_entries.append(_Entry(path))
+            if path in known:
+                duplicated += 1
+                continue
+            known.add(path)
+            new_entries.append(_Entry(path))
         if new_entries:
+            self.log(
+                "Agregados %d archivos: %s", len(new_entries), describe_files(entry.path for entry in new_entries),
+                total=len(self.entries) + len(new_entries),
+            )
             previous_last = len(self.entries) - 1
             self.entries.extend(new_entries)
             if previous_last >= 0:
@@ -219,7 +240,10 @@ class MergePage(BasePage):
                 self._on_infos_read,
                 self.app.show_error,
             )
+        if duplicated:
+            self.log_debug("Archivos ya presentes en la lista: %d (no se duplican)", duplicated)
         if rejected:
+            self.log("Ignorados %d archivos no validos: %s", len(rejected), describe_files(rejected))
             self.app.show_error(core.InvalidInputError("Se ignoraron archivos no validos:\n" + "\n".join(rejected)))
 
     @staticmethod
@@ -245,8 +269,14 @@ class MergePage(BasePage):
                     entry.row.update_info(result)
             else:
                 rejected.append(f"{entry.path.name}: {result}")
-                self.remove_entry(entry)
+                self.remove_entry(entry, reason=f"no se pudo leer ({result})")
         self._refresh_summary()
+        valid = [result for result in results.values() if isinstance(result, core.PdfInfo)]
+        self.log_debug(
+            "Metadatos leidos: %d PDFs", len(valid),
+            paginas=sum(info.page_count or 0 for info in valid),
+            protegidos=sum(1 for info in valid if info.encrypted),
+        )
         if rejected:
             self.app.show_error(core.InvalidInputError("Se quitaron archivos no validos:\n" + "\n".join(rejected)))
 
@@ -279,16 +309,18 @@ class MergePage(BasePage):
             return
         self.entries[index], self.entries[target] = self.entries[target], self.entries[index]
         self._place_rows(min(index, target), max(index, target) + 1)
+        self.log("Movido %s: posicion %d -> %d", entry.path.name, index + 1, target + 1)
 
     def _move(self, index: int, offset: int) -> None:
         """Compatibilidad: mueve por posicion."""
         if 0 <= index < len(self.entries):
             self.move_entry(self.entries[index], offset)
 
-    def remove_entry(self, entry: _Entry) -> None:
+    def remove_entry(self, entry: _Entry, reason: str = "por el usuario") -> None:
         if entry not in self.entries:
             return
         index = self.entries.index(entry)
+        self.log("Quitado %s (posicion %d) %s", entry.path.name, index + 1, reason, quedan=len(self.entries) - 1)
         self.entries.remove(entry)
         self.passwords.pop(entry.path, None)
         if entry.row is not None:
@@ -300,10 +332,12 @@ class MergePage(BasePage):
         self._refresh_summary()
 
     def _sort_by_name(self) -> None:
+        self.log("Lista ordenada A-Z", archivos=len(self.entries))
         self.entries.sort(key=lambda entry: entry.path.name.lower())
         self._place_rows(0, len(self.entries))
 
     def _clear(self) -> None:
+        self.log("Lista vaciada", archivos=len(self.entries))
         for entry in self.entries:
             if entry.row is not None:
                 entry.row.forget()
@@ -366,6 +400,10 @@ class MergePage(BasePage):
                 return
             sources = self.files
             add_bookmarks = bool(self.bookmarks.get())
+            self.log(
+                "Unir PDFs solicitado: %s", describe_files(sources, limit=10),
+                archivos=len(sources), marcadores=add_bookmarks, salida=output,
+            )
             self.run_task(
                 "Uniendo PDFs",
                 "PDF unido",

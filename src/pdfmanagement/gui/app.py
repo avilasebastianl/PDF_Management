@@ -4,7 +4,11 @@ Ventana principal: barra lateral de navegacion, area de paginas y barra de estad
 
 import logging
 import os
+import platform
 import sys
+import time
+from dataclasses import asdict
+from datetime import timedelta
 from pathlib import Path
 from tkinter import messagebox
 
@@ -12,11 +16,12 @@ import customtkinter as ctk
 from PIL import Image
 from tkinterdnd2 import TkinterDnD
 
-from .. import __app_name__, __version__, core, paths
+from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import Settings
 from . import style
 from .appearance import AppearanceScheduler
 from .dialogs import HelpWindow
+from .events import debug_event, log_event
 from . import icons
 from .icons import icon
 from .pages import PAGES
@@ -31,6 +36,21 @@ logger = logging.getLogger(__name__)
 PREBUILD_DELAY_MS = 600      # espera tras el arranque antes de precargar paginas
 PREBUILD_INTERVAL_MS = 150   # pausa entre paginas precargadas o reapiladas
 RESTACK_DELAY_MS = 400       # espera tras redimensionar antes de reapilar paginas
+RESIZE_LOG_DELAY_MS = 600    # se registra el tamano final, no cada paso del arrastre
+
+# Nombres legibles de las preferencias para el registro de cambios.
+SETTING_LABELS = {
+    "window_width": "Ancho de ventana",
+    "window_height": "Alto de ventana",
+    "window_maximized": "Ventana maximizada",
+    "appearance_mode": "Modo",
+    "color_theme": "Color de acento",
+    "ui_scaling": "Tamano de la interfaz",
+    "initial_page": "Pagina inicial",
+    "open_after_save": "Abrir el archivo al terminar",
+    "output_dir": "Carpeta de salida",
+    "debug_logging": "Registro detallado",
+}
 
 
 class DnDCTk(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -46,6 +66,10 @@ class MainWindow:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self._started = time.monotonic()
+        self._settings_snapshot = asdict(settings)
+        if settings.debug_logging:
+            logging_setup.set_debug(True)
         # Iconos y fuentes quedan ligados a la ventana que los creo: se
         # descartan para poder crear otra ventana en el mismo proceso.
         icons.icon.cache_clear()
@@ -78,12 +102,27 @@ class MainWindow:
         self._deferred_success: tuple[str, Path] | None = None
         self._last_size: tuple[int, int] | None = None
         self._restack_job: str | None = None
+        self._resize_log_job: str | None = None
 
         self._build_sidebar()
         self._build_content()
         self._build_status_bar()
         self._bind_shortcuts()
         self.root.bind("<Configure>", self._on_root_configure, add="+")
+        self._log_session_start()
+
+    def _log_session_start(self) -> None:
+        settings = self.settings
+        log_event(
+            "Sesion", "Inicio de %s %s", __app_name__, __version__,
+            python=platform.python_version(),
+            sistema=platform.platform(terse=True),
+            pantalla=f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}",
+            escala_ui=f"{round(settings.ui_scaling * 100)}%",
+            tema=f"{settings.appearance_mode}/{settings.color_theme}",
+            modo_detallado=logging_setup.is_debug(),
+            datos=paths.DATA_DIR,
+        )
 
     # * Construccion ----------------------------------------------------------
 
@@ -159,8 +198,11 @@ class MainWindow:
 
     def _bind_shortcuts(self) -> None:
         for index, page_class in enumerate(PAGES, start=1):
-            self.root.bind(f"<Control-Key-{index}>", lambda _event, name=page_class.name: self.show_page(name))
-        self.root.bind("<F1>", lambda _event: self.open_help())
+            self.root.bind(
+                f"<Control-Key-{index}>",
+                lambda _event, name=page_class.name, key=index: self.show_page(name, source=f"atajo Ctrl+{key}"),
+            )
+        self.root.bind("<F1>", lambda _event: self.open_help(source="atajo F1"))
 
     # * Navegacion ------------------------------------------------------------
 
@@ -171,12 +213,14 @@ class MainWindow:
     #   asi que al redimensionar se desmontan y se reapilan de a una cuando
     #   la ventana queda quieta.
 
-    def _ensure_page(self, name: str) -> BasePage:
+    def _ensure_page(self, name: str, reason: str = "al abrir") -> BasePage:
         """Construye la pagina ``name`` si aun no existe."""
         if name not in self.pages:
             page_class = next(page for page in PAGES if page.name == name)
+            started = time.perf_counter()
             self.pages[name] = page_class(self.content, self)
             self._stack(self.pages[name], front=False)
+            debug_event("Interfaz", "Pagina %s construida %s (%.0f ms)", name, reason, (time.perf_counter() - started) * 1000)
         return self.pages[name]
 
     def _stack(self, page: BasePage, front: bool) -> None:
@@ -187,8 +231,10 @@ class MainWindow:
         else:
             page.lower()
 
-    def show_page(self, name: str) -> None:
+    def show_page(self, name: str, source: str = "barra lateral") -> None:
         """Muestra la pagina ``name`` (la construye si la precarga aun no lo hizo)."""
+        if name != self.current_page:
+            log_event("Navegacion", "%s -> %s", self.current_page or "(inicio)", name, origen=source)
         page = self._ensure_page(name)
         self.appearance.flush_page(page)  # por si quedo pendiente de un cambio de tema
         self._stack(page, front=True)
@@ -206,7 +252,7 @@ class MainWindow:
             return
         delay = PREBUILD_INTERVAL_MS * 4 if self.runner.busy else PREBUILD_INTERVAL_MS
         if not self.runner.busy:
-            self._ensure_page(pending[0])
+            self._ensure_page(pending[0], reason="en precarga")
         self.root.after(delay, self._prebuild_pages)
 
     def _on_root_configure(self, event) -> None:
@@ -222,6 +268,17 @@ class MainWindow:
         if self._restack_job:
             self.root.after_cancel(self._restack_job)
         self._restack_job = self.root.after(RESTACK_DELAY_MS, self._restack_pages)
+        if self._resize_log_job:
+            self.root.after_cancel(self._resize_log_job)
+        self._resize_log_job = self.root.after(RESIZE_LOG_DELAY_MS, self._log_window_size)
+
+    def _log_window_size(self) -> None:
+        self._resize_log_job = None
+        if self.root.winfo_exists():
+            debug_event(
+                "Ventana", "Tamano %sx%s", self.root.winfo_width(), self.root.winfo_height(),
+                estado="maximizada" if self.root.state() == "zoomed" else "normal",
+            )
 
     def _restack_pages(self) -> None:
         """Vuelve a apilar, de a una, las paginas desmontadas al redimensionar."""
@@ -273,11 +330,27 @@ class MainWindow:
             text="  Modo claro" if dark else "  Modo oscuro", image=icon("sun" if dark else "moon", 18)
         )
 
+    def set_debug_logging(self, enabled: bool) -> None:
+        """Activa o desactiva el registro detallado sin reiniciar."""
+        self.settings.debug_logging = enabled
+        logging_setup.set_debug(enabled)
+        self.save_settings()
+
     def save_settings(self) -> None:
+        self._log_settings_changes()
         try:
             self.settings.save()
         except OSError as error:
             logger.error("No se pudieron guardar las preferencias: %s", error)
+
+    def _log_settings_changes(self) -> None:
+        """Registra cada preferencia que cambio desde el ultimo guardado (antes -> despues)."""
+        current = asdict(self.settings)
+        for key, value in current.items():
+            previous = self._settings_snapshot.get(key)
+            if previous != value:
+                log_event("Ajustes", "%s: %s -> %s", SETTING_LABELS.get(key, key), _show(previous), _show(value))
+        self._settings_snapshot = current
 
     # * Notificaciones --------------------------------------------------------
 
@@ -292,7 +365,7 @@ class MainWindow:
 
     def notify_success(self, title: str, result: Path) -> None:
         """Informa el resultado en la barra de estado sin interrumpir al usuario."""
-        logger.debug("%s: %s", title, result)
+        debug_event(self.current_page or "General", "Resultado notificado: %s", title, archivo=result)
         if self.runner.busy:
             # Quedan tareas en cola: el resultado se muestra cuando terminen todas.
             self._deferred_success = (title, result)
@@ -304,7 +377,10 @@ class MainWindow:
     def show_error(self, error: BaseException) -> None:
         """Muestra un error. Los inesperados se registran con su traza completa."""
         if isinstance(error, core.PdfManagementError):
-            logger.warning("%s", error)
+            log_event(
+                self.current_page or "General", "Aviso mostrado al usuario: %s", error,
+                level=logging.WARNING, tipo=type(error).__name__,
+            )
             message = str(error)
         else:
             logger.error("Error inesperado", exc_info=(type(error), error, error.__traceback__))
@@ -320,8 +396,9 @@ class MainWindow:
 
     # * Ventanas y ciclo de vida ----------------------------------------------
 
-    def open_help(self, section: str | None = None) -> None:
+    def open_help(self, section: str | None = None, source: str = "boton Ayuda") -> None:
         """Abre la guia de uso (o la trae al frente), opcionalmente en ``section``."""
+        log_event("Ayuda", "Guia abierta", seccion=section or "inicio", origen=source)
         if getattr(self, "_help", None) is not None and self._help.winfo_exists():
             if section:
                 self._help.show_section(section)
@@ -337,11 +414,14 @@ class MainWindow:
 
     def restart(self) -> None:
         """Reinicia el proceso para aplicar cambios que requieren recargar el tema."""
+        log_event("Sesion", "Reinicio solicitado para aplicar cambios")
         self.close(exit_process=False)
         os.execl(sys.executable, sys.executable, *sys.argv)
 
     def close(self, exit_process: bool = True) -> None:
         self._remember_geometry()
+        duration = timedelta(seconds=round(time.monotonic() - self._started))
+        log_event("Sesion", "Fin de la sesion", duracion=duration, tareas_pendientes=self.runner.pending)
         for page in self.pages.values():
             page.on_close()
         self.runner.shutdown()
@@ -358,3 +438,12 @@ class MainWindow:
             self.settings.window_width = int(getattr(self.root, "_current_width", self.root.winfo_width()))
             self.settings.window_height = int(getattr(self.root, "_current_height", self.root.winfo_height()))
         self.save_settings()
+
+
+def _show(value: object) -> str:
+    """Valor legible en el registro (cadenas vacias incluidas)."""
+    if value == "":
+        return "(vacio)"
+    if isinstance(value, bool):
+        return "si" if value else "no"
+    return str(value)

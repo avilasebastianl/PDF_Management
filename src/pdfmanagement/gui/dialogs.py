@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 from .. import paths
 from ..signatures import signature_path_for
 from . import style
+from .events import debug_event
 from .widgets import primary_button, secondary_button
 
 
@@ -121,6 +122,7 @@ class HelpWindow(ctk.CTkToplevel):
     def show_section(self, title: str) -> None:
         """Desplaza la guia para que la seccion ``title`` quede arriba."""
         mark = self._sections.get(title)
+        debug_event("Ayuda", "Seccion mostrada: %s", title)
         if mark is None:
             return
         self.text_box._textbox.yview(mark)  # noqa: SLF001
@@ -331,11 +333,13 @@ class SignaturePad(ctk.CTkToplevel):
         stroke.append((event.x, event.y, width))
 
     def _undo(self) -> None:
+        debug_event("Firmar", "Lienzo de firma: deshacer trazo", trazos=len(self.strokes))
         if self.strokes:
             self.canvas.delete(f"stroke{len(self.strokes)}")
             self.strokes.pop()
 
     def _clear(self) -> None:
+        debug_event("Firmar", "Lienzo de firma: limpiar", trazos=len(self.strokes))
         self.strokes.clear()
         self.canvas.delete("all")
         self.canvas.create_line(40, 200, self.CANVAS_WIDTH - 40, 200, fill="#d0d0d0", dash=(4, 4), tags="guide")

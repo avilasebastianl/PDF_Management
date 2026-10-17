@@ -234,7 +234,8 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `config.py` | `Settings` (dataclass): `load()` crea, valida y migra; `save()` escribe `config/settings.ini`; `output_path` |
 | `signatures.py` | `list_signatures()`, `import_signature()`, `signature_path_for()`, `delete_signature()` |
 | `paths.py` | Rutas de recursos (`ASSETS_DIR`, `THEMES_DIR`...) y datos (`CONFIG_DIR`, `LOG_DIR`, `SIGNATURES_DIR`, `EXPORT_DIR`); soporte para PyInstaller |
-| `logging_setup.py` | `configure_logging(debug=False)`: `log/app.log` y `log/error.log` rotativos, captura de excepciones no controladas |
+| `logging_setup.py` | `configure_logging(debug=False)`: `log/app.log` y `log/error.log` rotativos; `set_debug()` activa el modo detallado en caliente; captura excepciones no controladas (tambien de hilos) |
+| `gui/events.py` | `log_event()` / `debug_event()`: eventos de la interfaz con formato `[Seccion] mensaje  \| clave=valor`, una linea por evento y contrasenas ocultas; `area_of()`, `describe_files()`, `timed()` |
 | `cli.py` | `main(argv) -> int`, `build_parser()` |
 
 ### `gui` - presentacion
@@ -359,7 +360,7 @@ flowchart TD
 |---|---|
 | `config/settings.ini` | Preferencias. Secciones `[Window]`, `[Appearance]`, `[General]`. Se regenera si falta; los valores invalidos se corrigen al cargar |
 | `config/default.ini` | Formato anterior (v3). Se migra automaticamente a `settings.ini` |
-| `log/app.log` | Actividad (INFO; DEBUG con `--debug`). Rotacion 1 MB x 3 |
+| `log/app.log` | Actividad: acciones del usuario, operaciones y resultados (INFO); detalle fino en modo detallado (DEBUG). Rotacion 1 MB x 3 |
 | `log/error.log` | Errores con traza completa |
 | `signs/` | Firmas guardadas (PNG/JPG) |
 | `export/` | Carpeta de salida por defecto (configurable en Ajustes) |
@@ -381,9 +382,37 @@ ui_scaling = 1.0
 initial_page = Unir
 open_after_save = yes
 output_dir =
+debug_logging = no
 ```
 
 Para mover todos los datos del usuario (por ejemplo a `%APPDATA%` al distribuir la app) basta con cambiar `DATA_DIR` en `paths.py`.
+
+### Registro de eventos (depuracion)
+
+Cada sesion queda registrada en `log/app.log` con una linea por evento:
+
+```
+[2026-10-17 10:32:24.075] INFO    MainThread    gui.events: [Unir] Unir PDFs solicitado: a.pdf, b.pdf  | archivos=2, marcadores=True, salida=...\PDF_unido.pdf
+[2026-10-17 10:32:24.080] INFO    MainThread    gui.tasks: Tarea #2 iniciada: Uniendo PDFs (en curso: 1)
+[2026-10-17 10:32:24.143] INFO    pdf-task_0    core.merge: PDF unido (2 archivos): ...\PDF_unido.pdf
+[2026-10-17 10:32:24.220] INFO    MainThread    gui.tasks: Tarea #2 'Uniendo PDFs' terminada en 0.14 s -> PDF_unido.pdf
+[2026-10-17 10:32:36.750] DEBUG   MainThread    gui.events: [Firmar] Visor: zoom 125%
+```
+
+Columnas: fecha y hora con milisegundos, nivel, hilo (`MainThread` es la interfaz; `pdf-task_N` las operaciones en segundo plano), modulo y mensaje.
+
+| Nivel | Que se registra |
+|---|---|
+| **INFO** (siempre) | Inicio y fin de sesion (version, sistema, pantalla, escala, tema), navegacion entre secciones y su origen (barra lateral, atajo), tipo de firma o accion elegida, archivos elegidos (dialogo o arrastre), agregados, movidos, quitados u ordenados, firmas seleccionadas, dibujadas, importadas o borradas, cada cambio de ajustes (`antes -> despues`), operaciones solicitadas con sus parametros, tareas numeradas con duracion y resultado, avisos y errores mostrados, decisiones de sobrescritura y solicitudes de contrasena |
+| **DEBUG** (modo detallado) | Paginas y zoom del visor, posicion y tamano de la firma (valor final de cada arrastre), apertura y eleccion en desplegables, construccion de paginas y tiempos, cambio de tema, tamano final de la ventana, dialogos cancelados |
+
+Activar el modo detallado (se aplica al instante):
+
+- **Ajustes > Datos locales > Registro detallado (para depurar)**; el boton **Ver registro** abre `app.log`.
+- `python main.pyw --debug` (ademas lo muestra en la consola).
+- Variable de entorno `PDFMANAGEMENT_DEBUG=1`.
+
+Las **contrasenas nunca se registran**: los valores cuya clave parece una contrasena se escriben como `***`, y los dialogos solo dejan constancia de que se pidio, se ingreso o se cancelo.
 
 ## Decisiones de diseno
 
@@ -421,6 +450,7 @@ venv\Scripts\python.exe -m pytest
 | `tests/test_convert.py` | Conversion real con Word y Excel (se omite si Office no esta instalado) |
 | `tests/test_gui_appearance.py` | Cambio de tema: prioridad de lo visible, seccion pendiente actualizada al abrirla, cambios rapidos sucesivos (requiere pantalla) |
 | `tests/test_gui_sign.py` | Redimensionado de la firma (asas, deslizador, limites de pagina, coincidencia con el PDF) y enlace a la guia del certificado (requiere pantalla) |
+| `tests/test_logging.py` | Formato del registro, modo detallado en caliente y por variable de entorno, contrasenas ocultas, una linea por evento, eventos de navegacion, ajustes, archivos y tareas |
 | `tests/test_gui_dropdown.py` | Desplegables: tamano segun la cantidad de opciones, barra de desplazamiento, resaltado, seleccion, clics reales (abrir, cerrar, clic fuera) (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.

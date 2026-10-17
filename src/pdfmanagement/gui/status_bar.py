@@ -20,6 +20,7 @@ import customtkinter as ctk
 
 from .. import paths
 from . import style
+from .events import log_event
 from .system import open_path, reveal_in_folder
 from .widgets import ToolTip, hide, secondary_button, show
 
@@ -62,12 +63,12 @@ class StatusBar(ctk.CTkFrame):
         self.message.grid(row=0, column=2, sticky="w", padx=(0, 14))
 
         self.reveal_button = secondary_button(
-            self, "Mostrar en carpeta", lambda: self.last_result and reveal_in_folder(self.last_result), "folder",
+            self, "Mostrar en carpeta", lambda: self._use_result("Mostrar en carpeta", reveal_in_folder), "folder",
             width=150,
         )
         self.open_button = ctk.CTkButton(
             self, text="Abrir", width=80, height=34, corner_radius=8, font=style.fonts().body,
-            command=lambda: self.last_result and open_path(self.last_result),
+            command=lambda: self._use_result("Abrir", open_path),
         )
         ToolTip(self.reveal_button, "Abre el explorador con el archivo seleccionado", above=True)
         ToolTip(self.open_button, "Abre el archivo con el programa predeterminado", above=True)
@@ -118,6 +119,12 @@ class StatusBar(ctk.CTkFrame):
         self._hide_actions()
 
     # * Interno -------------------------------------------------------------
+
+    def _use_result(self, action: str, handler) -> None:
+        if self.last_result is None:
+            return
+        log_event("Barra de estado", "%s: %s", action, self.last_result.name, ruta=self.last_result)
+        handler(self.last_result)
 
     def _apply(self, state: str, text: str, help_text: str) -> None:
         self.state = state

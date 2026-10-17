@@ -149,7 +149,7 @@ def gui_app(tmp_path_factory):
         except RuntimeError:  # tkdnd no cargo: se reintenta
             if attempt == 2:
                 raise
-    main.save_settings = lambda: None
+    main.settings.save = lambda *args, **kwargs: None  # no escribe settings.ini (el registro de cambios si corre)
     main.show_page("Unir")
     pump(main, timeout=0.5)  # la ventana debe estar visible, como cuando el usuario interactua
     yield main

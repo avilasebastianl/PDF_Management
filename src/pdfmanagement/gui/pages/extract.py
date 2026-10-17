@@ -50,7 +50,7 @@ class ExtractPage(BasePage):
         presets = ctk.CTkFrame(selection, fg_color="transparent")
         presets.grid(row=selection.row(0), column=2, padx=(8, style.CARD_PAD))
         for label, value in (("Todas", "todo"), ("Impares", "impar"), ("Pares", "par")):
-            secondary_button(presets, label, lambda v=value: self.selection.set(v), width=72).pack(side="left", padx=2)
+            secondary_button(presets, label, lambda v=value: self._use_preset(v), width=72).pack(side="left", padx=2)
         self.selection_preview = muted_label(selection)
         self.selection_preview.grid(row=selection.row(1), column=1, columnspan=2, sticky="ew", padx=(0, style.CARD_PAD))
         self.selection.trace_add("write", lambda *_: self._update_preview())
@@ -73,14 +73,20 @@ class ExtractPage(BasePage):
         try:
             info = core.get_pdf_info(path)
         except core.PdfManagementError as error:
+            self.log("Origen no valido: %s", error)
             self.source_info.configure(text=str(error), text_color=style.DANGER)
             return
         self.page_count = info.page_count
+        self.log("Origen listo: %s", info.path.name, paginas=info.page_count or "?", protegido=info.encrypted)
         pages = f"{info.page_count} paginas" if info.page_count is not None else "Protegido con contrasena"
         lock = "  ·  protegido" if info.encrypted and info.page_count is not None else ""
         self.source_info.configure(text=f"{pages}  ·  {format_size(info.size_bytes)}{lock}", text_color=style.TEXT_MUTED)
         self.output_field.set(self.default_output(info.path, "paginas"), auto=True)
         self._update_preview()
+
+    def _use_preset(self, value: str) -> None:
+        self.log_debug("Seleccion rapida: %s", value)
+        self.selection.set(value)
 
     def _update_preview(self) -> None:
         text = self.selection.get().strip()
@@ -111,6 +117,10 @@ class ExtractPage(BasePage):
                 return
             typed_password = self.source_password.get() or None
             output_password = self.output_password.get() or None
+            self.log(
+                "Extraer paginas solicitado: %s", source.name, seleccion=selection.strip(),
+                clave_origen=typed_password, proteger_resultado=bool(output_password), salida=output,
+            )
             self.run_task(
                 "Extrayendo paginas",
                 "Paginas extraidas",

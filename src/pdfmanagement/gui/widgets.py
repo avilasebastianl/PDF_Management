@@ -11,6 +11,7 @@ import customtkinter as ctk
 from tkinterdnd2 import DND_FILES
 
 from . import style
+from .events import area_of, debug_event, log_event
 from .icons import icon
 
 FileTypes = tuple[tuple[str, str], ...]
@@ -213,6 +214,7 @@ class FileField:
         stacked: bool = False,
     ) -> None:
         self.mode = mode
+        self.label = label
         self.filetypes = filetypes
         self.on_change = on_change
         self.initial_dir = initial_dir
@@ -270,16 +272,28 @@ class FileField:
                 **options,
             )
             if chosen:
+                self._log_choice(Path(chosen), "Guardar como")
                 self.set(Path(chosen))
                 self.confirmed_path = Path(chosen)
+            else:
+                debug_event(area_of(self.entry), "%s: dialogo cancelado", self.label)
         else:
             chosen = filedialog.askopenfilename(title="Seleccionar archivo", **options)
             if chosen:
+                self._log_choice(Path(chosen), "dialogo")
                 self.set(Path(chosen))
+            else:
+                debug_event(area_of(self.entry), "%s: dialogo cancelado", self.label)
 
     def _on_drop(self, files: list[Path]) -> None:
         if files:
+            extra = f" (se usa el primero de {len(files)})" if len(files) > 1 else ""
+            self._log_choice(files[0], f"arrastrado{extra}")
             self.set(files[0])
+
+    def _log_choice(self, path: Path, origin: str) -> None:
+        """Registra el archivo que el usuario eligio para este campo."""
+        log_event(area_of(self.entry), "%s: %s", self.label, path, origen=origin)
 
     def _on_typed(self, *_args) -> None:
         if not self._setting:

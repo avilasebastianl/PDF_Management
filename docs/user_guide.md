@@ -14,7 +14,7 @@ Combine varios PDFs en uno solo.
 
 1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista. Puede seguir trabajando mientras se leen: cada fila muestra sus paginas y tamano al terminar.
 2. Ordenelos con las flechas de cada fila o con **Ordenar A-Z**.
-3. Opcional: active **Crear un marcador por cada archivo** para navegar el resultado por documento.
+3. Opcional: active **Crear un marcador por cada archivo**. El PDF unido tendra en su indice lateral un marcador con el nombre de cada archivo de origen, para saltar directo a su inicio; los marcadores originales se conservan anidados dentro. Pase el cursor sobre la opcion para ver esta explicacion.
 4. Revise **Guardar como** y presione **Unir PDFs**.
 
 Si algun PDF esta protegido, la aplicacion pedira su contrasena.
@@ -131,6 +131,8 @@ Los cambios se guardan automaticamente:
 - **Carpeta de salida** por defecto.
 
 El tamano y la posicion de la ventana se recuerdan al cerrar.
+
+En **Datos locales** puede activar el **Registro detallado (para depurar)**: guarda en `log/app.log` cada accion con mas detalle, util si necesita reportar un problema. Se aplica al instante y las contrasenas nunca se registran. El boton **Ver registro** abre ese archivo.
 
 ## Privacidad y seguridad
 

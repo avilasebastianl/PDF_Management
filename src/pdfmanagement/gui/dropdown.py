@@ -28,6 +28,7 @@ import customtkinter as ctk
 
 from .._vendor.ctk_scrollable_dropdown import CTkScrollableDropdown
 from . import style
+from .events import area_of, debug_event
 from .widgets import hide, show
 
 ROW_HEIGHT = 30        # alto de cada opcion (pixeles logicos)
@@ -134,6 +135,7 @@ class _DropdownController:
     def _first_open(self, _event=None) -> None:
         if self.menu.cget("state") == "disabled":
             return
+        debug_event(area_of(self.menu), "Desplegable abierto", valor=self.menu.get(), opciones=len(self.values))
         if self.popup is None or not self.popup.winfo_exists():
             self.popup = _ScrollablePopup(
                 self.menu,
@@ -161,6 +163,7 @@ class _DropdownController:
         self.popup._iconify()  # noqa: SLF001
 
     def _select(self, value: str) -> None:
+        debug_event(area_of(self.menu), "Desplegable: elegido %s", value, anterior=self.menu.get())
         self.menu.set(value)
         if self.command:
             self.command(value)
