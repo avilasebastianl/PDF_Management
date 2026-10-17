@@ -108,6 +108,7 @@ class MainWindow:
         self._restack_job: str | None = None
         self._resize_log_job: str | None = None
         self._sidebar_animation: tuple[float, int, int, float] | None = None
+        self.settings_listeners: list = []  # se llaman tras guardar con las claves que cambiaron
 
         self._build_sidebar()
         self._build_content()
@@ -485,20 +486,26 @@ class MainWindow:
         self.save_settings()
 
     def save_settings(self) -> None:
-        self._log_settings_changes()
+        changed = self._log_settings_changes()
         try:
             self.settings.save()
         except OSError as error:
             logger.error("No se pudieron guardar las preferencias: %s", error)
+            return
+        for listener in self.settings_listeners:
+            listener(changed)
 
-    def _log_settings_changes(self) -> None:
+    def _log_settings_changes(self) -> list[str]:
         """Registra cada preferencia que cambio desde el ultimo guardado (antes -> despues)."""
         current = asdict(self.settings)
+        changed = []
         for key, value in current.items():
             previous = self._settings_snapshot.get(key)
             if previous != value:
+                changed.append(key)
                 log_event("Ajustes", "%s: %s -> %s", SETTING_LABELS.get(key, key), _show(previous), _show(value))
         self._settings_snapshot = current
+        return changed
 
     # * Notificaciones --------------------------------------------------------
 

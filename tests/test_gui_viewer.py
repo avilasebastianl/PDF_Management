@@ -294,9 +294,9 @@ def test_tabs_keep_each_document_and_its_view(viewer, gui_app, tmp_path):
     other = make_pdf(tmp_path / "otro.pdf", 3)
     assert viewer.open_file(other)
     assert len(viewer.tabs) == 2 and viewer.active == 1 and viewer.session.page_count == 3
-    assert [button.cget("text") for button in viewer._tab_buttons] == ["manual.pdf", "otro.pdf"]
+    assert viewer.tab_bar.titles() == ["manual.pdf", "otro.pdf"]
     viewer.rotate_pages(90)  # cada pestana tiene su propio historial
-    assert viewer._tab_buttons[1].cget("text") == "otro.pdf  •"
+    assert viewer.tab_bar.tabs[1].modified and viewer.tab_bar._widgets[1]["dot"].winfo_manager() == "place"
     viewer.switch_to(0)
     pump(gui_app, timeout=0.3)
     assert viewer.session is first and not first.modified

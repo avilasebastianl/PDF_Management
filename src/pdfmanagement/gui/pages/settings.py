@@ -6,6 +6,7 @@ Los cambios se guardan al instante. Solo el color del tema requiere reiniciar
 """
 
 import webbrowser
+from datetime import datetime
 from tkinter import filedialog
 
 import customtkinter as ctk
@@ -28,6 +29,12 @@ DEBUG_LOGGING_HELP = (
 )
 
 
+SAVED_TITLE = "Los cambios se guardan automáticamente"
+SAVED_DETAIL = (
+    "No hace falta pulsar ningún botón: lo que elija aquí queda guardado al instante y será la "
+    "configuración predeterminada cada vez que abra la aplicación."
+)
+SAVED_BANNER_BG = ("#eaf2fc", "#1d2733")
 ABOUT_TAGLINE = "Sus PDFs, faciles, gratis y 100 % privados"
 ABOUT_BANNER_MUTED = ("gray90", "gray85")
 ABOUT_AUTHOR_BG = ("gray90", "gray22")
@@ -53,17 +60,18 @@ ABOUT_HOW = (
 class SettingsPage(BasePage):
     name = "Ajustes"
     title = "Ajustes"
-    subtitle = "Personalice la apariencia y el comportamiento. Los cambios se guardan automaticamente."
+    subtitle = "Personalice la apariencia y el comportamiento de la aplicación."
     icon_name = "settings"
 
     def build(self) -> None:
         settings = self.app.settings
         self.body.grid_columnconfigure(0, weight=3)
         self.body.grid_columnconfigure(1, weight=2)
+        self._build_saved_banner()
 
         # * Apariencia
         appearance = Card(self.body, "Apariencia")
-        appearance.grid(row=0, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
+        appearance.grid(row=1, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
         self.mode = ctk.CTkSegmentedButton(
             appearance, values=[MODE_LABELS[mode] for mode in APPEARANCE_MODES],
             command=self._on_mode_changed, font=style.fonts().body,
@@ -86,7 +94,7 @@ class SettingsPage(BasePage):
 
         # * General
         general = Card(self.body, "General")
-        general.grid(row=1, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
+        general.grid(row=2, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.GAP))
         self.initial_page = dropdown_menu(general, list(self.app.nav_buttons), self._on_initial_page)
         self._row(general, 0, "Pagina inicial", self.initial_page)
 
@@ -103,7 +111,7 @@ class SettingsPage(BasePage):
 
         # * Datos
         data = Card(self.body, "Datos locales", "Todo se procesa y guarda en este equipo; la aplicacion no usa internet.")
-        data.grid(row=2, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.PAD))
+        data.grid(row=3, column=0, sticky="new", padx=(0, style.GAP), pady=(0, style.PAD))
         folders = ctk.CTkFrame(data, fg_color="transparent")
         folders.grid(row=data.row(0), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(10, 0))
         for text, folder in (
@@ -127,15 +135,42 @@ class SettingsPage(BasePage):
 
         self._build_about()
 
+    def _build_saved_banner(self) -> None:
+        """Aviso fijo: todo se guarda al instante y queda como configuracion al iniciar."""
+        accent = style.accent_color()
+        banner = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=SAVED_BANNER_BG, border_width=1,
+                              border_color=accent)
+        banner.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
+        banner.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(banner, text="", image=icon("check", 22, accent)).grid(row=0, column=0, rowspan=2, padx=(16, 12),
+                                                                          pady=12)
+        ctk.CTkLabel(banner, text=SAVED_TITLE, font=style.fonts().body_bold, text_color=style.TEXT, anchor="w").grid(
+            row=0, column=1, sticky="w", pady=(10, 0)
+        )
+        muted_label(banner, SAVED_DETAIL, wraplength=640).grid(row=1, column=1, sticky="w", pady=(0, 10))
+        self.saved_status = ctk.CTkLabel(banner, text="", font=style.fonts().small, text_color=style.TEXT_MUTED)
+        self.saved_status.grid(row=0, column=2, rowspan=2, padx=16)
+        self.app.settings_listeners.append(self._on_settings_saved)
+
+    def _on_settings_saved(self, changed: list[str]) -> None:
+        """Confirma cada guardado ("Guardado a las 10:42") y lo resalta un momento."""
+        if not changed or not self.saved_status.winfo_exists():
+            return
+        self.saved_status.configure(text=f"✓ Guardado a las {datetime.now():%H:%M:%S}",
+                                    text_color=style.accent_color())
+        if getattr(self, "_saved_fade", None):
+            self.after_cancel(self._saved_fade)
+        self._saved_fade = self.after(2500, lambda: self.saved_status.configure(text_color=style.TEXT_MUTED))
+
     def _build_about(self) -> None:
         """Tarjeta destacada: proposito, ventajas, como se hizo y quien la desarrollo."""
         accent = style.accent_color()
         about = self.about = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
                                           border_width=2, border_color=accent)
-        about.grid(row=0, column=1, rowspan=4, sticky="new", pady=(0, style.PAD))
+        about.grid(row=1, column=1, rowspan=4, sticky="new", pady=(0, style.PAD))
         about.grid_columnconfigure(0, weight=1)
         # La fila vacia de abajo absorbe el alto extra: las tarjetas de la izquierda no se separan.
-        self.body.grid_rowconfigure(3, weight=1)
+        self.body.grid_rowconfigure(4, weight=1)
 
         # Cabecera con el color de acento: logo, nombre y eslogan.
         banner = ctk.CTkFrame(about, corner_radius=style.CORNER - 2, fg_color=accent)

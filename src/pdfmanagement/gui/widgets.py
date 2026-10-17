@@ -2,6 +2,9 @@
 Componentes reutilizables de la interfaz.
 """
 
+import ctypes
+import ctypes.wintypes
+import sys
 import tkinter as tk
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -370,9 +373,20 @@ def _walk(widget):
 # * Tooltip -----------------------------------------------------------------
 
 class ToolTip:
-    """Tooltip sencillo que aparece tras una breve pausa sobre el widget."""
+    """
+    Tooltip que aparece tras una breve pausa sobre el widget.
+
+    - Siempre dentro del monitor donde esta el widget (cerca del borde derecho
+      se corre hacia la izquierda; si no cabe debajo, se muestra encima).
+    - No es "siempre encima" y se cierra cuando la aplicacion pierde el foco:
+      antes quedaba flotando sobre el otro programa al usar Alt+Tab.
+    - No aparece si la aplicacion no esta activa.
+    """
 
     DELAY_MS = 450
+    MARGIN = 8  # distancia minima al borde del monitor
+    _active: "ToolTip | None" = None  # a lo sumo uno visible
+    _hooked: set[str] = set()  # ventanas con el aviso de desactivacion instalado
 
     def __init__(self, widget, text: str | Callable[[], str], above: bool = False) -> None:
         self.widget = widget
@@ -394,15 +408,16 @@ class ToolTip:
             self._after_id = None
 
     def _show(self) -> None:
+        self._after_id = None
         text = self.text() if callable(self.text) else self.text
-        if self.window or not text:
+        if self.window or not text or not self.widget.winfo_exists() or not _app_is_active(self.widget):
             return
-        x = self.widget.winfo_rootx() + 8
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        if ToolTip._active is not None:
+            ToolTip._active._hide()
+        self._hook_deactivation()
         self.window = tk.Toplevel(self.widget)
+        self.window.withdraw()  # se ubica antes de verse: sin saltos
         self.window.wm_overrideredirect(True)
-        self.window.wm_attributes("-topmost", True)
-        self.window.wm_geometry(f"+{x}+{y}")
         tk.Label(
             self.window,
             text=text,
@@ -414,14 +429,86 @@ class ToolTip:
             padx=8,
             pady=4,
         ).pack()
-        # Encima del widget si se pidio o si no cabe debajo en la pantalla.
         self.window.update_idletasks()
-        if self.above or y + self.window.winfo_height() > self.widget.winfo_screenheight() - 40:
-            y = self.widget.winfo_rooty() - self.window.winfo_height() - 6
-            self.window.wm_geometry(f"+{x}+{y}")
+        x, y = self.position(self.window.winfo_reqwidth(), self.window.winfo_reqheight())
+        self.window.wm_geometry(f"+{x}+{y}")
+        self.window.deiconify()
+        self.window.lift()
+        ToolTip._active = self
+
+    def position(self, width: int, height: int) -> tuple[int, int]:
+        """Esquina superior izquierda del tooltip, dentro del monitor del widget."""
+        widget = self.widget
+        left, top, right, bottom = monitor_work_area(widget)
+        x = widget.winfo_rootx() + 8
+        below = widget.winfo_rooty() + widget.winfo_height() + 6
+        above = widget.winfo_rooty() - height - 6
+        y = above if self.above or below + height > bottom - self.MARGIN else below
+        x = max(left + self.MARGIN, min(x, right - width - self.MARGIN))
+        y = max(top + self.MARGIN, min(y, bottom - height - self.MARGIN))
+        return x, y
+
+    def _hook_deactivation(self) -> None:
+        """Cierra el tooltip visible cuando la ventana pierde el foco (Alt+Tab, otra app)."""
+        top = self.widget.winfo_toplevel()
+        if str(top) in ToolTip._hooked:
+            return
+        ToolTip._hooked.add(str(top))
+        top.bind("<FocusOut>", lambda _e: top.after(60, ToolTip._hide_if_inactive), add="+")
+        top.bind("<Unmap>", lambda _e: ToolTip._hide_active(), add="+")
+
+    @staticmethod
+    def _hide_if_inactive() -> None:
+        active = ToolTip._active
+        if active is not None and (not active.widget.winfo_exists() or not _app_is_active(active.widget)):
+            active._hide()
+
+    @staticmethod
+    def _hide_active() -> None:
+        if ToolTip._active is not None:
+            ToolTip._active._hide()
 
     def _hide(self, _event=None) -> None:
         self._cancel()
         if self.window:
             self.window.destroy()
             self.window = None
+        if ToolTip._active is self:
+            ToolTip._active = None
+
+
+def _app_is_active(widget) -> bool:
+    """La aplicacion tiene el foco del sistema (Tk devuelve None si es otra la activa)."""
+    try:
+        return widget.focus_get() is not None
+    except (KeyError, tk.TclError):  # foco en una ventana de otra libreria
+        return True
+
+
+def monitor_work_area(widget) -> tuple[int, int, int, int]:
+    """Area util (sin barra de tareas) del monitor donde esta ``widget``."""
+    if sys.platform.startswith("win"):
+        try:
+            return _windows_work_area(widget.winfo_rootx() + widget.winfo_width() // 2,
+                                      widget.winfo_rooty() + widget.winfo_height() // 2)
+        except (OSError, AttributeError):
+            pass
+    return 0, 0, widget.winfo_screenwidth(), widget.winfo_screenheight()
+
+
+def _windows_work_area(x: int, y: int) -> tuple[int, int, int, int]:
+    class _Rect(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    class _MonitorInfo(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", _Rect), ("rcWork", _Rect), ("dwFlags", ctypes.c_ulong)]
+
+    user32 = ctypes.windll.user32
+    user32.MonitorFromPoint.restype = ctypes.c_void_p
+    monitor = user32.MonitorFromPoint(ctypes.wintypes.POINT(x, y), 2)  # MONITOR_DEFAULTTONEAREST
+    info = _MonitorInfo()
+    info.cbSize = ctypes.sizeof(_MonitorInfo)
+    if not user32.GetMonitorInfoW(ctypes.c_void_p(monitor), ctypes.byref(info)):
+        raise OSError("GetMonitorInfoW")
+    work = info.rcWork
+    return work.left, work.top, work.right, work.bottom

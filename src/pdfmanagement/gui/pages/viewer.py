@@ -43,6 +43,7 @@ from ..icons import icon
 from ..viewer import FIT_WIDTH, HandTool, PageView, ThumbnailStrip, ViewerToolbar
 from ..viewer.annotation_tools import SelectTool
 from ..viewer.find_bar import FindBar
+from ..viewer.tab_strip import TabInfo, TabStrip
 from ..viewer.panels import OutlinePanel, SearchPanel
 from ..widgets import ToolTip, format_size, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
@@ -61,7 +62,6 @@ PLACEHOLDER = (
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
 MAX_TABS = 12
 NORMAL, WINDOW, FULLSCREEN = "normal", "ventana", "pantalla completa"
-TAB_TITLE_CHARS = 26
 
 
 @dataclass
@@ -168,10 +168,9 @@ class ViewerPage(BasePage):
 
     def _build_tab_bar(self) -> None:
         """Pestanas de los documentos abiertos (se muestra con al menos uno)."""
-        self.tab_bar = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.tab_bar = TabStrip(self.body, on_select=self.switch_to, on_close=self.close_tab, on_new=self.browse)
         self.tab_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         self.tab_bar.grid_remove()
-        self._tab_buttons: list[ctk.CTkButton] = []
 
     def _build_side_panel(self) -> None:
         self.side = ctk.CTkFrame(self.body, corner_radius=style.CORNER, fg_color=style.CARD_BG,
@@ -466,47 +465,21 @@ class ViewerPage(BasePage):
 
     def _render_tabs(self) -> None:
         """Vuelve a dibujar la barra de pestanas (al abrir, cerrar o cambiar de pestana)."""
-        for widget in self.tab_bar.winfo_children():
-            widget.destroy()
-        self._tab_buttons = []
         if not self.tabs:
+            self.tab_bar.set_tabs([], -1)
             self.tab_bar.grid_remove()
             return
         if self.view_mode != FULLSCREEN:
             self.tab_bar.grid()
-        accent = style.accent_color()
-        for index, tab in enumerate(self.tabs):
-            active = index == self.active
-            frame = ctk.CTkFrame(self.tab_bar, corner_radius=8, border_width=1,
-                                 fg_color=style.CARD_BG if active else "transparent",
-                                 border_color=accent if active else style.CARD_BORDER)
-            frame.pack(side="left", padx=(0, 4))
-            title = ctk.CTkButton(
-                frame, text=self._tab_title(tab), height=26, corner_radius=6, anchor="w",
-                fg_color="transparent", hover_color=style.HOVER, text_color=style.TEXT,
-                font=style.fonts().body_bold if active else style.fonts().small,
-                command=lambda i=index: self.switch_to(i),
-            )
-            title.pack(side="left", padx=(4, 0), pady=2)
-            ToolTip(title, str(tab.path))
-            icon_button(frame, "clear", lambda i=index: self.close_tab(i), "Cerrar pestana (Ctrl+W)",
-                        size=24).pack(side="left", padx=(0, 4), pady=2)
-            self._tab_buttons.append(title)
-        icon_button(self.tab_bar, "add", self.browse, "Abrir otro PDF en una pestana nueva (Ctrl+O)",
-                    size=28).pack(side="left", padx=(2, 0))
+        self.tab_bar.set_tabs([self._tab_info(tab) for tab in self.tabs], self.active)
 
-    def _tab_title(self, tab: DocumentTab) -> str:
-        name = tab.path.name
-        if len(name) > TAB_TITLE_CHARS:
-            name = name[:TAB_TITLE_CHARS - 3] + "..."
-        return name + ("  •" if tab.session.modified else "")
+    @staticmethod
+    def _tab_info(tab: DocumentTab) -> TabInfo:
+        return TabInfo(title=tab.path.name, tooltip=str(tab.path), modified=tab.session.modified)
 
     def _update_tab_title(self) -> None:
-        if self.tab is not None and self.active < len(self._tab_buttons):
-            text = self._tab_title(self.tab)
-            button = self._tab_buttons[self.active]
-            if button.cget("text") != text:
-                button.configure(text=text)
+        if self.tab is not None:
+            self.tab_bar.update_tab(self.active, self._tab_info(self.tab))
 
     # * Pantalla completa -------------------------------------------------------
 

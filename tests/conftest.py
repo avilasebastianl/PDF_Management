@@ -166,3 +166,26 @@ def pump(window, done=None, timeout: float = 0.3) -> None:
         window.root.update()
         time.sleep(0.01)
     window.root.update()
+
+
+@pytest.fixture(autouse=True)
+def _reset_gui_state(request):
+    """
+    Las pruebas de interfaz comparten una sola ventana: antes de cada una se
+    deja en un estado conocido (seccion Unir, menu expandido, Visor sin
+    documentos ni modos especiales), asi no dependen del orden.
+    """
+    if "gui_app" not in request.fixturenames:
+        yield
+        return
+    app = request.getfixturevalue("gui_app")
+    viewer = app.pages.get("Visor")
+    if viewer is not None:
+        viewer.set_view_mode("normal")
+        viewer.set_edit_mode(False)
+        viewer.close_all_documents()
+    if app.settings.sidebar_collapsed:
+        app.toggle_sidebar(animate=False)
+    app.show_page("Unir", source="pruebas")
+    pump(app, timeout=0.05)
+    yield
