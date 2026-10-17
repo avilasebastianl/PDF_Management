@@ -55,6 +55,7 @@ GLYPHS = {
     "eye": "\ue890",
     "heart": "\ueb51",
     "refresh": "\ue72c",
+    "list": "\ue8fd",
 }
 
 _FONT_CANDIDATES = ("SegoeIcons.ttf", "segmdl2.ttf")

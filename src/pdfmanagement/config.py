@@ -60,7 +60,7 @@ class Settings:
     appearance_mode: str = "System"
     color_theme: str = DEFAULT_COLOR_THEME
     ui_scaling: float = 1.0
-    initial_page: str = "Unir"
+    initial_page: str = "Visor"
     open_after_save: bool = True
     output_dir: str = ""
     debug_logging: bool = False  # registro detallado (DEBUG) en log/app.log

@@ -67,6 +67,7 @@ class MainWindow:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._started = time.monotonic()
+        self._closing = False
         self._settings_snapshot = asdict(settings)
         if settings.debug_logging:
             logging_setup.set_debug(True)
@@ -193,7 +194,7 @@ class MainWindow:
         self.content.grid_rowconfigure(0, weight=1)
 
     def _build_status_bar(self) -> None:
-        self.status_bar = StatusBar(self.root)
+        self.status_bar = StatusBar(self.root, on_view=lambda path: self.open_in("Visor", path))
         self.status_bar.grid(row=1, column=1, sticky="ew")
 
     def _bind_shortcuts(self) -> None:
@@ -241,6 +242,11 @@ class MainWindow:
         self.current_page = name
         self._refresh_nav()
         page.on_show()
+
+    def open_in(self, name: str, path: Path) -> None:
+        """Muestra la seccion ``name`` y le entrega el archivo ``path``."""
+        self.show_page(name, source=f"enviado ({path.name})")
+        self.pages[name].receive_file(path)
 
     def _prebuild_pages(self) -> None:
         """
@@ -392,6 +398,9 @@ class MainWindow:
         messagebox.showerror("No se pudo completar la operacion", message, parent=self.root)
 
     def _on_callback_exception(self, exc_type, exc_value, exc_traceback) -> None:
+        if self._closing:  # la ventana se esta destruyendo: un dialogo modal la bloquearia
+            logger.error("Error durante el cierre", exc_info=(exc_type, exc_value, exc_traceback))
+            return
         self.show_error(exc_value.with_traceback(exc_traceback))
 
     # * Ventanas y ciclo de vida ----------------------------------------------
@@ -419,6 +428,7 @@ class MainWindow:
         os.execl(sys.executable, sys.executable, *sys.argv)
 
     def close(self, exit_process: bool = True) -> None:
+        self._closing = True
         self._remember_geometry()
         duration = timedelta(seconds=round(time.monotonic() - self._started))
         log_event("Sesion", "Fin de la sesion", duracion=duration, tareas_pendientes=self.runner.pending)

@@ -74,7 +74,11 @@ class _ScrollablePopup(CTkScrollableDropdown):
         self.hide = True
 
     def _on_root_configure(self, event) -> None:
-        if event.widget is self.attach.winfo_toplevel() and self.winfo_exists() and self.winfo_viewable():
+        # Al cerrar la ventana el control ancla se destruye antes que la raiz,
+        # que sigue enviando <Configure>: sin esta guarda cada evento fallaba.
+        if not (self.winfo_exists() and self.attach.winfo_exists()):
+            return
+        if event.widget is self.attach.winfo_toplevel() and self.winfo_viewable():
             self._withdraw()
 
     def fade_in(self) -> None:  # aparicion inmediata

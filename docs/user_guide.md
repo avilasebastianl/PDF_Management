@@ -1,12 +1,30 @@
 # PDF Management - Guia de uso
 
-Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+6**. Pulse **F1** para abrir esta guia.
+Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+7**. Pulse **F1** para abrir esta guia.
 
 En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
 
-La **barra de estado** (parte inferior) indica que esta haciendo la aplicacion: un punto gris significa *listo*, la barra animada una operacion *en curso* (con las que esperan en cola), el punto verde el *ultimo archivo generado* con los botones **Mostrar en carpeta** y **Abrir**, y el rojo que la ultima operacion *no se completo*. Pase el cursor sobre ella para ver el detalle. Puede seguir trabajando mientras una operacion esta en curso.
+La **barra de estado** (parte inferior) indica que esta haciendo la aplicacion: un punto gris significa *listo*, la barra animada una operacion *en curso* (con las que esperan en cola), el punto verde el *ultimo archivo generado* con los botones **Mostrar en carpeta**, **Abrir** y **Ver en el visor**, y el rojo que la ultima operacion *no se completo*. Pase el cursor sobre ella para ver el detalle. Puede seguir trabajando mientras una operacion esta en curso.
 
 La aplicacion nunca sobrescribe un archivo sin preguntar: si el nombre de salida sugerido ya existe, elige automaticamente uno libre, por ejemplo `informe_firmado (2).pdf`.
+
+## Visor
+
+Lea cualquier PDF sin salir de la aplicacion. Es la primera seccion y la que se abre al iniciar (puede cambiarlo en Ajustes).
+
+- **Abrir**: boton **Abrir**, **Ctrl+O**, clic en el area vacia o arrastre un PDF. Si esta protegido se pide la contrasena. **Recientes** muestra los ultimos 10 archivos.
+- **Panel lateral** (boton de lista para mostrarlo u ocultarlo):
+  - **Miniaturas**: haga clic en una para ir a esa pagina.
+  - **Marcadores**: el indice del documento, si lo tiene.
+  - **Buscar** (**Ctrl+F**): escriba y pulse Enter. Puede distinguir mayusculas o buscar solo palabras completas. **F3** / **Mayus+F3** van al resultado siguiente / anterior; cada resultado muestra su contexto y se resalta en la pagina.
+- **Herramientas**: **Seleccionar texto** (arrastre sobre el texto; **Ctrl+C** copia y **Ctrl+A** selecciona la pagina) o **Mano** para mover la pagina. El boton central del raton tambien desplaza.
+- **Zoom**: **Ctrl + rueda** (centrado en el cursor), **Ctrl++** / **Ctrl+-**, **Ctrl+0** para ajustar al ancho, o la lista de zoom (ajustar ancho, ajustar pagina, 50-400 %).
+- **Navegar**: rueda, **Re Pag** / **Av Pag**, **Inicio** / **Fin**, o escriba el numero de pagina.
+- **Propiedades**: titulo, autor, fechas, tamano de pagina, cifrado y firmas del documento.
+- **Enviar a...**: abre el documento en Unir, Extraer, Firmar o Proteger sin buscarlo de nuevo.
+- **Esc** borra la seleccion y los resaltados de la busqueda.
+
+El visor solo dibuja las paginas que se ven, asi que los documentos de cientos de paginas abren y se desplazan con la misma fluidez. Cuando haya edicion, los cambios siempre se guardaran con **Guardar como**: el archivo original nunca se modifica.
 
 ## Unir
 

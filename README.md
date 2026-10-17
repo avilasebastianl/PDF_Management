@@ -35,6 +35,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 
 | Seccion | Que hace | Detalles |
 |---|---|---|
+| **Visor** | Abre y lee PDFs con fluidez | Desplazamiento continuo virtualizado, miniaturas, marcadores, busqueda incremental (mayusculas / palabras completas), seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion |
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
@@ -42,7 +43,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Proteger** | Cifra o descifra un PDF | AES-256, deteccion automatica del estado, confirmacion de contrasena |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, pagina inicial, carpeta de salida |
 
-Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir** y **Mostrar en carpeta**), atajos `Ctrl+1..6` y `F1`, y una CLI con las mismas operaciones.
+Ademas: escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir**, **Mostrar en carpeta** y **Ver en el visor**), atajos `Ctrl+1..7` y `F1`, y una CLI con las mismas operaciones.
 
 ## Inicio rapido
 
@@ -152,6 +153,7 @@ PDFManagement/
 │   ├── config.py               # Preferencias (settings.ini)
 │   ├── logging_setup.py        # Registro rotativo
 │   ├── signatures.py           # Biblioteca de firmas (signs/)
+│   ├── recent.py               # Archivos recientes del visor (config/recent.json)
 │   ├── _vendor/                # Codigo de terceros sin modificar (ver _vendor/README.md)
 │   │   └── ctk_scrollable_dropdown/   # Lista desplegable con desplazamiento (MIT)
 │   ├── core/
@@ -164,7 +166,11 @@ PDFManagement/
 │   │   ├── security.py         # Proteger / desproteger
 │   │   ├── signing.py          # Firma visual (SignaturePlacement, signature_rect)
 │   │   ├── digital_signing.py  # Firma digital con certificado (PAdES)
-│   │   └── convert.py          # Office -> PDF
+│   │   ├── convert.py          # Office -> PDF
+│   │   └── editing/            # Base del visor/editor (sin GUI)
+│   │       ├── session.py      # DocumentSession: documento abierto, Guardar como
+│   │       ├── history.py      # History: deshacer/rehacer con el journal de PyMuPDF
+│   │       └── search.py       # iter_search: busqueda incremental por paginas
 │   └── gui/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
 │       ├── tasks.py            # TaskRunner (hilos + sondeo seguro)
@@ -176,10 +182,17 @@ PDFManagement/
 │       ├── widgets.py          # Card, FileField, PasswordField, ToolTip...
 │       ├── dialogs.py          # Contrasena, ayuda, lienzo de firma
 │       ├── system.py           # Abrir archivos / mostrar en carpeta
+│       ├── viewer/             # Visor reutilizable (Visor y Firmar)
+│       │   ├── render.py       # RenderScheduler: cola de prioridad + cache LRU + mosaicos
+│       │   ├── page_view.py    # PageView: lienzo virtualizado, zoom, coordenadas, herramientas
+│       │   ├── toolbar.py      # ViewerToolbar: navegacion y zoom
+│       │   ├── thumbnails.py   # ThumbnailStrip: miniaturas perezosas
+│       │   ├── tools.py        # HandTool, TextSelectTool
+│       │   └── panels.py       # OutlinePanel (marcadores), SearchPanel (busqueda)
 │       └── pages/
 │           ├── registry.py     # Lista ordenada de paginas
 │           ├── base.py         # BasePage
-│           └── merge.py · extract.py · convert.py · sign.py · security.py · settings.py
+│           └── viewer.py · merge.py · extract.py · convert.py · sign.py · security.py · settings.py
 └── tests/                      # Pruebas automatizadas (pytest)
 ```
 
@@ -210,6 +223,16 @@ Todas las funciones validan sus entradas, escriben el resultado de forma atomica
 | `unique_path(path)` | `nombre (2).pdf` si `path` ya existe |
 
 `SignaturePlacement(x, y, width=150, page_number=None, all_pages=False)`: coordenadas en puntos sobre la pagina **tal como se ve** (origen arriba a la izquierda); `page_number=None` significa la ultima pagina.
+
+### `core.editing` - base del visor y del editor
+
+| Elemento | Descripcion |
+|---|---|
+| `DocumentSession.open(path, password=None)` | Abre el PDF (pide contrasena con los errores tipados de `open_document`); `page_count`, `page_rect(i)`, `page_sizes()`, `words(i)` (cache por pagina), `table_of_contents()`, `properties()`, `has_signatures()`, `modified`, `close()` |
+| `DocumentSession.save_as(output, keep_encryption=True)` | **Siempre Guardar como**: rechaza escribir sobre el original, guarda una copia compacta (`garbage=3`, `deflate`) de forma atomica y conserva el cifrado AES-256 con la misma contrasena si se pide; el historial de deshacer sigue disponible |
+| `History(document, on_change)` | Deshacer/rehacer sobre el *journal* de PyMuPDF: `with history.operation("Rotar"):` agrupa cambios y, si algo falla, revierte la operacion; `undo()`, `redo()`, `undo_label`, `redo_label`, `modified`, `mark_saved()` |
+| `iter_search(document, query, options, start_page=0)` | Generador `(pagina, [SearchHit])` que recorre el documento desde `start_page` y da la vuelta; `SearchOptions(match_case, whole_words)`; cada `SearchHit` trae rectangulos y contexto |
+| `recent.load_recent()`, `add_recent(path)`, `clear_recent()` | Ultimos 10 archivos abiertos en el visor |
 
 ### `core.errors` - excepciones
 
@@ -251,6 +274,10 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
+| `ViewerPage` (`pages/viewer.py`) | Seccion Visor (la primera): barra de archivo (Abrir, Recientes, Enviar a..., Propiedades), panel lateral plegable (Miniaturas / Marcadores / Buscar), herramientas y atajos activos solo en esta seccion |
+| `PageView` (`viewer/page_view.py`) | Lienzo de paginas continuo o de pagina unica: solo dibuja las paginas visibles (+-1) y libera las lejanas, zoom por pasos o ajustado (`FIT_WIDTH`, `FIT_PAGE`) anclado al cursor, mosaicos con zoom alto, conversion `canvas_to_page` / `page_to_canvas`, resaltados de busqueda y herramientas enchufables (`Tool`) |
+| `RenderScheduler` (`viewer/render.py`) | Dibuja una imagen por ciclo de eventos en el hilo de la interfaz, por prioridad, con cache LRU de 200 MB; los pedidos obsoletos se descartan (`cancel_where` por solicitante) |
+| `ViewerToolbar`, `ThumbnailStrip`, `HandTool`, `TextSelectTool`, `OutlinePanel`, `SearchPanel` (`viewer/`) | Navegacion y zoom; miniaturas perezosas; mano; seleccion de texto por palabras entre paginas; marcadores; busqueda incremental con presupuesto de 15 ms por ciclo |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
 
 ## Flujos principales
@@ -346,6 +373,24 @@ flowchart TD
     H --> I[Actualizacion incremental<br/>escritura atomica]
 ```
 
+### Visor: dibujo de paginas
+
+```mermaid
+flowchart TD
+    A[Desplazamiento / zoom / redimension] --> B[PageView._update_visible<br/>paginas visibles +-1]
+    B --> C{Pagina > 2,5 MP?}
+    C -- no --> D[Pedir pagina completa]
+    C -- si --> E[Pedir solo los mosaicos visibles<br/>1024 px, clip en coordenadas visibles]
+    D & E --> F{En cache?}
+    F -- si --> G[Se muestra al instante]
+    F -- no --> H[Cola de prioridad<br/>cercania a la vista; miniaturas despues]
+    H --> I[Una imagen por ciclo de eventos<br/>get_pixmap en el hilo de la interfaz]
+    I --> J[Cache LRU 200 MB] --> G
+    B --> K[Liberar imagenes a mas de 3 paginas]
+```
+
+La busqueda sigue el mismo principio: `SearchPanel` avanza `iter_search` en porciones de 15 ms y publica los resaltados como maximo cada 150 ms, asi la ventana responde mientras recorre documentos largos.
+
 ### Politica de sobrescritura (`BasePage.resolve_output`)
 
 | Origen de la ruta de salida | Si el archivo ya existe |
@@ -429,6 +474,10 @@ Las **contrasenas nunca se registran**: los valores cuya clave parece una contra
 - **Lista de Unir incremental.** Filas persistentes que solo se recolocan al mover, quitar u ordenar (mover: de ~5 s a ~15 ms con 40 archivos); filas nuevas construidas por lotes entre eventos (la ventana responde en ~20 ms al agregar 40 archivos); metadatos leidos en un hilo; arrastrar y soltar registrado en el contenedor y no en cada widget.
 - **Cambio de tema priorizado.** CustomTkinter redibuja todos los widgets al cambiar de tema (~1,2 s con todas las secciones). `AppearanceScheduler` redibuja primero solo lo visible (~200 ms) con el pintado de la ventana congelado (`WM_SETREDRAW`), asi el cambio aparece completo en un solo cuadro; el resto se actualiza en segundo plano. Tambien aplica al modo "Sistema".
 - **Codigo de terceros aislado.** Los componentes externos viven sin modificar en `_vendor/` (convencion de `pip`/`setuptools`); los ajustes propios van en un envoltorio (`gui/dropdown.py`), asi actualizar un componente es reemplazar sus archivos.
+- **Dibujo de paginas en el hilo de la interfaz.** PyMuPDF no libera el GIL al dibujar (medido: un hilo dibujando bloquea la ventana ~16 ms por pagina) ni admite un documento en varios hilos, asi que un hilo no aporta fluidez. `RenderScheduler` dibuja una imagen por ciclo de eventos: entre imagen e imagen Tk atiende clics y desplazamiento.
+- **Mosaicos con zoom alto.** Una pagina al 400 % ocuparia decenas de MB; por encima de 2,5 MP solo se dibujan los trozos visibles de 1024 px (zoom 200 %: de ~508 a ~174 ms en el perfilador).
+- **Historial con el journal de PyMuPDF y Guardar como desde una copia.** Guardar con `garbage` sobre el documento vivo borra el historial; por eso `save_as` guarda una copia (`tobytes()`) y el usuario puede seguir deshaciendo tras guardar. Nunca se sobrescribe el original.
+- **Un solo visor.** Firmar usa el mismo `PageView` que el Visor (en modo pagina unica) con la firma como herramienta (`Tool`); las mejoras de rendimiento benefician a ambas secciones.
 - **Sin redibujos innecesarios.** CustomTkinter redibuja en cada `configure`, por eso los widgets se crean con su estado final y la barra lateral y Ajustes solo actualizan lo que cambio.
 
 ## Pruebas
@@ -451,7 +500,9 @@ venv\Scripts\python.exe -m pytest
 | `tests/test_gui_appearance.py` | Cambio de tema: prioridad de lo visible, seccion pendiente actualizada al abrirla, cambios rapidos sucesivos (requiere pantalla) |
 | `tests/test_gui_sign.py` | Redimensionado de la firma (asas, deslizador, limites de pagina, coincidencia con el PDF) y enlace a la guia del certificado (requiere pantalla) |
 | `tests/test_logging.py` | Formato del registro, modo detallado en caliente y por variable de entorno, contrasenas ocultas, una linea por evento, eventos de navegacion, ajustes, archivos y tareas |
-| `tests/test_gui_dropdown.py` | Desplegables: tamano segun la cantidad de opciones, barra de desplazamiento, resaltado, seleccion, clics reales (abrir, cerrar, clic fuera) (requiere pantalla) |
+| `tests/test_gui_dropdown.py` | Desplegables: tamano segun la cantidad de opciones, barra de desplazamiento, resaltado, seleccion, clics reales (abrir, cerrar, clic fuera), controles destruidos al cerrar (requiere pantalla) |
+| `tests/test_editing.py` | `DocumentSession` (indice, propiedades, contrasena), deshacer/rehacer y reversion de operaciones fallidas, Guardar como (nunca sobre el original, historial conservado, cifrado conservado o quitado), modos de busqueda, archivos recientes |
+| `tests/test_gui_viewer.py` | Visor: apertura con miniaturas y marcadores, dibujo virtualizado, navegacion, busqueda con resaltado y ciclo de resultados, seleccionar y copiar, mosaicos y modos de ajuste, Enviar a Unir, PDF protegido, atajos solo en el Visor (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
 
@@ -505,14 +556,20 @@ flowchart LR
 ## Hoja de ruta
 
 - [x] Firma digital con certificado (PAdES B-B).
+- [x] Visor/editor, fase 0: nucleo de edicion (`DocumentSession`, `History`, `iter_search`) y visor reutilizable; Firmar migrado al visor compartido.
+- [x] Visor/editor, fase 1: seccion **Visor** (primera seccion) con miniaturas, marcadores, busqueda, seleccion de texto, zoom por mosaicos y Enviar a...
+- [ ] Fase 2: organizar paginas en el Visor (rotar, eliminar, reordenar arrastrando miniaturas, insertar de otro PDF) con deshacer/rehacer y **Guardar como**.
+- [ ] Fase 3: anotaciones (resaltar, subrayar, notas, formas, texto libre, dibujo a mano).
+- [ ] Fase 4: edicion de contenido (agregar texto e imagenes, **reemplazar texto**, tapar/redactar).
+- [ ] Fase 5: formularios (rellenar campos y aplanar).
+- [ ] Fase 6: seccion **Crear**, en este orden: documento nuevo, desde plantilla, desde imagenes.
+- [ ] Fase 7 (opcional): OCR con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Verificar firmas digitales existentes: firmante, fecha, integridad y confianza del certificado.
 - [ ] Sello de tiempo opcional (PAdES B-T) con una TSA; requiere conexion, por eso seria una opcion explicita y desactivada por defecto.
 - [ ] Firmar con tokens USB / tarjetas (PKCS#11) y con el almacen de certificados de Windows.
 - [ ] Conversion sin Microsoft Office (alternativa: LibreOffice en modo headless).
 - [ ] Comprimir PDF (optimizar imagenes y limpiar objetos).
 - [ ] Dividir un PDF en varios archivos (por rangos o cada N paginas).
-- [ ] Rotar y reordenar paginas con miniaturas.
-- [ ] Convertir imagenes (JPG/PNG) a PDF.
 - [ ] Empaquetado distribuible (PyInstaller + instalador) y datos en `%APPDATA%`.
 
 ---

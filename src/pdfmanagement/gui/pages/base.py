@@ -154,6 +154,17 @@ class BasePage(ctk.CTkFrame):
         passwords = dict(self.passwords)
         self.app.runner.submit(description, lambda: operation(passwords), succeeded, failed)
 
+    def receive_file(self, path: Path) -> None:
+        """
+        Recibe un archivo enviado desde otra seccion (p. ej. el Visor). Por
+        defecto lo pone como archivo de origen si la pagina tiene uno.
+        """
+        source_field = getattr(self, "source_field", None)
+        if source_field is None:
+            return
+        self.log("Archivo recibido de otra seccion: %s", path.name)
+        source_field.set(path)
+
     def guard(self, action: Callable[[], None]) -> None:
         """Ejecuta una accion de la interfaz mostrando los errores de validacion."""
         try:

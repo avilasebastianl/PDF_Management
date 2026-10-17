@@ -85,6 +85,59 @@ def _password_dialog(parent, title: str, message: str) -> str | None:
     return result["value"]
 
 
+# * Propiedades del documento -----------------------------------------------
+
+class DocumentPropertiesWindow(ctk.CTkToplevel):
+    """Datos del PDF abierto en el visor (solo lectura)."""
+
+    def __init__(self, parent, properties, current_page_size: tuple[float, float] | None = None) -> None:
+        super().__init__(parent)
+        _prepare_toplevel(self, parent, "Propiedades del documento", 520, 520, modal=False)
+        self.resizable(False, False)
+        frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+        frame.grid_columnconfigure(1, weight=1)
+
+        def size_text(size_bytes: int) -> str:
+            value = float(size_bytes)
+            for unit in ("B", "KB", "MB"):
+                if value < 1024:
+                    return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+                value /= 1024
+            return f"{value:.1f} GB"
+
+        rows = [
+            ("Archivo", properties.path.name),
+            ("Carpeta", str(properties.path.parent)),
+            ("Tamano", size_text(properties.size_bytes)),
+            ("Paginas", str(properties.page_count)),
+        ]
+        if current_page_size:
+            width, height = current_page_size
+            rows.append(("Pagina actual", f"{width:.0f} x {height:.0f} pt  ({width / 72 * 25.4:.0f} x {height / 72 * 25.4:.0f} mm)"))
+        rows += [
+            ("Version PDF", properties.pdf_version or "-"),
+            ("Protegido", "Si, con contrasena" if properties.encrypted else "No"),
+            ("Firmas digitales", "Si (editarlo invalidaria las firmas)" if properties.has_signatures else "No"),
+            ("Titulo", properties.title or "-"),
+            ("Autor", properties.author or "-"),
+            ("Asunto", properties.subject or "-"),
+            ("Palabras clave", properties.keywords or "-"),
+            ("Creado con", properties.creator or "-"),
+            ("Producido por", properties.producer or "-"),
+            ("Creado", properties.created or "-"),
+            ("Modificado", properties.modified or "-"),
+        ]
+        for row, (label, value) in enumerate(rows):
+            ctk.CTkLabel(frame, text=label, font=style.fonts().body_bold, anchor="nw").grid(
+                row=row, column=0, sticky="nw", padx=(4, 14), pady=3
+            )
+            ctk.CTkLabel(frame, text=value, font=style.fonts().body, anchor="w", justify="left", wraplength=320).grid(
+                row=row, column=1, sticky="w", pady=3
+            )
+        primary_button(self, "Cerrar", self.destroy, width=110).pack(anchor="e", padx=16, pady=(0, 14))
+
+
 # * Ayuda -------------------------------------------------------------------
 
 class HelpWindow(ctk.CTkToplevel):

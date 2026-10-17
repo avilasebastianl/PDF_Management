@@ -336,6 +336,10 @@ class MergePage(BasePage):
         self.entries.sort(key=lambda entry: entry.path.name.lower())
         self._place_rows(0, len(self.entries))
 
+    def receive_file(self, path: Path) -> None:
+        self.log("Archivo recibido de otra seccion: %s", path.name)
+        self._add_files([path])
+
     def _clear(self) -> None:
         self.log("Lista vaciada", archivos=len(self.entries))
         for entry in self.entries:

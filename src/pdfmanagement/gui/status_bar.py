@@ -41,7 +41,7 @@ _DOT_COLORS = {
 class StatusBar(ctk.CTkFrame):
     """Barra inferior con indicador de estado, mensaje, progreso y acciones."""
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, on_view=None) -> None:
         super().__init__(parent, height=46, corner_radius=0, fg_color=style.SIDEBAR_BG)
         self.grid_columnconfigure(1, weight=1)
         self.state = "idle"
@@ -66,6 +66,11 @@ class StatusBar(ctk.CTkFrame):
             self, "Mostrar en carpeta", lambda: self._use_result("Mostrar en carpeta", reveal_in_folder), "folder",
             width=150,
         )
+        self.on_view = on_view
+        self.view_button = secondary_button(
+            self, "Ver en el visor", lambda: self._use_result("Ver en el visor", self.on_view), "eye", width=150,
+        )
+        ToolTip(self.view_button, "Abre el archivo generado en la seccion Visor", above=True)
         self.open_button = ctk.CTkButton(
             self, text="Abrir", width=80, height=34, corner_radius=8, font=style.fonts().body,
             command=lambda: self._use_result("Abrir", open_path),
@@ -103,8 +108,10 @@ class StatusBar(ctk.CTkFrame):
             "Use 'Abrir' o 'Mostrar en carpeta' para acceder al resultado.",
         )
         if show_actions:
-            self.reveal_button.grid(row=1, column=2, padx=(0, 8))
-            self.open_button.grid(row=1, column=3, padx=(0, style.PAD))
+            if self.on_view is not None:
+                self.view_button.grid(row=1, column=2, padx=(0, 8))
+            self.reveal_button.grid(row=1, column=3, padx=(0, 8))
+            self.open_button.grid(row=1, column=4, padx=(0, style.PAD))
 
     def set_error(self, summary: str) -> None:
         short = summary.splitlines()[0] if summary else "La operacion no se completo"
@@ -141,5 +148,6 @@ class StatusBar(ctk.CTkFrame):
             self.dot.configure(fg_color=_DOT_COLORS[state])
 
     def _hide_actions(self) -> None:
+        hide(self.view_button)
         hide(self.reveal_button)
         hide(self.open_button)

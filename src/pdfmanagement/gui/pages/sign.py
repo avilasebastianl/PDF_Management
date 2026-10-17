@@ -20,18 +20,17 @@ from ...core.signing import MIN_SIGNATURE_WIDTH
 from .. import style
 from ..dialogs import SignaturePad, ask_certificate_password, ask_password
 from ..dropdown import dropdown_menu, set_dropdown_values
-from ..icons import GLYPHS, icon, render_glyph
+from ..icons import icon
+from ..viewer import PageView, Tool, ViewerToolbar
 from ..widgets import (
     Card,
     FileField,
     ToolTip,
-    enable_file_drop,
     field_label,
     hide,
     icon_button,
     muted_label,
     primary_button,
-    set_enabled,
     set_label_image,
     show,
 )
@@ -44,7 +43,6 @@ CERTIFICATE_FILETYPES = (("Certificados digitales", "*.pfx *.p12"),)
 DEFAULT_ASPECT = 0.4
 CERTIFICATE_HOLDER = "Titular del certificado"
 CERTIFICATE_GUIDE_SECTION = "Como obtener un certificado digital"  # titulo en docs/user_guide.md
-VIEWER_MARGIN = 24
 PLACEHOLDER_EMPTY = (
     "Haga clic aqui o arrastre un PDF para comenzar",
     'Tambien puede usar el boton "Examinar" del panel. Solo archivos PDF.',
@@ -53,18 +51,34 @@ PLACEHOLDER_LOCKED = (
     "El documento esta protegido",
     "Seleccionelo de nuevo e ingrese su contrasena para verlo.",
 )
-ZOOM_STEP = 1.25
-ZOOM_LIMITS = (0.3, 5.0)
 HANDLE_SIZE = 9          # lado de las asas de redimensionado, en pixeles del visor
 SIZE_STEP = 10           # paso de los botones - / + del tamano, en puntos
 SIZE_SLIDER_MAX = 400    # ancho maximo del deslizador (se ajusta a la pagina)
 _CORNER_CURSORS = {"nw": "size_nw_se", "se": "size_nw_se", "ne": "size_ne_sw", "sw": "size_ne_sw"}
 
 
-def _glyph_image(name: str, size: int, color: str) -> Image.Image:
-    """Icono de la fuente del sistema como imagen PIL (para dibujar en el lienzo)."""
-    image = render_glyph(GLYPHS[name], size, color)
-    return image.resize((size, size), Image.LANCZOS) if image else Image.new("RGBA", (size, size), (0, 0, 0, 0))
+class _SignatureTool(Tool):
+    """La firma como herramienta del visor: delega en la pagina Firmar."""
+
+    cursor = "crosshair"
+
+    def __init__(self, page: "SignPage") -> None:
+        self.page = page
+
+    def press(self, view, event, hit) -> None:
+        self.page._on_press(event)
+
+    def drag(self, view, event, hit) -> None:
+        self.page._on_drag(event)
+
+    def release(self, view, event, hit) -> None:
+        self.page._on_release(event)
+
+    def motion(self, view, event, hit) -> None:
+        self.page._on_motion(event)
+
+    def draw(self, view) -> None:
+        self.page._draw_overlay()
 
 
 class SignPage(BasePage):
@@ -77,11 +91,6 @@ class SignPage(BasePage):
     def build(self) -> None:
         self.document: pymupdf.Document | None = None
         self.document_path: Path | None = None
-        self.page_index = 0
-        self.zoom = 1.0
-        self.scale = 1.0
-        self.offset = (0.0, 0.0)
-        self.page_rect = pymupdf.Rect(0, 0, 0, 0)
         self.signature_paths: dict[str, Path] = {}
         self.signature_image: Image.Image | None = None
         self.image_aspect: float | None = None
@@ -94,11 +103,8 @@ class SignPage(BasePage):
         self._resize_corner: str | None = None
         self._resize_anchor: tuple[float, float] = (0.0, 0.0)
         self._syncing_size = False
-        self._page_photo = None
         self._overlay_photo = None
         self._redraw_pending = False
-        self._resize_job: str | None = None
-        self._last_canvas_size = (0, 0)
 
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
@@ -272,58 +278,44 @@ class SignPage(BasePage):
         viewer.grid_columnconfigure(1, weight=0, minsize=0)
         viewer.grid_rowconfigure(2, weight=1)
 
-        # Barra de herramientas: navegacion | nombre del documento | zoom
-        toolbar = ctk.CTkFrame(viewer, fg_color="transparent")
-        toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 8))
-        toolbar.grid_columnconfigure(1, weight=1)
-
-        navigation = ctk.CTkFrame(toolbar, fg_color="transparent")
-        navigation.grid(row=0, column=0, sticky="w")
-        first = icon_button(navigation, "first", lambda: self._go_to(0), "Primera pagina")
-        previous = icon_button(navigation, "previous", lambda: self._go_to(self.page_index - 1), "Pagina anterior")
-        self.page_label = ctk.CTkLabel(navigation, text="", width=118, font=style.fonts().body)
-        following = icon_button(navigation, "next", lambda: self._go_to(self.page_index + 1), "Pagina siguiente")
-        last = icon_button(navigation, "last", lambda: self._go_to(self._page_count() - 1), "Ultima pagina")
-        for widget in (first, previous, self.page_label, following, last):
-            widget.pack(side="left", padx=1)
-
-        self.document_label = ctk.CTkLabel(toolbar, text="", font=style.fonts().small, text_color=style.TEXT_MUTED)
-        self.document_label.grid(row=0, column=1, sticky="ew", padx=12)
-
-        zoom = ctk.CTkFrame(toolbar, fg_color="transparent")
-        zoom.grid(row=0, column=2, sticky="e")
-        zoom_out = icon_button(zoom, "zoom_out", lambda: self._set_zoom(self.zoom / ZOOM_STEP), "Alejar (Ctrl + rueda)")
-        self.zoom_label = ctk.CTkLabel(zoom, text="", width=52, font=style.fonts().body)
-        zoom_in = icon_button(zoom, "zoom_in", lambda: self._set_zoom(self.zoom * ZOOM_STEP), "Acercar (Ctrl + rueda)")
-        fit = icon_button(zoom, "fit", lambda: self._set_zoom(1.0), "Ajustar pagina a la ventana")
-        for widget in (zoom_out, self.zoom_label, zoom_in, fit):
-            widget.pack(side="left", padx=1)
-        self._viewer_buttons = [first, previous, following, last, zoom_out, zoom_in, fit]
-        self._nav_buttons = {"first": first, "previous": previous, "next": following, "last": last}
-        self._zoom_buttons = {"out": zoom_out, "in": zoom_in}
-
+        # Visor compartido (el mismo de la seccion Visor) en modo pagina unica;
+        # la firma es una herramienta mas sobre la pagina.
+        self.view = PageView(
+            viewer, continuous=False, placeholder=PLACEHOLDER_EMPTY,
+            on_empty_click=lambda: self.source_field.browse(),
+            on_drop=lambda files: files and self.source_field.set(files[0]),
+        )
+        self.viewer_toolbar = ViewerToolbar(viewer, self.view, page_entry=False, zoom_menu=False)
+        self.viewer_toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 8))
+        self.document_label = self.viewer_toolbar.center
         ctk.CTkFrame(viewer, height=1, corner_radius=0, fg_color=style.CARD_BORDER).grid(
             row=1, column=0, columnspan=2, sticky="ew", padx=1
         )
+        self.view.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=12, pady=12)
+        self.view.set_tool(_SignatureTool(self))
+        self.view.on_page_changed(self._on_view_page_changed)
 
-        self.canvas = tk.Canvas(viewer, highlightthickness=0, background=style.themed(style.CANVAS_BG))
-        self.canvas.grid(row=2, column=0, sticky="nsew", padx=(12, 12), pady=(12, 12))
-        self.vertical_scroll = ctk.CTkScrollbar(viewer, orientation="vertical", command=self.canvas.yview)
-        self.vertical_scroll.grid(row=2, column=1, sticky="ns", padx=(0, 8), pady=(12, 12))
-        self.horizontal_scroll = ctk.CTkScrollbar(viewer, orientation="horizontal", command=self.canvas.xview)
-        self.horizontal_scroll.grid(row=3, column=0, sticky="ew", padx=(12, 12), pady=(0, 10))
-        self.canvas.configure(xscrollcommand=self.horizontal_scroll.set, yscrollcommand=self.vertical_scroll.set)
+    # * Estado del visor (nombres que usan las pruebas y la colocacion) -------
 
-        self.canvas.bind("<ButtonPress-1>", self._on_press)
-        self.canvas.bind("<B1-Motion>", self._on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self._on_release)
-        self.canvas.bind("<Motion>", self._on_motion)
-        self.canvas.bind("<Configure>", self._on_canvas_resize)
-        self.canvas.bind("<MouseWheel>", self._on_wheel)
-        ctk.AppearanceModeTracker.add(self._on_appearance_change, self.canvas)
-        enable_file_drop(self.canvas, lambda files: files and self.source_field.set(files[0]), recursive=False)
-        self._placeholder = PLACEHOLDER_EMPTY
-        self._draw_placeholder()
+    @property
+    def page_index(self) -> int:
+        return self.view.current_page
+
+    @property
+    def scale(self) -> float:
+        return self.view.scale
+
+    @property
+    def offset(self) -> tuple[float, float]:
+        return self.view.page_origin(self.view.current_page) if self.view.layout else (0.0, 0.0)
+
+    @property
+    def page_rect(self) -> pymupdf.Rect:
+        return self.view.page_rect(self.view.current_page) if self.view.sizes else pymupdf.Rect(0, 0, 0, 0)
+
+    @property
+    def canvas(self):
+        return self.view.canvas
 
     # * Modo ------------------------------------------------------------------
 
@@ -379,20 +371,21 @@ class SignPage(BasePage):
                 retry = True
                 if not password:
                     self.log("Apertura cancelada: no se ingreso la contrasena", documento=source.name)
-                    self._draw_placeholder(PLACEHOLDER_LOCKED)
+                    self.view.set_placeholder(*PLACEHOLDER_LOCKED)
                     return
             except core.PdfManagementError as error:
                 self.app.show_error(error)
-                self._draw_placeholder()
+                self.view.set_placeholder(*PLACEHOLDER_EMPTY)
                 return
         if password:
             self.passwords[source] = password
         self.document_path = source
-        self.page_index = self.document.page_count - 1 if self.document.page_count else 0
-        self.zoom = 1.0
+        self.view.set_placeholder(*PLACEHOLDER_EMPTY)
+        self.view.set_document(self.document, page=self.document.page_count - 1)  # se abre en la ultima pagina
+        self.document_label.configure(text=source.name)
         self.output_field.set(self.default_output(source, "firmado"), auto=True)
         self.page_var.set(str(self.page_index + 1))
-        self._render_page()
+        self._update_size_limits()
         if not self.x_var.get() or not self.y_var.get():
             self._place_default()
         self.log(
@@ -401,6 +394,8 @@ class SignPage(BasePage):
         )
 
     def _close_document(self) -> None:
+        self.view.set_document(None)
+        self.document_label.configure(text="")
         if self.document is not None:
             self.document.close()
         self.document = None
@@ -538,9 +533,8 @@ class SignPage(BasePage):
         self._set_position(self.page_rect.width - width - margin, self.page_rect.height - width * self.aspect_ratio - margin)
 
     def _to_page_point(self, event) -> tuple[float, float]:
-        canvas_x = self.canvas.canvasx(event.x)
-        canvas_y = self.canvas.canvasy(event.y)
-        return (canvas_x - self.offset[0]) / self.scale, (canvas_y - self.offset[1]) / self.scale
+        hit = self.view.event_to_page(event, clamp=True)
+        return (hit.x, hit.y) if hit is not None else (0.0, 0.0)
 
     def _on_press(self, event) -> None:
         if self.document is None:
@@ -696,151 +690,40 @@ class SignPage(BasePage):
     # * Visor -----------------------------------------------------------------
 
     def _go_to(self, index: int) -> None:
-        if self.document is None or not 0 <= index < self._page_count() or index == self.page_index:
-            return
-        self.page_index = index
-        self.page_var.set(str(index + 1))
-        self._render_page()
-        self.log_debug("Visor: pagina %d de %d", index + 1, self._page_count())
+        if self.document is not None:
+            self.view.go_to(index)
+
+    def _on_view_page_changed(self, page: int) -> None:
+        if self.page_var.get() != str(page + 1):
+            self.page_var.set(str(page + 1))
+        self._update_size_limits()
+        self.log_debug("Visor: pagina %d de %d", page + 1, self._page_count())
 
     def _on_page_typed(self) -> None:
         try:
             index = int(self.page_var.get()) - 1
         except ValueError:
             return
-        if index != self.page_index:
-            self._go_to(index)
+        if self.document is not None and index != self.page_index and 0 <= index < self._page_count():
+            self.view.go_to(index)
 
-    def _set_zoom(self, zoom: float) -> None:
-        self.zoom = max(ZOOM_LIMITS[0], min(zoom, ZOOM_LIMITS[1]))
-        self._render_page()
-        self.log_debug("Visor: zoom %.0f%%", self.zoom * 100)
-
-    def _on_wheel(self, event) -> None:
-        if event.state & 0x0004:  # Ctrl
-            self._set_zoom(self.zoom * (ZOOM_STEP if event.delta > 0 else 1 / ZOOM_STEP))
-        elif event.state & 0x0001:  # Shift
-            self.canvas.xview_scroll(-1 if event.delta > 0 else 1, "units")
-        else:
-            self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
-
-    def _on_canvas_resize(self, event) -> None:
-        size = (event.width, event.height)
-        if size == self._last_canvas_size:
-            return
-        self._last_canvas_size = size
-        if self._resize_job:
-            self.after_cancel(self._resize_job)
-        self._resize_job = self.after(120, self._render_page)
-
-    def _on_appearance_change(self, mode: str) -> None:
-        self.canvas.configure(background=style.CANVAS_BG[1] if mode.lower() == "dark" else style.CANVAS_BG[0])
-        # Los colores del lienzo se fijan al dibujar: se repinta con el tema nuevo.
-        if self.document is None:
-            self._draw_placeholder()
-        else:
-            self._render_page()
-
-    def _draw_placeholder(self, placeholder: tuple[str, str] | None = None) -> None:
-        """
-        Zona para soltar un PDF: recuadro punteado con icono, titulo y ayuda,
-        siempre centrados en el area visible del visor.
-        """
-        if placeholder is not None:
-            self._placeholder = placeholder
-        title, subtitle = self._placeholder
-        canvas = self.canvas
-        canvas.delete("all")
-        width, height = canvas.winfo_width(), canvas.winfo_height()
-        if width < 50 or height < 50:  # aun sin mapear: se redibuja en <Configure>
-            width, height = 640, 480
-        canvas.configure(scrollregion=(0, 0, width, height))
-        canvas.xview_moveto(0)
-        canvas.yview_moveto(0)
-        self._update_scrollbars(width, height, width, height)
-
-        scaling = ctk.ScalingTracker.get_widget_scaling(self)
-        muted = style.themed(style.TEXT_MUTED)
-        inset = 16
-        text_width = max(width - 2 * inset - 40, 200)
-        canvas.create_rectangle(inset, inset, width - inset, height - inset, outline=muted, dash=(6, 5), width=1.5)
-        center_x, center_y = width / 2, height / 2
-        self._placeholder_icon = ImageTk.PhotoImage(_glyph_image("pdf", round(52 * scaling), muted))
-        canvas.create_image(center_x, center_y - 34 * scaling, image=self._placeholder_icon, anchor="center")
-        canvas.create_text(
-            center_x, center_y + 14 * scaling, text=title, anchor="center", justify="center", width=text_width,
-            fill=style.themed(style.TEXT), font=(style.FONT_FAMILY, round(13 * scaling), "bold"),
-        )
-        canvas.create_text(
-            center_x, center_y + 40 * scaling, text=subtitle, anchor="center", justify="center", width=text_width,
-            fill=muted, font=(style.FONT_FAMILY, round(10 * scaling)),
-        )
-        self.page_label.configure(text="Sin documento")
-        self.document_label.configure(text="")
-        self.zoom_label.configure(text="—")
-        for button in self._viewer_buttons:
-            set_enabled(button, False)
-
-    def _update_scrollbars(self, content_width: float, content_height: float, canvas_width: int, canvas_height: int) -> None:
-        """Muestra cada barra de desplazamiento solo si el contenido no cabe."""
-        (show if content_width > canvas_width + 1 else hide)(self.horizontal_scroll)
-        (show if content_height > canvas_height + 1 else hide)(self.vertical_scroll)
-
-    def _render_page(self) -> None:
-        self._resize_job = None
-        if self.document is None:
-            self._draw_placeholder()
-            return
-        page = self.document[self.page_index]
-        self.page_rect = page.rect
-        self.size_slider.configure(to=max(MIN_SIGNATURE_WIDTH + 10, min(SIZE_SLIDER_MAX, self.page_rect.width)))
-        self._sync_size_slider()
-        canvas_width = max(self.canvas.winfo_width(), 200)
-        canvas_height = max(self.canvas.winfo_height(), 200)
-        fit = min(
-            (canvas_width - 2 * VIEWER_MARGIN) / self.page_rect.width,
-            (canvas_height - 2 * VIEWER_MARGIN) / self.page_rect.height,
-        )
-        self.scale = max(fit, 0.05) * self.zoom
-        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(self.scale, self.scale), alpha=False)
-        image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
-        self._page_photo = ImageTk.PhotoImage(image)
-
-        offset_x = max(VIEWER_MARGIN, (canvas_width - image.width) / 2)
-        offset_y = max(VIEWER_MARGIN, (canvas_height - image.height) / 2)
-        self.offset = (offset_x, offset_y)
-        self.canvas.delete("all")
-        self.canvas.create_rectangle(
-            offset_x + 3, offset_y + 3, offset_x + image.width + 3, offset_y + image.height + 3,
-            fill=style.themed(style.PAGE_SHADOW), outline="",
-        )
-        self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self._page_photo)
-        content_width = image.width + 2 * VIEWER_MARGIN
-        content_height = image.height + 2 * VIEWER_MARGIN
-        self.canvas.configure(scrollregion=(0, 0, max(canvas_width, content_width), max(canvas_height, content_height)))
-        self._update_scrollbars(content_width, content_height, canvas_width, canvas_height)
-        self.page_label.configure(text=f"Pagina {self.page_index + 1} de {self._page_count()}")
-        self.document_label.configure(text=self.document_path.name if self.document_path else "")
-        self.zoom_label.configure(text=f"{self.zoom:.0%}")
-        # Cada boton se activa solo si su accion tiene efecto en la posicion actual.
-        at_first, at_last = self.page_index == 0, self.page_index >= self._page_count() - 1
-        set_enabled(self._nav_buttons["first"], not at_first)
-        set_enabled(self._nav_buttons["previous"], not at_first)
-        set_enabled(self._nav_buttons["next"], not at_last)
-        set_enabled(self._nav_buttons["last"], not at_last)
-        set_enabled(self._zoom_buttons["out"], self.zoom > ZOOM_LIMITS[0] + 1e-6)
-        set_enabled(self._zoom_buttons["in"], self.zoom < ZOOM_LIMITS[1] - 1e-6)
-        set_enabled(self._viewer_buttons[-1], True)
-        self._draw_overlay()
+    def _update_size_limits(self) -> None:
+        """El deslizador de tamano llega hasta el ancho de la pagina actual."""
+        if self.view.sizes:
+            self.size_slider.configure(to=max(MIN_SIGNATURE_WIDTH + 10, min(SIZE_SLIDER_MAX, self.page_rect.width)))
+            self._sync_size_slider()
 
     def _schedule_overlay(self) -> None:
         if not self._redraw_pending:
             self._redraw_pending = True
-            self.after_idle(self._draw_overlay)
+            self.after_idle(self._redraw_overlay)
+
+    def _redraw_overlay(self) -> None:
+        self._redraw_pending = False
+        self.view.redraw_overlays()  # borra la capa y llama a _SignatureTool.draw
 
     def _draw_overlay(self) -> None:
-        self._redraw_pending = False
-        self.canvas.delete("overlay")
+        """Dibuja la firma, su borde y las asas (el visor ya borro la capa anterior)."""
         rect = self._current_rect()
         if rect is None or not self._overlay_visible():
             return

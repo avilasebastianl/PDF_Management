@@ -11,8 +11,10 @@ from .merge import MergePage
 from .security import SecurityPage
 from .settings import SettingsPage
 from .sign import SignPage
+from .viewer import ViewerPage
 
-PAGES: list[type[BasePage]] = [MergePage, ExtractPage, ConvertPage, SignPage, SecurityPage, SettingsPage]
+# El Visor va primero: es el centro de la aplicacion y desde el se envian documentos al resto.
+PAGES: list[type[BasePage]] = [ViewerPage, MergePage, ExtractPage, ConvertPage, SignPage, SecurityPage, SettingsPage]
 
 
 def page_names() -> list[str]:

@@ -86,3 +86,18 @@ def test_real_clicks_open_close_and_click_outside(gui_app):
     time.sleep(0.25)
     click(page.output_dir._label)
     assert not popup.winfo_viewable(), "un clic fuera de la lista la cierra"
+
+
+def test_destroyed_menu_ignores_window_events(gui_app):
+    """Al cerrar la app los controles se destruyen antes que la raiz: no debe fallar."""
+    import customtkinter as ctk
+
+    from pdfmanagement.gui.dropdown import dropdown_menu
+
+    holder = ctk.CTkFrame(gui_app.pages["Ajustes"])
+    menu = dropdown_menu(holder, ["Uno", "Dos"])
+    popup = _open(menu, gui_app)
+    holder.destroy()
+    event = type("E", (), {"widget": gui_app.root})()
+    popup._on_root_configure(event)  # antes lanzaba TclError: bad window path name
+    popup.destroy()
