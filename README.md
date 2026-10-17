@@ -167,6 +167,7 @@ PDFManagement/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
 │       ├── tasks.py            # TaskRunner (hilos + sondeo seguro)
 │       ├── status_bar.py       # Barra de estado (progreso, resultado, errores)
+│       ├── appearance.py       # Cambio de tema priorizado (visible primero)
 │       ├── style.py            # Tipografia, espaciado y colores
 │       ├── icons.py            # Iconos desde la fuente de Windows
 │       ├── widgets.py          # Card, FileField, PasswordField, ToolTip...
@@ -241,6 +242,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `BasePage` (`pages/base.py`) | Encabezado, `run_task()` (hilo + reintento con contrasena), `resolve_output()` (politica de sobrescritura), `default_output()`, `guard()` |
 | `TaskRunner` (`tasks.py`) | Pool de 2 hilos; el hilo de la GUI sondea cada 80 ms y ejecuta los callbacks |
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
+| `AppearanceScheduler` (`appearance.py`) | Al cambiar de tema redibuja primero lo que se ve, con el pintado congelado, y difiere por lotes las secciones ocultas y las filas fuera de vista; `flush_page()` actualiza una seccion pendiente antes de mostrarla |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias |
 | `icon(name, size, color)` (`icons.py`) | Iconos vectoriales de Segoe Fluent Icons en dos colores (claro/oscuro) |
@@ -391,6 +393,7 @@ Para mover todos los datos del usuario (por ejemplo a `%APPDATA%` al distribuir 
 - **Arranque rapido y precarga.** Solo se construye la pagina inicial; las demas se precargan una a una en los ciclos libres posteriores (`_prebuild_pages`), asi el primer cambio de seccion ya es inmediato.
 - **Paginas apiladas.** Las paginas comparten la misma celda y mostrar una es traerla al frente (~30-70 ms frente a ~100-190 ms de volver a mapearla). Como mantener paginas ocultas montadas encarece el redimensionado (x4), al cambiar el tamano de la ventana se desmontan y se reapilan de a una cuando queda quieta.
 - **Lista de Unir incremental.** Filas persistentes que solo se recolocan al mover, quitar u ordenar (mover: de ~5 s a ~15 ms con 40 archivos); filas nuevas construidas por lotes entre eventos (la ventana responde en ~20 ms al agregar 40 archivos); metadatos leidos en un hilo; arrastrar y soltar registrado en el contenedor y no en cada widget.
+- **Cambio de tema priorizado.** CustomTkinter redibuja todos los widgets al cambiar de tema (~1,2 s con todas las secciones). `AppearanceScheduler` redibuja primero solo lo visible (~200 ms) con el pintado de la ventana congelado (`WM_SETREDRAW`), asi el cambio aparece completo en un solo cuadro; el resto se actualiza en segundo plano. Tambien aplica al modo "Sistema".
 - **Sin redibujos innecesarios.** CustomTkinter redibuja en cada `configure`, por eso los widgets se crean con su estado final y la barra lateral y Ajustes solo actualizan lo que cambio.
 
 ## Pruebas
@@ -410,6 +413,7 @@ venv\Scripts\python.exe -m pytest
 | `tests/test_digital_signing.py` | Firma digital con un certificado autofirmado generado al vuelo: validacion con pyHanko, recuadro igual al del visor (0/90/180/270), varias firmas, PDF cifrado, deteccion de cambios posteriores, contrasena incorrecta, certificado vencido o invalido |
 | `tests/test_config_cli.py` | Valores por defecto, validacion, migracion de `default.ini`, CLI (incluye `sign-cert`) |
 | `tests/test_convert.py` | Conversion real con Word y Excel (se omite si Office no esta instalado) |
+| `tests/test_gui_appearance.py` | Cambio de tema: prioridad de lo visible, seccion pendiente actualizada al abrirla, cambios rapidos sucesivos (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
 

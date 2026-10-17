@@ -15,7 +15,9 @@ from tkinterdnd2 import TkinterDnD
 from .. import __app_name__, __version__, core, paths
 from ..config import Settings
 from . import style
+from .appearance import AppearanceScheduler
 from .dialogs import HelpWindow
+from . import icons
 from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
@@ -44,6 +46,10 @@ class MainWindow:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        # Iconos y fuentes quedan ligados a la ventana que los creo: se
+        # descartan para poder crear otra ventana en el mismo proceso.
+        icons.icon.cache_clear()
+        style.fonts.cache_clear()
         ctk.set_appearance_mode(settings.appearance_mode)
         ctk.set_default_color_theme(str(paths.THEMES_DIR / f"{settings.color_theme}.json"))
         ctk.set_widget_scaling(settings.ui_scaling)
@@ -62,6 +68,9 @@ class MainWindow:
         self.root.grid_rowconfigure(0, weight=1)
 
         self.runner = TaskRunner(self.root, self._on_busy_change)
+        self.appearance = AppearanceScheduler(
+            self.root, lambda: [page for name, page in self.pages.items() if name != self.current_page]
+        )
         self.pages: dict[str, BasePage] = {}
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
         self._nav_state: dict[str, bool] = {}
@@ -181,6 +190,7 @@ class MainWindow:
     def show_page(self, name: str) -> None:
         """Muestra la pagina ``name`` (la construye si la precarga aun no lo hizo)."""
         page = self._ensure_page(name)
+        self.appearance.flush_page(page)  # por si quedo pendiente de un cambio de tema
         self._stack(page, front=True)
         self.current_page = name
         self._refresh_nav()
@@ -332,6 +342,7 @@ class MainWindow:
         for page in self.pages.values():
             page.on_close()
         self.runner.shutdown()
+        self.appearance.uninstall()
         self.root.destroy()
         if exit_process:
             sys.exit(0)
