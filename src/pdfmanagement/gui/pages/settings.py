@@ -114,6 +114,13 @@ class SettingsPage(BasePage):
 
     def on_show(self) -> None:
         settings = self.app.settings
+        snapshot = (
+            settings.appearance_mode, settings.color_theme, settings.ui_scaling,
+            settings.initial_page, settings.open_after_save, str(settings.output_path),
+        )
+        if snapshot == getattr(self, "_shown", None):
+            return  # nada cambio desde la ultima vez: evita redibujar los controles
+        self._shown = snapshot
         self.mode.set(MODE_LABELS[settings.appearance_mode])
         self.color.set(settings.color_theme)
         self.scaling.set(f"{int(round(settings.ui_scaling * 100))}%")

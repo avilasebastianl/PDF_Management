@@ -12,7 +12,7 @@ La aplicacion nunca sobrescribe un archivo sin preguntar: si el nombre de salida
 
 Combine varios PDFs en uno solo.
 
-1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista.
+1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista. Puede seguir trabajando mientras se leen: cada fila muestra sus paginas y tamano al terminar.
 2. Ordenelos con las flechas de cada fila o con **Ordenar A-Z**.
 3. Opcional: active **Crear un marcador por cada archivo** para navegar el resultado por documento.
 4. Revise **Guardar como** y presione **Unir PDFs**.

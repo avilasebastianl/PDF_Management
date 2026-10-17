@@ -26,6 +26,10 @@ from .widgets import ToolTip, hide
 
 logger = logging.getLogger(__name__)
 
+PREBUILD_DELAY_MS = 600      # espera tras el arranque antes de precargar paginas
+PREBUILD_INTERVAL_MS = 150   # pausa entre paginas precargadas o reapiladas
+RESTACK_DELAY_MS = 400       # espera tras redimensionar antes de reapilar paginas
+
 
 class DnDCTk(ctk.CTk, TkinterDnD.DnDWrapper):
     """Ventana CustomTkinter con soporte de arrastrar y soltar (tkdnd)."""
@@ -60,13 +64,17 @@ class MainWindow:
         self.runner = TaskRunner(self.root, self._on_busy_change)
         self.pages: dict[str, BasePage] = {}
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
+        self._nav_state: dict[str, bool] = {}
         self.current_page: str | None = None
         self._deferred_success: tuple[str, Path] | None = None
+        self._last_size: tuple[int, int] | None = None
+        self._restack_job: str | None = None
 
         self._build_sidebar()
         self._build_content()
         self._build_status_bar()
         self._bind_shortcuts()
+        self.root.bind("<Configure>", self._on_root_configure, add="+")
 
     # * Construccion ----------------------------------------------------------
 
@@ -147,24 +155,85 @@ class MainWindow:
 
     # * Navegacion ------------------------------------------------------------
 
-    def show_page(self, name: str) -> None:
-        """Muestra la pagina ``name`` creandola la primera vez (carga diferida)."""
+    # Estrategia de paginas (medida en Windows):
+    # - Las paginas construidas se apilan en la misma celda y mostrar una es
+    #   solo traerla al frente (~40 ms frente a ~150 ms de mapearla con grid).
+    # - Mantener paginas ocultas montadas encarece cada redimensionado (x4),
+    #   asi que al redimensionar se desmontan y se reapilan de a una cuando
+    #   la ventana queda quieta.
+
+    def _ensure_page(self, name: str) -> BasePage:
+        """Construye la pagina ``name`` si aun no existe."""
         if name not in self.pages:
             page_class = next(page for page in PAGES if page.name == name)
             self.pages[name] = page_class(self.content, self)
-        if self.current_page and self.current_page != name:
-            hide(self.pages[self.current_page])
-        page = self.pages[name]
-        page.grid(row=0, column=0, sticky="nsew")
+            self._stack(self.pages[name], front=False)
+        return self.pages[name]
+
+    def _stack(self, page: BasePage, front: bool) -> None:
+        if page.winfo_manager() != "grid":
+            page.grid(row=0, column=0, sticky="nsew")
+        if front:
+            page.tkraise()
+        else:
+            page.lower()
+
+    def show_page(self, name: str) -> None:
+        """Muestra la pagina ``name`` (la construye si la precarga aun no lo hizo)."""
+        page = self._ensure_page(name)
+        self._stack(page, front=True)
         self.current_page = name
         self._refresh_nav()
         page.on_show()
 
+    def _prebuild_pages(self) -> None:
+        """
+        Construye las paginas que faltan, una por ciclo libre, para que el
+        primer cambio de seccion sea inmediato.
+        """
+        pending = [page.name for page in PAGES if page.name not in self.pages]
+        if not pending:
+            return
+        delay = PREBUILD_INTERVAL_MS * 4 if self.runner.busy else PREBUILD_INTERVAL_MS
+        if not self.runner.busy:
+            self._ensure_page(pending[0])
+        self.root.after(delay, self._prebuild_pages)
+
+    def _on_root_configure(self, event) -> None:
+        if event.widget is not self.root:
+            return
+        size = (event.width, event.height)
+        if size == self._last_size:
+            return  # solo se movio la ventana
+        self._last_size = size
+        for name, page in self.pages.items():
+            if name != self.current_page and page.winfo_manager() == "grid":
+                hide(page)
+        if self._restack_job:
+            self.root.after_cancel(self._restack_job)
+        self._restack_job = self.root.after(RESTACK_DELAY_MS, self._restack_pages)
+
+    def _restack_pages(self) -> None:
+        """Vuelve a apilar, de a una, las paginas desmontadas al redimensionar."""
+        self._restack_job = None
+        unmounted = [
+            page for name, page in self.pages.items()
+            if name != self.current_page and page.winfo_manager() != "grid"
+        ]
+        if unmounted:
+            self._stack(unmounted[0], front=False)
+            if len(unmounted) > 1:
+                self._restack_job = self.root.after(PREBUILD_INTERVAL_MS, self._restack_pages)
+
     def _refresh_nav(self) -> None:
+        """Resalta la pagina actual; solo redibuja los botones que cambian."""
         accent = style.accent_color()
         for name, button in self.nav_buttons.items():
             page_class = next(page for page in PAGES if page.name == name)
             selected = name == self.current_page
+            if self._nav_state.get(name) == selected:
+                continue
+            self._nav_state[name] = selected
             button.configure(
                 fg_color=accent if selected else "transparent",
                 hover_color=style.accent_hover_color() if selected else style.HOVER,
@@ -250,6 +319,7 @@ class MainWindow:
     def run(self) -> None:
         initial = self.settings.initial_page
         self.show_page(initial if initial in self.nav_buttons else PAGES[0].name)
+        self.root.after(PREBUILD_DELAY_MS, self._prebuild_pages)
         self.root.mainloop()
 
     def restart(self) -> None:

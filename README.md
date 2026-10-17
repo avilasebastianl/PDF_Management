@@ -35,7 +35,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 
 | Seccion | Que hace | Detalles |
 |---|---|---|
-| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos |
+| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
 | **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
@@ -237,7 +237,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 
 | Elemento | Responsabilidad |
 |---|---|
-| `MainWindow` (`app.py`) | Crea la ventana (CustomTkinter + tkdnd), barra lateral, carga diferida de paginas, barra de estado, `notify_success()`, `show_error()`, apariencia, reinicio, recordar tamano |
+| `MainWindow` (`app.py`) | Crea la ventana (CustomTkinter + tkdnd), barra lateral, precarga y apilado de paginas, barra de estado, `notify_success()`, `show_error()`, apariencia, reinicio, recordar tamano |
 | `BasePage` (`pages/base.py`) | Encabezado, `run_task()` (hilo + reintento con contrasena), `resolve_output()` (politica de sobrescritura), `default_output()`, `guard()` |
 | `TaskRunner` (`tasks.py`) | Pool de 2 hilos; el hilo de la GUI sondea cada 80 ms y ejecuta los callbacks |
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
@@ -388,7 +388,10 @@ Para mover todos los datos del usuario (por ejemplo a `%APPDATA%` al distribuir 
 - **Hilos sin tocar widgets.** Tkinter no es seguro entre hilos; los trabajadores solo calculan y el hilo principal sondea los resultados.
 - **Preferencias autocorregibles.** Un `settings.ini` danado o de una version anterior nunca impide arrancar.
 - **Iconos desde la fuente del sistema.** Sin PNGs que mantener, nitidos a cualquier escala y adaptados al tema.
-- **Carga diferida de paginas.** Arranque rapido: cada pagina se construye la primera vez que se abre.
+- **Arranque rapido y precarga.** Solo se construye la pagina inicial; las demas se precargan una a una en los ciclos libres posteriores (`_prebuild_pages`), asi el primer cambio de seccion ya es inmediato.
+- **Paginas apiladas.** Las paginas comparten la misma celda y mostrar una es traerla al frente (~30-70 ms frente a ~100-190 ms de volver a mapearla). Como mantener paginas ocultas montadas encarece el redimensionado (x4), al cambiar el tamano de la ventana se desmontan y se reapilan de a una cuando queda quieta.
+- **Lista de Unir incremental.** Filas persistentes que solo se recolocan al mover, quitar u ordenar (mover: de ~5 s a ~15 ms con 40 archivos); filas nuevas construidas por lotes entre eventos (la ventana responde en ~20 ms al agregar 40 archivos); metadatos leidos en un hilo; arrastrar y soltar registrado en el contenedor y no en cada widget.
+- **Sin redibujos innecesarios.** CustomTkinter redibuja en cada `configure`, por eso los widgets se crean con su estado final y la barra lateral y Ajustes solo actualizan lo que cambio.
 
 ## Pruebas
 
