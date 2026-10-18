@@ -43,11 +43,10 @@ COLOR_LABELS = {
 }
 APP_ICON_LABELS = {
     "clasico": tr("Clásico"),
-    "azul": tr("Azul"),
-    "verde": tr("Verde"),
-    "rosa": tr("Rosa"),
-    "morado": tr("Morado"),
-    "plata": tr("Plata"),
+    "negro": tr("Negro"),
+    "gris": tr("Gris"),
+    "blanco": tr("Blanco"),
+    "cafe": tr("Café"),
 }
 DEBUG_LOGGING_HELP = tr(
     "Registro detallado\n"
@@ -120,16 +119,16 @@ class SettingsPage(BasePage):
         self.language = dropdown_menu(appearance, list(LANGUAGES.values()), self._on_language_changed)
         self._row(appearance, 3, tr("Idioma"), self.language)
 
-        # Variantes de color del logo: se aplican al instante (ventana, barra de tareas y "Acerca de").
+        # Variantes de pelaje del logo: se aplican al instante (ventana, barra de tareas y "Acerca de").
         icon_choices = ctk.CTkFrame(appearance, fg_color="transparent")
         self.icon_buttons: dict[str, ctk.CTkButton] = {}
         for variant in paths.APP_ICON_VARIANTS:
             button = ctk.CTkButton(
                 icon_choices,
                 text="",
-                image=brand_image(paths.app_icon_files(variant)[1], 30),
-                width=44,
-                height=44,
+                image=brand_image(paths.app_icon_files(variant)[1], 36),
+                width=50,
+                height=50,
                 corner_radius=8,
                 border_width=2,
                 border_color=style.CARD_BG,

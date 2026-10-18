@@ -26,13 +26,13 @@ ICONS_DIR = ASSETS_DIR / "icons"
 THEMES_DIR = ASSETS_DIR / "themes"
 DOCS_DIR = RESOURCE_DIR / "docs"
 USER_GUIDE_FILE = DOCS_DIR / "user_guide.md"
-APP_ICON = ICONS_DIR / "app.ico"  # generado desde app.png (varios tamanos)
+APP_ICON = ICONS_DIR / "app.ico"  # tools/make_icon_variants.py (varios tamanos)
 APP_LOGO = ICONS_DIR / "app.png"
 GITHUB_ICON = ICONS_DIR / "github.ico"
 LINKEDIN_ICON = ICONS_DIR / "linkedin.ico"
 CODE_ICON = ICONS_DIR / "code.ico"
-# Variantes de color del logo (tools/make_icon_variants.py); "clasico" es app.png/app.ico.
-APP_ICON_VARIANTS = ("clasico", "azul", "verde", "rosa", "morado", "plata")
+# Variantes de pelaje del logo (tools/make_icon_variants.py); "clasico" es app.png/app.ico.
+APP_ICON_VARIANTS = ("clasico", "negro", "gris", "blanco", "cafe")
 
 
 def app_icon_files(variant: str) -> tuple[Path, Path]:

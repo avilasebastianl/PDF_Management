@@ -75,10 +75,10 @@ def test_app_icon_variant_applies_at_once(gui_app):
     gui_app.show_page("Ajustes")
     page = gui_app.pages["Ajustes"]
     try:
-        page._on_app_icon("verde")
-        assert gui_app.settings.app_icon == "verde" and app_icon.current() == "verde"
-        assert app_icon.ico_path().name == "app_verde.ico"
-        assert page.icon_buttons["verde"].cget("border_color") == style.accent_color()
+        page._on_app_icon("negro")
+        assert gui_app.settings.app_icon == "negro" and app_icon.current() == "negro"
+        assert app_icon.ico_path().name == "app_negro.ico"
+        assert page.icon_buttons["negro"].cget("border_color") == style.accent_color()
         assert page.icon_buttons["clasico"].cget("border_color") == style.CARD_BG
         assert str(page.about_logo.cget("image"))  # el logo de "Acerca de" cambia con la variante
     finally:

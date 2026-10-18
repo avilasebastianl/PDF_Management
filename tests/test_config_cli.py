@@ -111,8 +111,8 @@ def test_cli_sign_cert(isolated_paths, pdf_factory, tmp_path, certificate, signa
 
 def test_settings_app_icon_is_validated(isolated_paths):
     settings_file = isolated_paths / "settings.ini"
-    config.Settings(app_icon="verde").save(settings_file)
-    assert config.Settings.load(settings_file).app_icon == "verde"
+    config.Settings(app_icon="negro").save(settings_file)
+    assert config.Settings.load(settings_file).app_icon == "negro"
     config.Settings(app_icon="inexistente").save(settings_file)
     assert config.Settings.load(settings_file).app_icon == "clasico"
 
