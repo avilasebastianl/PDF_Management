@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.4.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.4.1-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -36,7 +36,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | Seccion | Que hace | Detalles |
 |---|---|---|
 | **Visor** | Abre, lee, **anota**, **edita** y **organiza** PDFs | **Nuevo PDF** en blanco o desde plantilla (renglones, cuadricula, carta, acta, factura; A4, Carta u Oficio). Boton **Unir N PDFs** con 2 o mas documentos abiertos (lleva todos a Unir, con sus cambios sin guardar). **Varios documentos en pestanas** como un navegador (mismo ancho, punto de cambios sin guardar, cerrar al pasar el cursor o con clic central, boton **+**; cada una con su pagina, zoom e historial), dos modos de lectura: **visor en toda la ventana** (Ctrl+Mayus+F, con las pestanas) y **pantalla completa** (F11), desplazamiento continuo virtualizado, miniaturas, marcadores, **barra de busqueda flotante** (boton Buscar o Ctrl+F: contador, anterior/siguiente, mayusculas y palabras completas) con lista de resultados, seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Boton **Ver**: **modo nocturno** (colores invertidos), **dos paginas** lado a lado (ambos se recuerdan), **comparar** con otra pestana u otro PDF en vista dividida (sincronizar paginas) e **imprimir** (Ctrl+P, dialogo de Windows, incluye los cambios sin guardar). Panel lateral con pestanas de iconos: Paginas, Marcadores, Buscar, Notas y **Firmas** (verifica las firmas digitales con pyHanko, sin internet, y permite firmar). Herramientas de edicion con el boton **Editar**. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco. Anotar: resaltar, subrayar y tachar texto, notas, texto libre (con **tamano de letra** y cuadro que se ajusta al texto), rectangulos, elipses, lineas, flechas y dibujo a mano, con 5 colores y 3 grosores; seleccionar, mover, recolorear, editar y eliminar anotaciones, y panel **Notas** con todas. **Editar el contenido**: reemplazar texto, texto fijo, imagen y **tapar** (redaccion real: borra lo que hay debajo). Barras que se adaptan al ancho (iconos solos, anotacion en dos filas). Deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
-| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos; marca de agua y firma (visual o digital) del resultado con vista previa; vista previa navegable de todas las paginas del resultado; Unir y firmar (abre el resultado en Firmar) |
+| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos; marca de agua del resultado; vista previa navegable de todas las paginas del resultado; Unir y firmar (abre el resultado en Firmar) |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
 | **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, tamano ajustable (asas en las esquinas y control deslizante), paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
@@ -199,7 +199,7 @@ PDFManagement/
 │       ├── popup_menu.py       # Menus emergentes con el estilo de los desplegables (Ver, contextuales, tamano)
 │       ├── ctk_fixes.py        # Ajuste de rendimiento de CustomTkinter (barras sin repintar toda la ventana)
 │       ├── new_document.py     # Dialogo Nuevo PDF: plantillas con vista previa, tamano, orientacion
-│       ├── finish_controls.py  # Controles compartidos: marca de agua, firma y vista previa (Herramientas, Unir)
+│       ├── finish_controls.py  # Controles compartidos: marca de agua y vista previa (Herramientas, Unir)
 │       ├── style.py            # Tipografia, espaciado y colores
 │       ├── icons.py            # Iconos desde la fuente de Windows
 │       ├── widgets.py          # Card, FileField, PasswordField, ToolTip...
@@ -333,7 +333,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `NewDocumentDialog`, `ask_new_document()` (`new_document.py`) | Dialogo **Nuevo PDF**: tarjetas de plantilla con vista previa real, tamano, orientacion y paginas; devuelve un `core.create.NewDocument` |
 | `InlineEditor` (`viewer/inline_editor.py`) | Campo de texto dibujado en el lienzo del visor, con la letra al tamano real de la pagina: notas, cuadros de texto, texto fijo, reemplazar texto y editar anotaciones se escriben en su lugar. Enter aplica, Mayus+Enter agrega una linea, Esc cancela, clic fuera aplica; se reubica al cambiar el zoom |
 | `ElementTool`, `Selection` (`viewer/element_tool.py`) | Herramienta **Seleccionar**: marca al pasar el cursor y selecciona anotaciones (primero), lineas de texto o imagenes (`DocumentSession.elements`); arrastrar mueve anotaciones, doble clic edita, Supr elimina (`erase_text`, `remove_image`) |
-| `WatermarkControls`, `SignatureControls`, `PreviewPane` (`finish_controls.py`) | Opciones de marca de agua y de firma (visual de la biblioteca o digital con certificado, posicion, pagina y tamano) y la vista previa de una pagina; las mismas en Herramientas y Unir |
+| `WatermarkControls`, `PreviewPane` (`finish_controls.py`) | Opciones de marca de agua y vista previa de una pagina; las mismas en Herramientas y Unir |
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
@@ -646,7 +646,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 281 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 280 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -675,7 +675,7 @@ Hay 281 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 | `tests/test_gui_v51.py` | Nuevo PDF (pestana temporal, no va a Recientes, se borra al cerrar, Guardar como en la carpeta de salida), dialogo y validacion, `PopupMenu` (opciones, marcas, submenus, deshabilitadas), menu Ver y submenus que se cierran al elegir o al cambiar de aplicacion (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` (v5.2) | Ademas: Seleccionar (activa al pulsar Editar; elimina una linea, quita una imagen, prioriza anotaciones), doble clic edita una linea en su lugar, texto escrito sobre la pagina |
 | `tests/test_finish.py` | Marca de agua y firma visual (ultima pagina o todas), firma digital valida tras la marca, vista previa sin modificar el archivo, faltantes |
-| `tests/test_gui_merge.py` | Unir con una sola barra de desplazamiento, vista previa, marca de agua y firma en el resultado, aviso sin certificado (requiere pantalla) |
+| `tests/test_gui_merge.py` | Unir con una sola barra de desplazamiento, vista previa navegable, marca de agua en el resultado (sin firma: se firma con Unir y firmar), Unir y firmar abre Firmar, boton Unir del Visor (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` | Dos paginas, modo nocturno, comparar con otra pestana, imprimir el documento en memoria, panel Firmas, reemplazar texto seleccionado, tapar, texto fijo e imagen desde la barra (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -748,6 +748,7 @@ flowchart LR
 - [x] v5.3: cuadros de texto sin fondo negro al editarlos; cambiar su tamano desde las esquinas y su color de fondo; submenus que ya no quedan abiertos; rueda y panel tactil en todos los visores; vista previa de la marca de agua mas grande; Unir con marca de agua, firma y vista previa. Se quito el tamano de interfaz del menu lateral (2,4 s de espera: CustomTkinter redibuja todos los controles); se cambia en Ajustes.
 - [x] v5.3.1: vista previa sin el error "image pyimageN does not exist" (la imagen se soltaba antes que el control); las pruebas fallan ante cualquier error inesperado de la interfaz en vez de abrir un aviso.
 - [x] v5.4: boton **Unir N PDFs** en el Visor (documentos abiertos, con sus cambios sin guardar via `DocumentSession.write_copy` en una carpeta temporal); Unir con la vista previa en su propia columna, navegable por todas las paginas; **Unir y firmar...** abre el PDF unido en Firmar.
+- [x] v5.4.1: Unir ya no firma por su cuenta: queda la marca de agua opcional y, para firmar, **Unir y firmar...** lleva el PDF unido a Firmar (`core/finish.py` conserva la firma para usos futuros).
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

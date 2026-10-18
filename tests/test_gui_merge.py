@@ -6,18 +6,10 @@ desplazamiento). Requiere pantalla.
 import pymupdf
 import pytest
 from conftest import make_pdf, pump
-from PIL import Image, ImageDraw
-
-from pdfmanagement.gui import finish_controls
 
 
 @pytest.fixture
-def merge_page(gui_app, tmp_path, monkeypatch):
-    signature = tmp_path / "firma.png"
-    image = Image.new("RGB", (300, 120), "white")
-    ImageDraw.Draw(image).line((20, 90, 280, 30), fill="black", width=8)
-    image.save(signature)
-    monkeypatch.setattr(finish_controls.signatures, "list_signatures", lambda: [signature])
+def merge_page(gui_app, tmp_path):
     gui_app.show_page("Unir")
     page = gui_app.pages["Unir"]
     page._clear()
@@ -26,7 +18,6 @@ def merge_page(gui_app, tmp_path, monkeypatch):
     pump(gui_app, lambda: all(entry.info is not None for entry in page.entries), timeout=5)
     yield page
     page.add_watermark.deselect()
-    page.add_signature.deselect()
     page._on_finish_toggled(log=False)
     page._clear()
 
@@ -36,11 +27,11 @@ def test_merge_page_scrolls_as_one(merge_page):
     assert not hasattr(merge_page.list_frame, "_parent_canvas"), "la lista no tiene barra propia"
 
 
-def test_preview_and_merge_with_watermark_and_signature(merge_page, gui_app, tmp_path):
+def test_preview_and_merge_with_watermark(merge_page, gui_app, tmp_path):
+    assert not hasattr(merge_page, "add_signature"), "para firmar se usa Unir y firmar (seccion Firmar)"
     merge_page.refresh_preview()
     assert merge_page.preview.image is not None, "con archivos se ve la primera pagina"
     merge_page.add_watermark.select()
-    merge_page.add_signature.select()
     merge_page._on_finish_toggled(log=False)
     merge_page.watermark.mark_text.set("BORRADOR")
     merge_page.go_to_preview_page(-1)
@@ -54,19 +45,7 @@ def test_preview_and_merge_with_watermark_and_signature(merge_page, gui_app, tmp
     with pymupdf.open(output) as document:
         assert document.page_count == 5
         assert all("BORRADOR" in page.get_text() for page in document)
-        assert len(document[4].get_image_info()) == 1 and not document[0].get_image_info(), "firma en la ultima"
-
-
-def test_signature_without_certificate_is_reported(merge_page, gui_app, monkeypatch, tmp_path):
-    merge_page.output_field.set(tmp_path / "sin_certificado.pdf")  # que no pregunte si reemplazar
-    errors = []
-    monkeypatch.setattr(gui_app, "show_error", errors.append)
-    merge_page.add_signature.select()
-    merge_page._on_finish_toggled(log=False)
-    merge_page.signature.kind.set("Firma digital")
-    merge_page.signature._on_kind("Firma digital")
-    merge_page._merge()
-    assert errors and "certificado" in str(errors[0])
+        assert not any(page.get_image_info() for page in document), "sin firma"
 
 
 def test_preview_switches_between_image_and_message_safely(merge_page, gui_app):

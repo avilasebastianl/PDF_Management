@@ -121,14 +121,11 @@ Combine several PDFs into one. The whole section scrolls with a single scroll ba
 
 1. Press **Add PDFs** or drag files (or whole folders) into the list. You can keep working while they are read: each row shows its pages and size when done.
 2. Order them with the arrows on each row or with **Sort A-Z**.
-3. Optional, in **Watermark and signature**:
+3. Optional, in **Watermark**:
    - **Add a watermark**: the same options as in **Tools** (text, opacity, orientation and whether it goes behind the content).
-   - **Sign the result**: **Visual signature** (a signature saved in the **Sign** section) or **Digital signature** (.pfx/.p12 certificate and its password), with its **Position**, the **Page** (last, first or all; the digital one goes on a single page) and the **Size**.
-   - The **Result preview**, to the right of the list, goes through all the pages of the merged PDF with **‹** and **›** (below it says which file each one is from) and shows the watermark and signature where they will go; when you turn on the signature, it jumps to the page where it goes.
-
-   The watermark is applied before signing, so the digital signature stays valid.
+   - The **Result preview**, to the right of the list, goes through all the pages of the merged PDF with **‹** and **›** (below it says which file each one is from) and shows the watermark.
 4. Optional: turn on **Create a bookmark for each file**. The merged PDF will have a bookmark in its side outline with the name of each source file, to jump straight to its start; the original bookmarks are kept nested inside. Hover over the option to see this explanation.
-5. Check **Save as** and press **Merge PDFs**. With **Merge and sign...** the merged PDF also opens in the **Sign** section, so you can place the signature with the mouse or sign with a certificate.
+5. Check **Save as** and press **Merge PDFs**. To sign the result use **Merge and sign...**: it merges the PDFs and opens the merged one in the **Sign** section, so you can place the signature with the mouse or sign with a certificate.
 
 If any PDF is protected, the app will ask for its password.
 

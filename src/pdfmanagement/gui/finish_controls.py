@@ -1,41 +1,25 @@
 """
-Controles compartidos para terminar un PDF: marca de agua, firma y vista previa.
+Controles compartidos: opciones de marca de agua y vista previa de una pagina.
 
-Los usan Herramientas (marca de agua) y Unir (marca de agua y firma), asi las
-opciones se ven y se comportan igual en todas las secciones.
+Los usan Herramientas y Unir, asi la marca de agua se ve y se comporta igual
+en las dos secciones.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from pathlib import Path
-from tkinter import filedialog
 
 import customtkinter as ctk
 from PIL import Image
 
-from .. import signatures
-from ..core import InvalidInputError
-from ..core.finish import SignatureOptions, WatermarkOptions
+from ..core.finish import WatermarkOptions
 from ..i18n import tr
 from . import style
-from .dropdown import dropdown_menu, set_dropdown_values
-from .widgets import field_label, muted_label, secondary_button, set_label_image
+from .widgets import field_label, set_label_image
 
 # Orientacion de la marca de agua -> angulo (grados, antihorario como se ve).
 ORIENTATIONS = {tr("Diagonal"): 45, tr("Horizontal"): 0, tr("Vertical"): 90, tr("Diagonal inversa"): -45}
-SIGNATURE_KINDS = {tr("Firma visual"): "visual", tr("Firma digital"): "digital"}
-POSITIONS = {
-    tr("Abajo a la derecha"): "abajo-derecha",
-    tr("Abajo al centro"): "abajo-centro",
-    tr("Abajo a la izquierda"): "abajo-izquierda",
-    tr("Arriba a la derecha"): "arriba-derecha",
-    tr("Arriba a la izquierda"): "arriba-izquierda",
-}
-SIGNATURE_PAGES = {tr("Última"): "ultima", tr("Primera"): "primera", tr("Todas"): "todas"}
-NO_SIGNATURES = tr("(sin firmas guardadas)")
-CERTIFICATE_TYPES = ((tr("Certificados digitales"), "*.pfx *.p12"),)
 
 
 LABEL_WIDTH = 96  # columna de etiquetas igual en todos los grupos (quedan alineadas)
@@ -79,106 +63,6 @@ class WatermarkControls(ctk.CTkFrame):
     def options(self) -> WatermarkOptions:
         return WatermarkOptions(
             self.mark_text.get(), opacity=self.opacity.get() / 100, angle=self.angle, behind=bool(self.behind.get())
-        )
-
-
-class SignatureControls(ctk.CTkFrame):
-    """Firma visual (de la biblioteca de firmas) o digital (certificado), con posicion y tamano."""
-
-    def __init__(self, master, on_change: Callable[[], None] | None = None) -> None:
-        super().__init__(master, fg_color="transparent")
-        self.on_change = on_change or (lambda: None)
-        self.grid_columnconfigure(1, weight=1)
-        self.kind = ctk.CTkSegmentedButton(
-            self, values=list(SIGNATURE_KINDS), command=self._on_kind, font=style.fonts().small
-        )
-        self.kind.set(next(iter(SIGNATURE_KINDS)))
-        _grid_row(self, 0, tr("Tipo"), self.kind)
-
-        # Firma visual: una imagen de la biblioteca (la misma de la seccion Firmar).
-        self.visual = ctk.CTkFrame(self, fg_color="transparent")
-        self.visual.grid_columnconfigure(1, weight=1)
-        self.library = dropdown_menu(self.visual, [NO_SIGNATURES], lambda _v: self.on_change(), width=240)
-        _grid_row(self.visual, 0, tr("Firma"), self.library)
-        self.library_hint = muted_label(self.visual, tr("Las firmas se guardan en la sección Firmar."))
-        self.library_hint.grid(row=1, column=1, sticky="w")
-
-        # Firma digital: certificado y su contrasena.
-        self.digital = ctk.CTkFrame(self, fg_color="transparent")
-        self.digital.grid_columnconfigure(1, weight=1)
-        certificate_row = ctk.CTkFrame(self.digital, fg_color="transparent")
-        self.certificate = tk.StringVar()
-        ctk.CTkEntry(certificate_row, textvariable=self.certificate, width=260, height=34).pack(side="left")
-        secondary_button(certificate_row, tr("Examinar"), self._browse_certificate, "folder", width=110).pack(
-            side="left", padx=(8, 0)
-        )
-        _grid_row(self.digital, 0, tr("Certificado"), certificate_row)
-        self.certificate_password = tk.StringVar()
-        _grid_row(
-            self.digital,
-            1,
-            tr("Contraseña"),
-            ctk.CTkEntry(self.digital, textvariable=self.certificate_password, show="•", width=260, height=34),
-        )
-
-        self.position = dropdown_menu(self, list(POSITIONS), lambda _v: self.on_change(), width=240)
-        _grid_row(self, 2, tr("Posición"), self.position)
-        self.pages = ctk.CTkSegmentedButton(
-            self, values=list(SIGNATURE_PAGES), command=lambda _v: self.on_change(), font=style.fonts().small
-        )
-        self.pages.set(next(iter(SIGNATURE_PAGES)))
-        _grid_row(self, 3, tr("Página"), self.pages)
-        self.width = ctk.CTkSlider(
-            self, from_=80, to=260, number_of_steps=18, width=240, command=lambda _v: self.on_change()
-        )
-        self.width.set(150)
-        _grid_row(self, 4, tr("Tamaño"), self.width)
-        self.reload_library()
-        self._on_kind(self.kind.get(), notify=False)
-
-    def reload_library(self) -> None:
-        """Vuelve a leer las firmas guardadas (pueden agregarse en Firmar)."""
-        self._library = {path.stem: path for path in signatures.list_signatures()}
-        names = list(self._library) or [NO_SIGNATURES]
-        set_dropdown_values(self.library, names)
-        if self.library.get() not in names:
-            self.library.set(names[0])
-
-    def _on_kind(self, label: str, notify: bool = True) -> None:
-        visual = SIGNATURE_KINDS.get(label) == "visual"
-        (self.digital if visual else self.visual).grid_remove()
-        (self.visual if visual else self.digital).grid(row=1, column=0, columnspan=2, sticky="ew")
-        if notify:
-            self.on_change()
-
-    def _browse_certificate(self) -> None:
-        chosen = filedialog.askopenfilename(title=tr("Certificado digital"), filetypes=CERTIFICATE_TYPES)
-        if chosen:
-            self.certificate.set(chosen)
-            self.on_change()
-
-    def options(self, *, for_preview: bool = False) -> SignatureOptions:
-        """Opciones elegidas. Sin ``for_preview`` valida que esten la imagen o el certificado."""
-        kind = SIGNATURE_KINDS.get(self.kind.get(), "visual")
-        pages = SIGNATURE_PAGES.get(self.pages.get(), "ultima")
-        common = {
-            "position": POSITIONS.get(self.position.get(), "abajo-derecha"),
-            "pages": "ultima" if kind == "digital" and pages == "todas" else pages,
-            "width": float(self.width.get()),
-        }
-        if kind == "visual":
-            image = self._library.get(self.library.get())
-            if image is None and not for_preview:
-                raise InvalidInputError(tr("Guarde una firma en la sección Firmar para poder usarla aquí."))
-            return SignatureOptions("visual", image=image, **common)  # type: ignore[arg-type]
-        certificate = self.certificate.get().strip()
-        if not certificate and not for_preview:
-            raise InvalidInputError(tr("Elija el certificado digital (.pfx o .p12)."))
-        return SignatureOptions(
-            "digital",
-            certificate=Path(certificate) if certificate else None,
-            certificate_password=self.certificate_password.get() or None,
-            **common,  # type: ignore[arg-type]
         )
 
 

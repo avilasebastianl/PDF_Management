@@ -120,14 +120,11 @@ Combine varios PDFs en uno solo. Toda la sección se recorre con una sola barra 
 
 1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista. Puede seguir trabajando mientras se leen: cada fila muestra sus páginas y tamaño al terminar.
 2. Ordénelos con las flechas de cada fila o con **Ordenar A-Z**.
-3. Opcional, en **Marca de agua y firma**:
+3. Opcional, en **Marca de agua**:
    - **Agregar marca de agua**: las mismas opciones que en **Herramientas** (texto, opacidad, orientación y si va detrás del contenido).
-   - **Firmar el resultado**: **Firma visual** (una firma guardada en la sección **Firmar**) o **Firma digital** (certificado .pfx/.p12 y su contraseña), con su **Posición**, la **Página** (última, primera o todas; la digital va en una sola) y el **Tamaño**.
-   - La **Vista previa del resultado**, a la derecha de la lista, recorre todas las páginas del PDF unido con **‹** y **›** (debajo dice de qué archivo es cada una) y muestra la marca de agua y la firma donde irán; al activar la firma salta a la página donde va.
-
-   La marca de agua se aplica antes de firmar, así la firma digital queda válida.
+   - La **Vista previa del resultado**, a la derecha de la lista, recorre todas las páginas del PDF unido con **‹** y **›** (debajo dice de qué archivo es cada una) y muestra la marca de agua.
 4. Opcional: active **Crear un marcador por cada archivo**. El PDF unido tendrá en su índice lateral un marcador con el nombre de cada archivo de origen, para saltar directo a su inicio; los marcadores originales se conservan anidados dentro. Pase el cursor sobre la opción para ver esta explicación.
-5. Revise **Guardar como** y presione **Unir PDFs**. Con **Unir y firmar...** el PDF unido se abre además en la sección **Firmar**, para ubicar la firma con el ratón o firmar con un certificado.
+5. Revise **Guardar como** y presione **Unir PDFs**. Para firmar el resultado use **Unir y firmar...**: une los PDFs y abre el unido en la sección **Firmar**, para ubicar la firma con el ratón o firmar con un certificado.
 
 Si algún PDF está protegido, la aplicación pedirá su contraseña.
 

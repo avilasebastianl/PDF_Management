@@ -23,11 +23,11 @@ import customtkinter as ctk
 
 from ... import core
 from ...core import finish
-from ...core.finish import SignatureOptions, WatermarkOptions
+from ...core.finish import WatermarkOptions
 from ...i18n import tr, trn
 from .. import style
 from ..events import describe_files
-from ..finish_controls import SIGNATURE_PAGES, PreviewPane, SignatureControls, WatermarkControls
+from ..finish_controls import PreviewPane, WatermarkControls
 from ..icons import icon
 from ..widgets import (
     Card,
@@ -55,7 +55,6 @@ BOOKMARKS_HELP = tr(
 )
 PREVIEW_HEIGHT = 470
 PREVIEW_DELAY_MS = 300  # se espera a que deje de cambiar opciones antes de redibujar
-SIGNATURE_PAGE_FIRST = next(label for label, key in SIGNATURE_PAGES.items() if key == "primera")
 ROWS_PER_BATCH = 3  # filas construidas por ciclo (~50 ms cada una en CustomTkinter)
 DESTROY_PER_BATCH = 10  # filas destruidas por ciclo al vaciar la lista
 
@@ -222,11 +221,14 @@ class MergePage(BasePage):
         self._refresh_summary()
 
     def _build_finish_card(self) -> None:
-        """Marca de agua y firma del resultado (la vista previa esta en su propia columna)."""
+        """
+        Marca de agua del resultado (la vista previa esta en su propia columna).
+        Para firmar, "Unir y firmar..." lleva el PDF unido a la seccion Firmar.
+        """
         card = Card(
             self.body,
-            tr("Marca de agua y firma (opcional)"),
-            tr("Se aplican al PDF unido. La vista previa muestra cómo quedará."),
+            tr("Marca de agua (opcional)"),
+            tr("Se aplica al PDF unido. La vista previa muestra cómo quedará."),
         )
         card.grid(row=2, column=0, sticky="ew", pady=(style.GAP + 2, 0))
         left = ctk.CTkFrame(card, fg_color="transparent")
@@ -237,14 +239,9 @@ class MergePage(BasePage):
         )
         self.add_watermark.grid(row=0, column=0, sticky="w", pady=(0, 4))
         self.watermark = WatermarkControls(left, on_change=self._schedule_preview)
-        self.add_signature = ctk.CTkSwitch(
-            left, text=tr("Firmar el resultado"), font=style.fonts().body_bold, command=self._on_finish_toggled
-        )
-        self.add_signature.grid(row=2, column=0, sticky="w", pady=(12, 4))
-        self.signature = SignatureControls(left, on_change=self._on_signature_changed)
 
     def _build_preview_card(self) -> None:
-        """Vista previa del resultado: todas sus paginas, con la marca de agua y la firma elegidas."""
+        """Vista previa del resultado: todas sus paginas, con la marca de agua elegida."""
         card = Card(self.body, tr("Vista previa del resultado"))
         card.grid(row=1, column=1, rowspan=3, sticky="n", padx=(style.GAP, 0))
         self.preview = PreviewPane(card, PREVIEW_HEIGHT, tr("Agregue PDFs para ver la vista previa"))
@@ -271,24 +268,12 @@ class MergePage(BasePage):
             self.watermark.grid(row=1, column=0, sticky="ew")
         else:
             self.watermark.grid_remove()
-        if self.add_signature.get():
-            self.signature.reload_library()  # pudo agregarse una firma en Firmar
-            self.signature.grid(row=3, column=0, sticky="ew")
-            self._show_signature_page()
-        else:
-            self.signature.grid_remove()
         if log:
-            self.log(
-                "Terminacion del PDF unido",
-                marca_de_agua=bool(self.add_watermark.get()),
-                firma=bool(self.add_signature.get()),
-            )
+            self.log("Marca de agua del PDF unido: %s", "activada" if self.add_watermark.get() else "desactivada")
         self._schedule_preview()
 
-    def _finish_options(self, *, for_preview: bool = False) -> tuple[WatermarkOptions | None, SignatureOptions | None]:
-        watermark = self.watermark.options() if self.add_watermark.get() else None
-        signature = self.signature.options(for_preview=for_preview) if self.add_signature.get() else None
-        return watermark, signature
+    def _watermark_options(self) -> WatermarkOptions | None:
+        return self.watermark.options() if self.add_watermark.get() else None
 
     # * Vista previa navegable ------------------------------------------------------
 
@@ -310,16 +295,6 @@ class MergePage(BasePage):
     def step_preview(self, step: int) -> None:
         self.go_to_preview_page(self.preview_index + step)
 
-    def _on_signature_changed(self) -> None:
-        self._show_signature_page()
-        self._schedule_preview()
-
-    def _show_signature_page(self) -> None:
-        """Al elegir la firma se muestra la pagina donde ira."""
-        if self.add_signature.get() and self.entries:
-            first = self.signature.pages.get() == SIGNATURE_PAGE_FIRST
-            self.preview_index = 0 if first else self.preview_total - 1
-
     def _schedule_preview(self, delay: int = PREVIEW_DELAY_MS) -> None:
         if not hasattr(self, "preview_label"):
             return
@@ -328,7 +303,7 @@ class MergePage(BasePage):
         self._preview_job = self.after(delay, self.refresh_preview)
 
     def refresh_preview(self) -> None:
-        """La pagina elegida del resultado con la marca de agua y la firma (si va en ella)."""
+        """La pagina elegida del resultado con la marca de agua."""
         self._preview_job = None
         pages = self._page_map()
         total = sum(count for _entry, count in pages)
@@ -349,17 +324,11 @@ class MergePage(BasePage):
             local -= count
         self.preview_label.configure(text=tr("Página {n} de {total}", n=index + 1, total=total))
         self.preview_source.configure(text=f"{entry.path.name}  ·  " + tr("página {n}", n=local + 1))
-        watermark, signature = self._finish_options(for_preview=True)
-        if signature is not None:
-            here = {"todas": True, "primera": index == 0, "ultima": index == total - 1}[signature.pages]
-            if not here:
-                signature = None
         try:
             image = finish.preview(
                 entry.path,
                 local,
-                watermark=watermark,
-                signature=signature,
+                watermark=self._watermark_options(),
                 height=self.preview.pixel_height,
                 password=self.passwords.get(entry.path),
             )
@@ -624,7 +593,7 @@ class MergePage(BasePage):
                 return
             sources = self.files
             add_bookmarks = bool(self.bookmarks.get())
-            watermark, signature = self._finish_options()  # valida antes de empezar (firma, certificado)
+            watermark = self._watermark_options()
             self.log(
                 "Unir PDFs solicitado: %s",
                 describe_files(sources, limit=10),
@@ -635,7 +604,7 @@ class MergePage(BasePage):
 
             def operation(passwords) -> Path:
                 merged = core.merge_pdfs(sources, output, passwords=passwords, add_bookmarks=add_bookmarks)
-                return finish.apply_finish(merged, watermark=watermark, signature=signature)
+                return finish.apply_finish(merged, watermark=watermark)
 
             self.run_task(
                 tr("Uniendo PDFs"),
