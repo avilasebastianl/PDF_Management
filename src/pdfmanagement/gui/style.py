@@ -22,8 +22,8 @@ SIDEBAR_COLLAPSED_WIDTH = 64  # solo iconos
 CORNER = 10
 
 # * Colores semanticos
-TEXT = ("gray10", "gray92")
-TEXT_MUTED = ("gray40", "gray62")
+TEXT = ("black", "gray92")  # modo claro: negro, el mejor contraste
+TEXT_MUTED = ("gray25", "gray62")
 TEXT_DISABLED = ("gray75", "gray35")
 SIDEBAR_BG = ("gray88", "gray12")
 CONTENT_BG = ("gray95", "gray16")
@@ -37,6 +37,9 @@ WARNING = ("#B26A00", "#FFB74D")
 CANVAS_BG = ("#D9D9DE", "#1B1B1F")
 PAGE_SHADOW = ("#B4B4BA", "#0B0B0D")
 WHITE = ("white", "white")
+# Texto e iconos sobre el color de acento: negro en modo claro (los acentos claros, como
+# lavanda o naranja, no se leian con blanco) y blanco en modo oscuro.
+ON_ACCENT = ("black", "white")
 
 
 @dataclass(frozen=True)

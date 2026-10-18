@@ -70,6 +70,7 @@ class DocumentSession:
         self.history = History(document, on_change=on_change)
         self.changes = ChangeNotifier()  # avisa de cada cambio a quien muestra el documento
         self._words: dict[int, list[tuple]] = {}
+        self._elements: dict[int, list[content.PageElement]] = {}
 
     @classmethod
     def open(
@@ -119,12 +120,20 @@ class DocumentSession:
             self._words[index] = page_words(self.document[index], sort=True)
         return self._words[index]
 
+    def elements(self, index: int) -> list[content.PageElement]:
+        """Lineas de texto e imagenes de la pagina (para seleccionarlas en el visor)."""
+        if index not in self._elements:
+            self._elements[index] = content.page_elements(self.document[index])
+        return self._elements[index]
+
     def invalidate(self, pages: list[int] | None = None) -> None:
         """Descarta la cache de texto tras una edicion (todas o algunas paginas)."""
         if pages is None:
             self._words.clear()
+            self._elements.clear()
         for index in pages or []:
             self._words.pop(index, None)
+            self._elements.pop(index, None)
 
     def has_signatures(self) -> bool:
         """El PDF contiene firmas digitales (editarlo las invalidaria)."""
@@ -340,6 +349,13 @@ class DocumentSession:
 
     def redact(self, page: int, rect) -> None:
         self._annotate(tr("Tapar contenido (página {page})", page=page + 1), page, content.redact, rect)
+
+    def erase_text(self, page: int, rect) -> None:
+        """Elimina una linea de texto (se cubre con el color del fondo)."""
+        self._annotate(tr("Eliminar texto (página {page})", page=page + 1), page, content.redact, rect)
+
+    def remove_image(self, page: int, rect) -> None:
+        self._annotate(tr("Eliminar imagen (página {page})", page=page + 1), page, content.remove_image, rect)
 
     def _annotation_label(self, page: int, xref: int) -> str:
         """Nombre de la anotacion en minusculas, para componer la etiqueta del historial."""

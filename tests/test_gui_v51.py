@@ -109,7 +109,25 @@ def test_temporary_interface_size_is_not_saved(gui_app):
     gui_app.preview_ui_scaling(1.1)
     try:
         assert gui_app.ui_scaling == 1.1 and gui_app.settings.ui_scaling == saved
-        assert "110" in gui_app.scaling_button.cget("text")
+        assert "110" in gui_app.scaling_label.cget("text")
     finally:
         gui_app.preview_ui_scaling(saved)
     assert gui_app.ui_scaling == saved
+
+
+def test_minus_and_plus_change_the_size_after_a_pause(gui_app):
+    saved = gui_app.settings.ui_scaling
+    gui_app.step_ui_scaling(1)
+    gui_app.step_ui_scaling(1)
+    assert gui_app.ui_scaling == saved, "aun no se aplica: se espera a que deje de pulsar"
+    assert "125" in gui_app.scaling_label.cget("text")
+    gui_app._apply_pending_scaling()
+    try:
+        assert gui_app.ui_scaling == 1.25 and gui_app.settings.ui_scaling == saved
+    finally:
+        gui_app.preview_ui_scaling(saved)
+    for _ in range(10):
+        gui_app.step_ui_scaling(-1)
+    assert gui_app.scaling_minus.cget("state") == "disabled", "en el minimo, - queda desactivado"
+    gui_app._apply_pending_scaling()
+    gui_app.preview_ui_scaling(saved)

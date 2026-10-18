@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .. import style
 from ..icons import icon
+from ..system import clear_topmost
 
 if TYPE_CHECKING:
     from .viewer import ViewerPage
@@ -58,6 +59,13 @@ class ModesMixin:
         else:
             self.tab_bar.grid_remove()
         self.app.root.attributes("-fullscreen", mode == FULLSCREEN)
+        # Tk deja la ventana "siempre encima" al entrar o salir de pantalla completa
+        # (Alt+Tab no traia las otras aplicaciones y los desplegables se abrian
+        # detras). Se quita ahora y otra vez cuando Windows termina el cambio.
+        root = self.app.root
+        clear_topmost(root)
+        for delay in (50, 300):
+            root.after(delay, lambda: clear_topmost(root))
         for button, name, active in (
             (self.window_button, "window_mode", mode == WINDOW),
             (self.fullscreen_button, "fullscreen", mode == FULLSCREEN),

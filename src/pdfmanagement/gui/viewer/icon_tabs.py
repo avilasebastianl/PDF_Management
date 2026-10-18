@@ -66,7 +66,7 @@ class IconTabs(ctk.CTkFrame):
             button.configure(
                 fg_color=accent if active else "transparent",
                 hover_color=style.accent_hover_color() if active else style.HOVER,
-                image=icon(self._icons[tab], 17, style.WHITE if active else style.TEXT),
+                image=icon(self._icons[tab], 17, style.ON_ACCENT if active else style.TEXT),
             )
         self.title.configure(text=name)
 

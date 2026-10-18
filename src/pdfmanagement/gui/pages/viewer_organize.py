@@ -189,7 +189,10 @@ class OrganizeMixin:
             self.delete_pages()
 
     def toggle_edit_mode(self: ViewerPage) -> None:
+        """Boton Editar (Ctrl+E): al entrar queda activa Seleccionar, para elegir elementos de la pagina."""
         self.set_edit_mode(not self.edit_mode)
+        if self.edit_mode and self.session is not None and self.annotations.active is None:
+            self.annotations.select_tool("select")
 
     def set_edit_mode(self: ViewerPage, enabled: bool) -> None:
         """
@@ -214,7 +217,7 @@ class OrganizeMixin:
             text=self.edit_button_text(),
             fg_color=accent if enabled else "transparent",
             hover_color=style.accent_hover_color() if enabled else style.HOVER,
-            text_color=style.WHITE if enabled else style.TEXT,
+            text_color=style.ON_ACCENT if enabled else style.TEXT,
         )
         self._on_pages_selected(sorted(self.thumbnails.selected))
         self.fit_bars()

@@ -2,10 +2,12 @@
 Ventana principal: barra lateral de navegacion, area de paginas y barra de estado.
 """
 
+import ctypes
 import logging
 import os
 import platform
 import sys
+import threading
 import time
 import tkinter as tk
 from dataclasses import asdict
@@ -20,7 +22,7 @@ from tkinterdnd2 import TkinterDnD
 from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import UI_SCALING_OPTIONS, Settings
 from ..i18n import tr
-from . import icons, style
+from . import ctk_fixes, icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
 from .dialogs import HelpWindow
 from .events import debug_event, log_event
@@ -32,13 +34,14 @@ from .popup_menu import PopupMenu
 from .status_bar import StatusBar
 from .system import open_path
 from .tasks import TaskRunner
-from .widgets import ToolTip, hide, monitor_work_area, show
+from .widgets import ToolTip, hide, monitor_work_area, set_enabled, show
 
 logger = logging.getLogger(__name__)
 
 PREBUILD_DELAY_MS = 600  # espera tras el arranque antes de precargar paginas
 PREBUILD_INTERVAL_MS = 150  # pausa entre paginas precargadas o reapiladas
 RESTACK_DELAY_MS = 400  # espera tras redimensionar antes de reapilar paginas
+RESTACK_AFTER_TRANSITION_MS = 2500  # tras un cambio de modo: que la animacion termine tranquila
 SIDEBAR_ANIMATION_MS = 260  # duracion de contraer/expandir el menu lateral
 SIDEBAR_FRAME_MS = 6  # pausa entre cuadros (cada cuadro se pinta enseguida)
 RESIZE_LOG_DELAY_MS = 600  # se registra el tamano final, no cada paso del arrastre
@@ -46,6 +49,7 @@ RESIZE_LOG_DELAY_MS = 600  # se registra el tamano final, no cada paso del arras
 FADE_IN_MS = 240  # la cortina con la imagen anterior se desvanece en este tiempo
 CLOSE_FADE_MS = 140
 FADE_FRAME_MS = 8
+SCALING_DELAY_MS = 450  # tras el ultimo clic en - o +, se aplica el tamano
 
 # Nombres legibles de las preferencias para el registro de cambios.
 SETTING_LABELS = {
@@ -89,6 +93,7 @@ class MainWindow:
             logging_setup.set_debug(True)
         # Iconos y fuentes quedan ligados a la ventana que los creo: se
         # descartan para poder crear otra ventana en el mismo proceso.
+        ctk_fixes.apply()
         icons.icon.cache_clear()
         style.fonts.cache_clear()
         ctk.set_appearance_mode(settings.appearance_mode)
@@ -234,17 +239,56 @@ class MainWindow:
         )
         self.theme_button.grid(row=0, column=0, sticky="ew")
         ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
+
+        # Tamano de la interfaz: "-  Tamano 100 %  +" (con el menu contraido, un icono con la lista).
+        def scaling_tip() -> str:
+            return tr(
+                "Tamaño de la interfaz solo por ahora: al reiniciar vuelve el de Ajustes ({predeterminado} %)",
+                predeterminado=round(self.settings.ui_scaling * 100),
+            )
+
+        self.scaling_row = ctk.CTkFrame(footer, fg_color="transparent")
+        self.scaling_row.grid_columnconfigure(1, weight=1)
+        step_style = {"width": 32, "height": 32, "corner_radius": 8, "fg_color": "transparent", "text": ""}
+        self.scaling_minus = ctk.CTkButton(
+            self.scaling_row,
+            image=icon("minus", 16),
+            hover_color=style.HOVER,
+            command=lambda: self.step_ui_scaling(-1),
+            **step_style,
+        )
+        self.scaling_minus.icon_key = "minus"  # para set_enabled (atenua el icono)
+        self.scaling_minus.grid(row=0, column=0)
+        ToolTip(self.scaling_minus, tr("Reducir el tamaño de la interfaz"))
+        self.scaling_label = ctk.CTkButton(
+            self.scaling_row,
+            text="",
+            height=32,
+            corner_radius=8,
+            fg_color="transparent",
+            hover_color=style.HOVER,
+            text_color=style.TEXT,
+            font=style.fonts().body,
+            command=self.show_scaling_menu,
+        )
+        self.scaling_label.grid(row=0, column=1, sticky="ew", padx=2)
+        ToolTip(self.scaling_label, scaling_tip)
+        self.scaling_plus = ctk.CTkButton(
+            self.scaling_row,
+            image=icon("add", 16),
+            hover_color=style.HOVER,
+            command=lambda: self.step_ui_scaling(1),
+            **step_style,
+        )
+        self.scaling_plus.icon_key = "add"
+        self.scaling_plus.grid(row=0, column=2)
+        ToolTip(self.scaling_plus, tr("Aumentar el tamaño de la interfaz"))
         self.scaling_button = ctk.CTkButton(
             footer, text="", image=icon("zoom_in", 18), command=self.show_scaling_menu, **footer_style
         )
-        self.scaling_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        ToolTip(
-            self.scaling_button,
-            lambda: tr(
-                "Tamaño de la interfaz solo por ahora: al reiniciar vuelve el de Ajustes ({predeterminado} %)",
-                predeterminado=round(self.settings.ui_scaling * 100),
-            ),
-        )
+        ToolTip(self.scaling_button, scaling_tip)
+        self._pending_scaling: float | None = None
+        self._scaling_job: str | None = None
         self.help_button = ctk.CTkButton(
             footer, text=f"  {tr('Ayuda')}", image=icon("help", 18), command=self.open_help, **footer_style
         )
@@ -463,6 +507,8 @@ class MainWindow:
         if size == self._last_size:
             return  # solo se movio la ventana
         self._last_size = size
+        if self._in_transition:
+            return  # la transicion ya desmonto las secciones ocultas y las reapila al terminar
         for name, page in self.pages.items():
             if name != self.current_page and page.winfo_manager() == "grid":
                 hide(page)
@@ -507,8 +553,8 @@ class MainWindow:
             button.configure(
                 fg_color=accent if selected else "transparent",
                 hover_color=style.accent_hover_color() if selected else style.HOVER,
-                text_color=style.WHITE if selected else style.TEXT,
-                image=icon(page_class.icon_name, 18, style.WHITE if selected else style.TEXT),
+                text_color=style.ON_ACCENT if selected else style.TEXT,
+                image=icon(page_class.icon_name, 18, style.ON_ACCENT if selected else style.TEXT),
             )
 
     # * Apariencia ------------------------------------------------------------
@@ -559,11 +605,41 @@ class MainWindow:
         button = self.scaling_button
         menu.tk_popup(button.winfo_rootx() + button.winfo_width() + 6, button.winfo_rooty())
 
+    def step_ui_scaling(self, direction: int) -> None:
+        """Botones - y +: el numero cambia al instante y el tamano se aplica al dejar de pulsar."""
+        current = self._pending_scaling if self._pending_scaling is not None else self.ui_scaling
+        options = list(UI_SCALING_OPTIONS)
+        index = min(range(len(options)), key=lambda i: abs(options[i] - current))
+        target = options[max(0, min(index + direction, len(options) - 1))]
+        if target == current:
+            return
+        self._pending_scaling = target
+        self._refresh_scaling_button()
+        if self._scaling_job is not None:
+            self.root.after_cancel(self._scaling_job)
+        self._scaling_job = self.root.after(SCALING_DELAY_MS, self._apply_pending_scaling)
+
+    def _apply_pending_scaling(self) -> None:
+        self._scaling_job = None
+        target, self._pending_scaling = self._pending_scaling, None
+        if target is not None:
+            self.preview_ui_scaling(target)
+        self._refresh_scaling_button()
+
     def _refresh_scaling_button(self) -> None:
-        percent = round(self.ui_scaling * 100)
-        text = "" if self.settings.sidebar_collapsed else "  " + tr("Tamaño: {valor} %", valor=percent)
-        if self.scaling_button.cget("text") != text:
-            self.scaling_button.configure(text=text)
+        shown = self._pending_scaling if self._pending_scaling is not None else self.ui_scaling
+        collapsed = self.settings.sidebar_collapsed
+        if collapsed:
+            self.scaling_row.grid_remove()
+            self.scaling_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        else:
+            self.scaling_button.grid_remove()
+            self.scaling_row.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        text = tr("Tamaño {valor} %", valor=round(shown * 100))
+        if self.scaling_label.cget("text") != text:
+            self.scaling_label.configure(text=text)
+        set_enabled(self.scaling_minus, shown > UI_SCALING_OPTIONS[0])
+        set_enabled(self.scaling_plus, shown < UI_SCALING_OPTIONS[-1])
 
     # * Fundidos ----------------------------------------------------------------
 
@@ -606,18 +682,28 @@ class MainWindow:
             return
         self._in_transition = True
         curtain = self._show_curtain()
+        # El fundido empieza ya, en otro hilo, mientras la ventana se reacomoda debajo:
+        # no se nota la espera. Tk no se toca desde ese hilo (solo la opacidad de Windows).
+        dimmer = CurtainDimmer(curtain) if curtain is not None else None
+        # Las secciones ocultas montadas se reacomodarian todas al cambiar el tamano
+        # (con las 8 cargadas, ~3 s): se desmontan y se vuelven a apilar despues, de a una.
+        self._unstack_hidden_pages()
         try:
-            change()
-            self.root.update()  # el cambio de tamano de la ventana llega como eventos
-            page = self.pages.get(self.current_page or "")
-            if page is not None:
-                page.flush_layout()
-            self.root.update_idletasks()
+            with frozen_redraw(self.root):  # sin estados intermedios: se pinta una vez, al final
+                change()
+                self.root.update()  # el cambio de tamano de la ventana llega como eventos
+                page = self.pages.get(self.current_page or "")
+                if page is not None:
+                    page.flush_layout()
         finally:
-            if curtain is not None:
-                self._fade_window(curtain, 1.0, 0.0, FADE_IN_MS)
+            if curtain is not None and dimmer is not None:
+                start = dimmer.stop()
+                self._fade_window(curtain, start, 0.0, round(FADE_IN_MS * start))
                 curtain.destroy()
             self._in_transition = False
+            if self._restack_job:
+                self.root.after_cancel(self._restack_job)
+            self._restack_job = self.root.after(RESTACK_AFTER_TRANSITION_MS, self._restack_pages)
 
     def _show_curtain(self) -> tk.Toplevel | None:
         """Ventana sin bordes, encima de todo, con la captura del monitor tal como se ve."""
@@ -789,6 +875,48 @@ class MainWindow:
             self.settings.window_width = int(getattr(self.root, "_current_width", self.root.winfo_width()))
             self.settings.window_height = int(getattr(self.root, "_current_height", self.root.winfo_height()))
         self.save_settings()
+
+
+class CurtainDimmer:
+    """
+    Atenua la cortina en un hilo aparte mientras el hilo de Tk esta ocupado
+    reacomodando la ventana. Solo llama a ``SetLayeredWindowAttributes`` de
+    Windows (no a Tk, que no admite otros hilos). En otros sistemas no hace nada.
+    """
+
+    TARGET = 0.72  # opacidad a la que llega mientras espera (deja ver que algo cambia)
+    DURATION = 0.5  # segundos hasta llegar a TARGET
+
+    def __init__(self, curtain: tk.Toplevel) -> None:
+        self.alpha = 1.0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        if not sys.platform.startswith("win"):
+            return
+        curtain.attributes("-alpha", 0.999)  # la vuelve "layered" para poder cambiar su opacidad
+        curtain.update_idletasks()
+        self._hwnd = int(curtain.wm_frame(), 16)
+        self._thread = threading.Thread(target=self._run, name="cortina", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        user32 = ctypes.windll.user32
+        started = time.perf_counter()
+        while not self._stop.is_set():
+            progress = min(1.0, (time.perf_counter() - started) / self.DURATION)
+            eased = 1 - (1 - progress) ** 2
+            self.alpha = 1.0 - (1.0 - self.TARGET) * eased
+            user32.SetLayeredWindowAttributes(self._hwnd, 0, round(self.alpha * 255), 0x2)  # LWA_ALPHA
+            if progress >= 1.0:
+                return
+            time.sleep(FADE_FRAME_MS / 1000)
+
+    def stop(self) -> float:
+        """Detiene el hilo y devuelve la opacidad en la que quedo."""
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.2)
+        return self.alpha
 
 
 def _prune_scaling_callbacks() -> None:

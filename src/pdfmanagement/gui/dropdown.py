@@ -23,6 +23,7 @@ Uso::
 """
 
 import time
+import tkinter as tk
 from collections.abc import Callable, Sequence
 
 import customtkinter as ctk
@@ -57,6 +58,7 @@ class _ScrollablePopup(CTkScrollableDropdown):
         # lo que habia y se cierra solo si la ventana principal se mueve o cambia.
         root.bind("<Configure>", configure_bindings)
         root.bind("<Configure>", self._on_root_configure, add="+")
+        root.bind("<FocusOut>", lambda _e: root.after(80, self._close_if_app_inactive), add="+")
         # El original activa overrideredirect tras 100 ms; sin esto la primera
         # apertura muestra un instante la barra de titulo.
         self.overrideredirect(True)
@@ -72,10 +74,23 @@ class _ScrollablePopup(CTkScrollableDropdown):
         if not self.winfo_exists() or time.monotonic() - self._opened_at < OPEN_GRACE_SECONDS:
             return
         if self.winfo_viewable():
+            self.attributes("-topmost", False)
             self.withdraw()
         self.event_generate("<<Closed>>")
         # El original usa ``hide`` como metodo y como bandera a la vez.
         self.hide = True  # type: ignore[method-assign,assignment]
+
+    def _close_if_app_inactive(self) -> None:
+        """Otra aplicacion paso al frente (Alt+Tab): la lista no debe quedar encima de ella."""
+        if not self.winfo_exists() or not self.winfo_viewable():
+            return
+        try:
+            focused = self.focus_get()
+        except (KeyError, tk.TclError):
+            focused = None
+        if focused is None:
+            self._opened_at = 0.0
+            self._withdraw()
 
     def _on_root_configure(self, event) -> None:
         # Al cerrar la ventana el control ancla se destruye antes que la raiz,
@@ -111,6 +126,10 @@ class _ScrollablePopup(CTkScrollableDropdown):
         self.geometry(f"{round(width)}x{round(height)}+{x}+{round(y)}")
         self._opened_at = time.monotonic()
         self.attributes("-alpha", self.alpha)
+        # Siempre encima de la ventana principal: tras pasar por pantalla completa
+        # (que Tk deja como "siempre encima") la lista se abria detras y no se veia.
+        self.attributes("-topmost", True)
+        self.lift()
         attach.focus()
 
     def _highlight_current(self) -> None:

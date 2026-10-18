@@ -12,7 +12,7 @@ The app never overwrites a file without asking: if the suggested output name alr
 
 The interface is available in **Spanish**, **English** and **Russian** (see **Settings**).
 
-Below the light/dark mode button, **Size** changes the interface size for now only: on restart it returns to the one in **Settings**, which is where the default is changed.
+Below the light/dark mode button, the **−** and **+** buttons on either side of **Size** shrink or enlarge the interface (click the percentage to choose it from a list). It is for now only: on restart it returns to the size in **Settings**, which is where the default is changed.
 
 ## Viewer
 
@@ -30,7 +30,7 @@ Read any PDF without leaving the app. It is the first section and the one that o
 
   Night mode and the two-page view are remembered for next time.
 - **Read across the whole window**: the window button (or **Ctrl+Shift+F**) hides the menu, bars and side panel and lets the document fill the whole window, with the tabs within reach. **Esc** goes back.
-- **Full screen**: the arrows button (or **F11**) shows only the viewer across the whole screen; **Esc** or **F11** goes back.
+- **Full screen**: the arrows button (or **F11**) shows only the viewer across the whole screen; **Esc** or **F11** goes back. In full screen you can switch programs with **Alt+Tab** as usual.
 - **Side panel** (list button to show or hide it). Its tabs are icons: hover over each one to see its name; the name of the active tab is shown below.
   - **Pages**: thumbnails; click one to go to that page.
   - **Bookmarks**: the document's outline, if it has one.
@@ -69,9 +69,13 @@ If the document has **digital signatures**, you are warned before the first chan
 
 The **annotation bar** appears below the viewer's navigation when you press **Edit**:
 
+- **Select** (the arrow, first on the bar, active when you press **Edit**): hover to highlight what is underneath, and a click selects it: an **annotation**, a **line of text** or an **image** on the page. Annotations are moved by dragging them; a **double-click** edits the text (of a line or a note) and **Del** deletes the selection (a line is erased by covering it with the background color; an image is removed without touching the text).
+
 - **Highlight, underline and strike out**: choose the tool and drag over the text. If you already have text selected with the **Text** tool, one click on the button marks it instantly.
-- **Note**: click where you want the icon and type the comment.
+- **Note**: click where you want the icon and type the comment in the field that appears next to it.
 - **Text**: drag to draw the box (or click) and type the text that will appear on the page.
+
+Text is typed **directly on the page**, in a field that appears in its place and at its size, without dialog boxes: **Enter** applies it, **Shift+Enter** adds a line, **Esc** cancels and clicking outside also applies it.
 - **Rectangle, ellipse, line and arrow**: drag from one corner to the other.
 - **Freehand drawing**: drag to draw.
 - **Color** (yellow, green, blue, red or black), **thickness** (thin, medium or thick) and **Font** (text size) on the right of the bar.
@@ -79,7 +83,7 @@ The **annotation bar** appears below the viewer's navigation when you press **Ed
 
 Press **Esc** or click the tool again to finish.
 
-To **edit** an annotation use the **Text** tool: click it to select it (a dashed outline appears). Then you can drag it to move it, choose another color, double-click a note or a text to change it, or press **Del** to delete it. Right-clicking an annotation offers the same options.
+To **edit** an annotation use **Select** (or the **Text** tool): click it to select it (a dashed outline appears). Then you can drag it to move it, choose another color, double-click a note or a text to change it, or press **Del** to delete it. Right-clicking an annotation offers the same options.
 
 The **Notes** panel lists all the annotations in the document: click one to go to it; the buttons let you edit its text or delete it.
 
@@ -89,10 +93,10 @@ Like all other changes, annotations are undone with **Ctrl+Z** and saved with **
 
 After the annotation tools, the bar has four tools that change the **page content itself** (they are not annotations: they are written into the page):
 
-- **Replace text**: drag over the text you want to change (or select it first with **Text** and press the button) and type the new text. It is written in the same place, with the same size, color and direction, but in Helvetica. If the selection spans several pages, only the first one is replaced.
+- **Replace text**: drag over the text you want to change (or select it first with **Text** and press the button; or double-click the line with **Select**). A field appears over the text, with the current text, to correct it right there. It is written in the same place, with the same size, color and direction, but in Helvetica. If the PDF declares a color that is not the one you see (for example, light text on a dark band), the color you see is used, so that it stays readable. If the selection spans several pages, only the first one is replaced.
 - **Fixed text**: click where it goes and type the text. It uses the color and the **Font** size chosen in the bar (with yellow, which is unreadable on white, it is written in black).
 - **Image**: drag the area where it will go (or click for a standard size) and choose an image (PNG, JPG, BMP, GIF or TIFF). It fits the area while keeping its proportions and stays upright even if the page is rotated.
-- **Redact**: drag over what you want to remove. The area is painted black and what is underneath (text, images and drawings) **is really removed**, not just covered: it can no longer be copied, searched or recovered from the saved file.
+- **Redact**: drag over what you want to remove. The area is covered with the **color of the background around it** (it looks erased, without a black block) and what is underneath (text, images and drawings) **is really removed**, not just covered: it can no longer be copied, searched or recovered from the saved file.
 
 Everything is undone with **Ctrl+Z** and saved with **Save as**.
 
@@ -244,7 +248,7 @@ Choose the source **PDF** and, at the top, the tool: **Compress**, **Split**, **
   - **Position**: top or bottom, left, center or right (6 positions).
   - **Start at**: the first number.
   - **Pages**: leave the field empty to number all of them, or type a selection as in Extract (for example `3-`). Only the numbered pages count.
-- **Watermark**: writes a large, semi-transparent text diagonally across the center of each page, for example CONFIDENTIAL or DRAFT. Choose the **Text**, the **Opacity** and whether it goes **Behind the content** (otherwise it goes in front). Long texts are shrunk to fit the page.
+- **Watermark**: writes a large, semi-transparent text across the center of each page, for example CONFIDENTIAL or DRAFT. Choose the **Text**, the **Opacity**, the **Orientation** (**Diagonal**, **Landscape**, **Portrait** or **Reverse diagonal**) and whether it goes **Behind the content** (otherwise it goes in front). On the right, a **preview** of the first page shows how it will look and updates when you change any option. Long texts are shrunk to fit the page.
 
 The **Number pages** and **Watermark** texts are written in Helvetica; if they contain other alphabets (for example Cyrillic), the Windows Arial font is used.
 

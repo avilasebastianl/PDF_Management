@@ -220,13 +220,13 @@ class SettingsPage(BasePage):
         # Cabecera con el color de acento: logo, nombre y eslogan.
         banner = ctk.CTkFrame(about, corner_radius=style.CORNER - 2, fg_color=accent)
         banner.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
-        ctk.CTkLabel(banner, text="", image=icon("pdf", 48, style.WHITE)).grid(
+        ctk.CTkLabel(banner, text="", image=icon("pdf", 48, style.ON_ACCENT)).grid(
             row=0, column=0, rowspan=3, padx=(18, 12), pady=14
         )
-        ctk.CTkLabel(banner, text=__app_name__, font=style.fonts().title, text_color=style.WHITE, anchor="w").grid(
+        ctk.CTkLabel(banner, text=__app_name__, font=style.fonts().title, text_color=style.ON_ACCENT, anchor="w").grid(
             row=0, column=1, sticky="w", pady=(14, 0)
         )
-        ctk.CTkLabel(banner, text=ABOUT_TAGLINE, font=style.fonts().body, text_color=style.WHITE, anchor="w").grid(
+        ctk.CTkLabel(banner, text=ABOUT_TAGLINE, font=style.fonts().body, text_color=style.ON_ACCENT, anchor="w").grid(
             row=1, column=1, sticky="w"
         )
         ctk.CTkLabel(

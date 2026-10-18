@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.1.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.2.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -196,6 +196,7 @@ PDFManagement/
 │       ├── appearance.py       # Cambio de tema priorizado (visible primero)
 │       ├── dropdown.py         # Desplegables con desplazamiento (envoltorio de _vendor)
 │       ├── popup_menu.py       # Menus emergentes con el estilo de los desplegables (Ver, contextuales, tamano)
+│       ├── ctk_fixes.py        # Ajuste de rendimiento de CustomTkinter (barras sin repintar toda la ventana)
 │       ├── new_document.py     # Dialogo Nuevo PDF: plantillas con vista previa, tamano, orientacion
 │       ├── style.py            # Tipografia, espaciado y colores
 │       ├── icons.py            # Iconos desde la fuente de Windows
@@ -209,6 +210,8 @@ PDFManagement/
 │       │   ├── thumbnails.py   # ThumbnailStrip: miniaturas perezosas
 │       │   ├── tools.py        # HandTool, TextSelectTool
 │       │   ├── annotation_tools.py  # Gestos de anotacion: marcar texto, arrastrar formas, trazo, nota, seleccionar/mover
+│       │   ├── element_tool.py # Seleccionar: anotaciones, lineas de texto e imagenes de la pagina
+│       │   ├── inline_editor.py  # Campo de texto sobre la pagina (en lugar de cuadros de dialogo)
 │       │   ├── find_bar.py     # FindBar: barra de busqueda flotante (como en los navegadores)
 │       │   ├── tab_strip.py    # TabStrip: pestanas de documentos con aspecto de navegador
 │       │   ├── icon_tabs.py    # IconTabs: pestanas con icono del panel lateral
@@ -325,6 +328,8 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `dropdown_menu()`, `set_dropdown_values()` (`dropdown.py`) | `CTkOptionMenu` con lista desplazable: muestra como mucho 5 opciones (`MAX_VISIBLE`) y las demas con una barra de desplazamiento con colores visibles (parametros `height`, `scrollbar_button_color` y `scrollbar_button_hover_color` del componente de `_vendor`), mide lo mismo que el control a cualquier escala, resalta la opcion actual, se abre hacia arriba si no cabe y se cierra con clic fuera, Escape o al mover la ventana. Se usa en todos los desplegables (recientes, zoom, tamano de letra, firmas guardadas y Ajustes) |
 | `PopupMenu` (`popup_menu.py`) | Menu emergente con el mismo aspecto que las listas desplegables; admite el subconjunto de `tk.Menu` que usa la app (`add_command`, `add_checkbutton`, `add_separator`, `add_cascade`, `tk_popup`). Se cierra al elegir, con Esc, al hacer clic fuera, al mover la ventana o al cambiar de aplicacion. Lo usan el menu **Ver**, los menus contextuales del Visor y el boton **Tamano** del menu lateral |
 | `NewDocumentDialog`, `ask_new_document()` (`new_document.py`) | Dialogo **Nuevo PDF**: tarjetas de plantilla con vista previa real, tamano, orientacion y paginas; devuelve un `core.create.NewDocument` |
+| `InlineEditor` (`viewer/inline_editor.py`) | Campo de texto dibujado en el lienzo del visor, con la letra al tamano real de la pagina: notas, cuadros de texto, texto fijo, reemplazar texto y editar anotaciones se escriben en su lugar. Enter aplica, Mayus+Enter agrega una linea, Esc cancela, clic fuera aplica; se reubica al cambiar el zoom |
+| `ElementTool`, `Selection` (`viewer/element_tool.py`) | Herramienta **Seleccionar**: marca al pasar el cursor y selecciona anotaciones (primero), lineas de texto o imagenes (`DocumentSession.elements`); arrastrar mueve anotaciones, doble clic edita, Supr elimina (`erase_text`, `remove_image`) |
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
@@ -597,6 +602,8 @@ Las **contrasenas nunca se registran**: los valores cuya clave parece una contra
 - **Interfaz que cabe en cualquier idioma.** Los textos en ruso son mas largos: el panel lateral usa pestanas con icono, y con poco ancho Buscar/Editar quedan solo con icono y la barra de anotacion pasa a dos filas en vez de cortarse.
 - **Edicion de contenido con redacciones.** Reemplazar texto y Tapar usan redacciones de MuPDF (`apply_redactions`): lo tapado desaparece del archivo, no queda debajo de un rectangulo. Reemplazar conserva fondos e imagenes y escribe con Helvetica porque la fuente original suele venir incrustada y recortada. Dentro del historial solo se puede usar Helvetica (alfabeto latino); las herramientas de archivo (`tools`), que no usan historial, recurren a Arial para otros alfabetos.
 - **Transiciones con cortina.** Reacomodar toda la ventana (entrar o salir de pantalla completa, cambiar el tamano de la interfaz) le cuesta a Tk 0,3-0,6 s y se pinta por partes. `MainWindow.transition` cubre el monitor con una captura de como se ve, aplica el cambio debajo, espera a que todo quede dibujado (paginas del visor incluidas) y desvanece la captura: un fundido cruzado sin estados intermedios. Al cerrar, la ventana se desvanece, se oculta y el proceso termina sin destruir los widgets uno por uno.
+- **Colores tal como se ven.** `content.visible_colors` toma el fondo y el color del texto de la pagina dibujada. Reemplazar texto usa el color visible si el declarado no contrasta con el fondo (texto claro sobre una franja oscura declarado negro quedaba como un bloque negro), y Tapar cubre con el color del fondo en vez de negro.
+- **Pantalla completa sin "siempre encima".** Tk marca la ventana como `WS_EX_TOPMOST` al entrar o salir de pantalla completa: las demas aplicaciones quedaban detras (Alt+Tab) y las listas desplegables se abrian debajo. `system.clear_topmost` lo quita (con `SetWindowPos` y tipos explicitos: `HWND_NOTOPMOST` es -2) y los desplegables se abren siempre por encima. `ctk_fixes` evita que cada barra de desplazamiento repinte toda la ventana: los cambios de tamano pasaron de ~3 s a ~1 s, y la cortina de la transicion se atenua en otro hilo mientras tanto.
 - **Impresion sin dependencias.** `core/printing.py` llama a `PrintDlgW` con `ctypes` y dibuja con GDI mediante `PIL.ImageWin`, sin pywin32. Imprime el documento en memoria, asi que incluye los cambios sin guardar.
 - **Verificacion de firmas local.** `core/verify.py` usa pyHanko con `allow_fetching=False`: sin OCSP ni CRL, coherente con "sin internet"; un certificado sin raiz de confianza en el equipo aparece como "Identidad no verificada".
 
@@ -633,7 +640,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 255 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 265 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -660,6 +667,7 @@ Hay 255 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 | `tests/test_gui_tools.py` | Seccion Herramientas registrada; numerar, dividir (carpeta y partes), comprimir y marca de agua desde la interfaz (requiere pantalla) |
 | `tests/test_create.py` | Documento nuevo: cada plantilla, tamano y orientacion, rotulos en cirilico legibles, pedidos invalidos |
 | `tests/test_gui_v51.py` | Nuevo PDF (pestana temporal, no va a Recientes, se borra al cerrar, Guardar como en la carpeta de salida), dialogo y validacion, `PopupMenu` (opciones, marcas, submenus, deshabilitadas), menu Ver y tamano de interfaz temporal que no se guarda (requiere pantalla) |
+| `tests/test_gui_viewer_display.py` (v5.2) | Ademas: Seleccionar (activa al pulsar Editar; elimina una linea, quita una imagen, prioriza anotaciones), doble clic edita una linea en su lugar, texto escrito sobre la pagina |
 | `tests/test_gui_viewer_display.py` | Dos paginas, modo nocturno, comparar con otra pestana, imprimir el documento en memoria, panel Firmas, reemplazar texto seleccionado, tapar, texto fijo e imagen desde la barra (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -728,6 +736,7 @@ flowchart LR
 - [x] Seccion **Herramientas**: comprimir, dividir, numerar paginas y marca de agua.
 - [x] Visor: modo nocturno, dos paginas, comparar documentos, imprimir y panel **Firmas** (verificar firmas digitales existentes).
 - [x] v5.1: **Nuevo PDF** en blanco o desde plantilla; menus con el estilo de la app; fundido cruzado al cambiar de modo de lectura; cierre rapido; tamano de interfaz temporal en el menu lateral.
+- [x] v5.2: texto escrito sobre la pagina (sin dialogos); herramienta Seleccionar; Tapar y Reemplazar con los colores visibles; Alt+Tab y desplegables correctos tras pantalla completa; transiciones mas rapidas; control - tamano +; texto negro en modo claro; vista previa y orientacion de la marca de agua.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

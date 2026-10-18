@@ -109,3 +109,17 @@ def test_cyrillic_text_uses_a_unicode_font(tmp_path):
     marked = tools.add_watermark(source, tmp_path / "marca.pdf", "ЧЕРНОВИК")
     assert "Страница 1 из 2" in page_texts(numbered)[0].replace(" ", " ")
     assert "ЧЕРНОВИК" in page_texts(marked)[1]
+
+
+def test_watermark_preview_and_orientation(tmp_path):
+    source = make_pdf(tmp_path / "doc.pdf", 2)
+    plain = tools.watermark_preview(source, "", height=200)
+    marked = tools.watermark_preview(source, "BORRADOR", height=200, opacity=0.5, angle=0)
+    assert plain.size == marked.size and plain.height == 200
+    assert plain.tobytes() != marked.tobytes(), "la marca se ve en la vista previa"
+    vertical = tools.watermark_preview(source, "BORRADOR", height=200, opacity=0.5, angle=90)
+    assert vertical.tobytes() != marked.tobytes(), "girada se ve distinta"
+    output = tools.add_watermark(source, tmp_path / "v.pdf", "BORRADOR", angle=90)
+    with pymupdf.open(output) as document:
+        [block] = [b for b in document[0].get_text("dict")["blocks"] if "BORRADOR" in str(b)]
+        assert abs(block["lines"][0]["dir"][0]) < 0.01, "texto vertical"

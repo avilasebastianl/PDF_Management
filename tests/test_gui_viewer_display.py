@@ -143,9 +143,11 @@ def test_signatures_panel(viewer, gui_app, tmp_path, certificate):
 
 
 def test_replace_selected_text(viewer, monkeypatch):
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *args, **kwargs: "Hola mundo")
     viewer.text_tool.select_all(viewer.view, 0)
     viewer.annotations.select_tool("replace_text")
+    editor = viewer.annotations.editor
+    assert editor.value() == "Pagina 1", "el campo aparece sobre el texto, con el texto actual"
+    editor.commit("Hola mundo")
     assert "Hola mundo" in text_of(viewer) and "Pagina 1" not in text_of(viewer)
     assert viewer.session.history.undo_label == "Reemplazar texto (página 1)"
     assert any(word[4] == "Hola" for word in viewer.session.words(0)), "el texto nuevo se puede seleccionar"
@@ -157,9 +159,9 @@ def test_redact_and_fixed_text(viewer, monkeypatch):
     viewer.annotations.select_tool("redact")
     gesture(viewer, [(60, 40), (320, 90)])
     assert "Pagina 1" not in text_of(viewer), "tapar elimina el texto de verdad"
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *args, **kwargs: "Aprobado")
     viewer.annotations.select_tool("fixed_text")
     gesture(viewer, [(100, 300)])
+    viewer.annotations.editor.commit("Aprobado")
     assert "Aprobado" in text_of(viewer)
     assert viewer.session.history.undo_label == "Agregar texto fijo (página 1)"
 
@@ -174,3 +176,54 @@ def test_insert_image(viewer, monkeypatch, tmp_path):
     assert len(page.get_images()) == 1
     [info] = page.get_image_info()
     assert pymupdf.Rect(98, 198, 302, 352).contains(pymupdf.Rect(info["bbox"]))
+
+
+# * Seleccionar elementos ------------------------------------------------------------
+
+
+def test_select_tool_is_active_when_editing_and_finds_elements(viewer, tmp_path):
+    viewer.toggle_edit_mode()
+    assert viewer.annotations.active == "select", "al pulsar Editar se puede elegir enseguida"
+    gesture(viewer, [(80, 66)])  # sobre "Pagina 1"
+    element = viewer.annotations.element
+    assert element is not None and element.element.kind == "text" and element.element.text == "Pagina 1"
+    assert "Supr" in viewer.selection_label.cget("text")
+    viewer._on_delete_key()
+    assert "Pagina 1" not in text_of(viewer), "Supr elimina la linea seleccionada"
+    assert viewer.session.history.undo_label == "Eliminar texto (página 1)"
+    viewer.undo()
+    viewer.toggle_edit_mode()
+
+
+def test_double_click_edits_a_line_on_the_page(viewer):
+    viewer.annotations.select_tool("select")
+    view = viewer.view
+    view._dispatch("double", Event(view, 0, 80, 66))
+    editor = viewer.annotations.editor
+    assert editor is not None and editor.value() == "Pagina 1"
+    editor.commit("Portada")
+    assert "Portada" in text_of(viewer)
+
+
+def test_select_and_remove_an_image(viewer, monkeypatch, tmp_path):
+    image = tmp_path / "logo.png"
+    Image.new("RGB", (60, 40), "blue").save(image)
+    monkeypatch.setattr(viewer_annotations.filedialog, "askopenfilename", lambda **kwargs: str(image))
+    viewer.annotations.select_tool("image")
+    gesture(viewer, [(200, 300), (320, 380)])
+    assert len(viewer.session.document[0].get_images()) == 1
+    viewer.annotations.select_tool("select")
+    gesture(viewer, [(260, 340)])
+    assert viewer.annotations.element.element.kind == "image"
+    viewer._on_delete_key()
+    assert viewer.session.document[0].get_image_info() == [], "la imagen se quito de la pagina"
+    assert "Pagina 1" in text_of(viewer), "el texto no se toca"
+
+
+def test_select_tool_picks_annotations_first(viewer):
+    session = viewer.session
+    session.add_shape(0, "rect", pymupdf.Rect(60, 50, 200, 90), viewer.annotations.style())
+    viewer.annotations.reset()
+    viewer.annotations.select_tool("select")
+    gesture(viewer, [(61, 70)])
+    assert viewer.annotations.selected is not None and viewer.annotations.element is None

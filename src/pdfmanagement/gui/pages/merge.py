@@ -82,7 +82,7 @@ class _FileRow:
             height=28,
             corner_radius=14,
             fg_color=style.accent_color(),
-            text_color=style.WHITE,
+            text_color=style.ON_ACCENT,
             font=style.fonts().small,
         )
         self.badge.grid(row=0, column=0, rowspan=2, padx=(12, 10), pady=10)

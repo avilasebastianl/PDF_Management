@@ -10,6 +10,7 @@ from pathlib import Path
 from tkinter import filedialog
 
 import customtkinter as ctk
+from PIL import Image
 
 from ... import core
 from ...core import tools
@@ -35,6 +36,10 @@ POSITIONS = {
     tr("Arriba a la derecha"): "arriba-derecha",
     tr("Arriba a la izquierda"): "arriba-izquierda",
 }
+# Orientacion de la marca de agua -> angulo (grados, antihorario como se ve).
+ORIENTATIONS = {tr("Diagonal"): 45, tr("Horizontal"): 0, tr("Vertical"): 90, tr("Diagonal inversa"): -45}
+PREVIEW_HEIGHT = 300
+PREVIEW_DELAY_MS = 250  # se espera a que deje de escribir antes de redibujar
 SUFFIXES = {COMPRESS: tr("comprimido"), NUMBER: tr("numerado"), WATERMARK: tr("marca")}
 
 
@@ -150,16 +155,97 @@ class ToolsPage(BasePage):
 
     def _build_watermark(self) -> Card:
         card = self._card(
-            WATERMARK, tr("Texto grande y semitransparente en diagonal, por ejemplo CONFIDENCIAL o BORRADOR.")
+            WATERMARK,
+            tr(
+                "Texto grande y semitransparente, por ejemplo CONFIDENCIAL o BORRADOR. A la derecha se ve cómo quedará."
+            ),
         )
         self.mark_text = tk.StringVar(value=tr("CONFIDENCIAL"))
+        self.mark_text.trace_add("write", lambda *_: self._schedule_preview())
         self._row(card, 0, tr("Texto"), ctk.CTkEntry(card, textvariable=self.mark_text, width=260, height=34))
-        self.opacity = ctk.CTkSlider(card, from_=5, to=60, number_of_steps=11, width=220)
+        self.opacity = ctk.CTkSlider(
+            card, from_=5, to=60, number_of_steps=11, width=220, command=lambda _v: self._schedule_preview()
+        )
         self.opacity.set(15)
         self._row(card, 1, tr("Opacidad"), self.opacity)
-        self.behind = ctk.CTkSwitch(card, text=tr("Detrás del contenido"), font=style.fonts().body)
-        self._row(card, 2, "", self.behind)
+        self.orientation = ctk.CTkSegmentedButton(
+            card, values=list(ORIENTATIONS), command=lambda _v: self._schedule_preview(), font=style.fonts().small
+        )
+        self.orientation.set(next(iter(ORIENTATIONS)))
+        self._row(card, 2, tr("Orientación"), self.orientation)
+        self.behind = ctk.CTkSwitch(
+            card, text=tr("Detrás del contenido"), font=style.fonts().body, command=self._schedule_preview
+        )
+        self._row(card, 3, "", self.behind)
+        # Vista previa de la primera pagina con la marca.
+        self.preview = ctk.CTkLabel(
+            card,
+            text=tr("Elija un PDF para ver la vista previa"),
+            width=round(PREVIEW_HEIGHT * 0.72),
+            height=PREVIEW_HEIGHT,
+            fg_color=style.CANVAS_BG,
+            corner_radius=8,
+            text_color=style.TEXT_MUTED,
+            font=style.fonts().small,
+            wraplength=180,
+        )
+        self.preview.grid(row=card.row(0), column=2, rowspan=5, sticky="ne", padx=(style.GAP, style.CARD_PAD), pady=8)
+        card.grid_columnconfigure(2, weight=0)
+        self._preview_job: str | None = None
+        self._preview_image: ctk.CTkImage | None = None
         return card
+
+    # * Vista previa de la marca de agua ------------------------------------------
+
+    @property
+    def mark_angle(self) -> float:
+        return ORIENTATIONS.get(self.orientation.get(), 45)
+
+    def _schedule_preview(self) -> None:
+        if not hasattr(self, "preview"):
+            return
+        if self._preview_job is not None:
+            self.after_cancel(self._preview_job)
+        self._preview_job = self.after(PREVIEW_DELAY_MS, self.refresh_preview)
+
+    def refresh_preview(self) -> None:
+        """Dibuja la primera pagina del PDF elegido con la marca como quedara."""
+        self._preview_job = None
+        source = self.resolved(self.source_field.path)
+        if source is None:
+            self._show_preview_message(tr("Elija un PDF para ver la vista previa"))
+            return
+        try:
+            image = tools.watermark_preview(
+                source,
+                self.mark_text.get(),
+                height=round(PREVIEW_HEIGHT * ctk.ScalingTracker.get_widget_scaling(self)),
+                opacity=self.opacity.get() / 100,
+                angle=self.mark_angle,
+                behind=bool(self.behind.get()),
+                password=self.passwords.get(source),
+            )
+        except core.PasswordRequiredError:
+            self._show_preview_message(tr("PDF protegido: la vista previa aparece al ingresar la contraseña."))
+            return
+        except core.PdfManagementError as error:
+            self._show_preview_message(str(error))
+            return
+        bordered = Image.new("RGB", (image.width + 2, image.height + 2), (190, 194, 202))  # borde de la hoja
+        bordered.paste(image, (1, 1))
+        image = bordered
+        scaling = ctk.ScalingTracker.get_widget_scaling(self)
+        size = (round(image.width / scaling), round(image.height / scaling))
+        self._preview_image = ctk.CTkImage(light_image=image, dark_image=image, size=size)
+        self.preview.configure(
+            image=self._preview_image, text="", width=size[0], height=size[1], fg_color="transparent"
+        )
+
+    def _show_preview_message(self, text: str) -> None:
+        self._preview_image = None
+        self.preview.configure(
+            image=None, text=text, width=round(PREVIEW_HEIGHT * 0.72), height=PREVIEW_HEIGHT, fg_color=style.CANVAS_BG
+        )
 
     # * Eventos -----------------------------------------------------------------------
 
@@ -180,6 +266,8 @@ class ToolsPage(BasePage):
             self.output_field.show()
         self.run_button.configure(text=name)
         self._suggest_output()
+        if name == WATERMARK:
+            self._schedule_preview()
         if log:
             self.log("Herramienta: %s", name)
 
@@ -216,6 +304,7 @@ class ToolsPage(BasePage):
         self.source_info.configure(text=f"{pages}  ·  {format_size(info.size_bytes)}", text_color=style.TEXT_MUTED)
         self.log("Origen listo: %s", info.path.name, paginas=info.page_count or "?", protegido=info.encrypted)
         self._suggest_output()
+        self._schedule_preview()
 
     def _suggest_output(self) -> None:
         source = self.resolved(self.source_field.path)
@@ -306,12 +395,20 @@ class ToolsPage(BasePage):
 
     def _watermark(self, source: Path, output: Path) -> None:
         text, opacity, behind = self.mark_text.get(), self.opacity.get() / 100, bool(self.behind.get())
-        self.log("Marca de agua solicitada: %s", source.name, texto=text, opacidad=round(opacity, 2), detras=behind)
+        angle = self.mark_angle
+        self.log(
+            "Marca de agua solicitada: %s",
+            source.name,
+            texto=text,
+            opacidad=round(opacity, 2),
+            angulo=angle,
+            detras=behind,
+        )
         self.run_task(
             tr("Agregando marca de agua a {name}", name=source.name),
             tr("Marca de agua agregada"),
             lambda passwords: tools.add_watermark(
-                source, output, text, opacity=opacity, behind=behind, password=passwords.get(source)
+                source, output, text, opacity=opacity, angle=angle, behind=behind, password=passwords.get(source)
             ),
             button=self.run_button,
         )

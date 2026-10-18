@@ -22,12 +22,14 @@ import pymupdf
 from ... import core
 from ...core.editing import AnnotationInfo, AnnotationStyle
 from ...core.editing.annotations import DEFAULT_FONT_SIZE, FONT_SIZES
+from ...core.editing.content import text_style_at, visible_colors
 from ...i18n import tr
 from .. import style
-from ..dialogs import ask_text
 from ..dropdown import dropdown_menu
 from ..popup_menu import PopupMenu
 from ..viewer.annotation_tools import DragTool, InkTool, MarkupTool, NoteTool, line_rects, tk_color
+from ..viewer.element_tool import ElementTool, Selection
+from ..viewer.inline_editor import InlineEditor
 from ..viewer.page_view import PageHit, Tool
 from ..viewer.panels import AnnotationsPanel
 from ..widgets import ToolTip, icon_button, muted_label
@@ -55,6 +57,12 @@ COLOR_NAMES = {
 WIDTH_NAMES = {"Fino": tr("Fino"), "Medio": tr("Medio"), "Grueso": tr("Grueso")}
 # (clave, icono, descripcion); None = separador
 TOOLS = (
+    (
+        "select",
+        "select",
+        tr("Seleccionar: haga clic en un texto, una imagen o una anotación (doble clic edita, Supr elimina)"),
+    ),
+    None,
     ("highlight", "highlight", tr("Resaltar texto: arrastre sobre el texto")),
     ("underline", "underline", tr("Subrayar texto")),
     ("strikeout", "strikeout", tr("Tachar texto")),
@@ -71,12 +79,14 @@ TOOLS = (
     ("replace_text", "replace_text", tr("Reemplazar texto: seleccione el texto que quiere cambiar")),
     ("fixed_text", "fixed_text", tr("Texto fijo: haga clic donde va (queda escrito en la página)")),
     ("image", "image", tr("Imagen: arrastre el área donde irá (o haga clic)")),
-    ("redact", "redact", tr("Tapar: arrastre sobre lo que quiere eliminar definitivamente")),
+    ("redact", "redact", tr("Tapar: arrastre sobre lo que quiere borrar (se cubre con el color del fondo)")),
 )
 MARKUP = ("highlight", "underline", "strikeout")
 CONTENT_TOOLS = ("replace_text", "fixed_text", "image", "redact")
 DEFAULT_TEXT_BOX = (220, 44)  # cuadro de texto cuando solo se hace clic
 DEFAULT_IMAGE_BOX = (200, 150)  # area de la imagen cuando solo se hace clic
+NOTE_BOX = (220, 40)  # campo para escribir una nota nueva
+NOTE_BACKGROUND = "#FFF6BF"  # el campo de una nota se ve como un papel adhesivo
 IMAGE_PATTERNS = "*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff"
 HIT_TOLERANCE = 3  # puntos alrededor de la anotacion que tambien cuentan como clic
 
@@ -99,6 +109,9 @@ class ViewerAnnotations:
             panel_parent, on_select=self._select_from_panel, on_edit=self.edit_text, on_delete=self._delete_from_panel
         )
         self.view.add_overlay_painter(self._paint_selection)
+        self.editor: InlineEditor | None = None  # campo de texto abierto sobre la pagina
+        self.element: Selection | None = None  # linea de texto o imagen elegida con Seleccionar
+        self.view.on_layout_changed(self._place_editor)
 
     # * Construccion ----------------------------------------------------------
 
@@ -174,6 +187,7 @@ class ViewerAnnotations:
         page = self.page
         if page.session is None:
             return
+        self.close_editor()
         if not page.edit_mode:
             page.set_edit_mode(True)
         if key == self.active:
@@ -190,6 +204,13 @@ class ViewerAnnotations:
                 self._markup(key, lines)
             return
         tools = {
+            "select": lambda: ElementTool(
+                elements_for=lambda index: page.session.elements(index) if page.session is not None else [],
+                hit_annotation=self.hit,
+                on_select=self._select_element,
+                on_move=self.move,
+                on_edit=self._edit_element,
+            ),
             "note": lambda: NoteTool(self._note_done),
             "fixed_text": lambda: NoteTool(self._fixed_text_done),
             "ink": lambda: InkTool(self._ink_done, lambda: self.color, lambda: self.width),
@@ -213,6 +234,7 @@ class ViewerAnnotations:
 
     def cancel_tool(self) -> None:
         """Vuelve a la herramienta Texto."""
+        self._clear_element()
         if self.active is None:
             return
         self.active = None
@@ -270,11 +292,57 @@ class ViewerAnnotations:
             self._run(lambda session, p=page_index, r=rects: session.add_markup(p, kind, r, self.style()), page_index)
 
     def _note_done(self, page_index: int, point: tuple[float, float]) -> None:
-        text = ask_text(self.page, tr("Nueva nota"), tr("Escriba el comentario de la nota:"))
-        if text is None:
-            self.page.log_debug("Nota cancelada")
-            return
-        self._run(lambda session: session.add_note(page_index, point, text, self.style()), page_index)
+        rect = pymupdf.Rect(point[0] + 24, point[1], point[0] + 24 + NOTE_BOX[0], point[1] + NOTE_BOX[1])
+
+        def add(text: str) -> None:
+            self._run(lambda session: session.add_note(page_index, point, text, self.style()), page_index)
+
+        self.open_editor(page_index, rect, add, fontsize=11, background=NOTE_BACKGROUND, what="nota")
+
+    # * Escribir sobre la pagina -------------------------------------------------
+
+    def open_editor(
+        self,
+        page_index: int,
+        rect: pymupdf.Rect,
+        on_commit,
+        *,
+        initial: str = "",
+        fontsize: float = DEFAULT_FONT_SIZE,
+        color: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        background: str = "#FFFFFF",
+        what: str = "texto",
+    ) -> InlineEditor:
+        """Campo de texto sobre la pagina, en lugar de un cuadro de dialogo."""
+        self.close_editor()
+        self.view.reveal(page_index, rect)
+
+        def cancelled() -> None:
+            self.page.log_debug("Escritura cancelada: %s", what)
+
+        self.editor = InlineEditor(
+            self.view,
+            page_index,
+            rect,
+            on_commit=on_commit,
+            on_cancel=cancelled,
+            initial=initial,
+            fontsize=fontsize,
+            color=tk_color(color),
+            background=background,
+        )
+        self.page.log_debug("Escribiendo sobre la pagina: %s", what, pagina=page_index + 1)
+        return self.editor
+
+    def close_editor(self) -> None:
+        """Aplica el campo abierto, si lo hay (p. ej. al elegir otra herramienta)."""
+        editor, self.editor = self.editor, None
+        if editor is not None and not editor.done:
+            editor.commit()
+
+    def _place_editor(self) -> None:
+        if self.editor is not None and not self.editor.done:
+            self.editor.place()
 
     def _ink_done(self, page_index: int, points: list[tuple[float, float]]) -> None:
         self._run(lambda session: session.add_ink(page_index, [points], self.style()), page_index)
@@ -296,26 +364,42 @@ class ViewerAnnotations:
             self.page.selection_label.configure(
                 text=tr("Se reemplaza solo el texto de la primera página seleccionada.")
             )
-        new_text = ask_text(
-            self.page,
-            tr("Reemplazar texto"),
-            tr("Texto nuevo (se escribe con el mismo tamaño y color, en letra Helvetica):"),
-            initial=current,
-        )
-        if new_text is None or new_text == current:
-            self.page.log_debug("Reemplazo de texto cancelado")
-            return
         rects = lines[page_index]
-        self._run(lambda session: session.replace_text(page_index, rects, new_text), page_index)
+        session = self.page.session
+        if session is None:
+            return
+        area = pymupdf.Rect(rects[0])
+        for rect in rects[1:]:
+            area |= rect
+        # El campo se ve como el texto original: mismo tamano, color y fondo de la pagina.
+        page = session.document[page_index]
+        style = text_style_at(page, rects[0])
+        background, ink = visible_colors(page, rects[0])
+
+        def replace(new_text: str) -> None:
+            self._run(lambda session: session.replace_text(page_index, rects, new_text), page_index)
+
+        self.open_editor(
+            page_index,
+            area,
+            replace,
+            initial=current,
+            fontsize=style.fontsize,
+            color=ink or style.color,
+            background=tk_color(background),
+            what="reemplazo de texto",
+        )
 
     def _fixed_text_done(self, page_index: int, point: tuple[float, float]) -> None:
-        text = ask_text(self.page, tr("Texto fijo"), tr("Escriba el texto que quedará escrito en la página:"))
-        if not text:
-            self.page.log_debug("Texto fijo cancelado")
-            return
         # El amarillo (color por defecto, pensado para resaltar) no se lee sobre blanco.
         color = COLORS["Negro"] if self.color == COLORS["Amarillo"] else self.color
-        self._run(lambda session: session.add_fixed_text(page_index, point, text, self.font_size, color), page_index)
+        size = self.font_size
+        rect = pymupdf.Rect(point[0], point[1], point[0] + DEFAULT_TEXT_BOX[0], point[1] + size * 1.3)
+
+        def add(text: str) -> None:
+            self._run(lambda session: session.add_fixed_text(page_index, point, text, size, color), page_index)
+
+        self.open_editor(page_index, rect, add, fontsize=size, color=color, what="texto fijo")
 
     def _image_done(self, page_index: int, rect: pymupdf.Rect) -> None:
         if rect.width < 10 or rect.height < 10:
@@ -348,13 +432,12 @@ class ViewerAnnotations:
                 x0 = min(start[0], bounds.width - DEFAULT_TEXT_BOX[0] - 4)
                 y0 = min(start[1], bounds.height - DEFAULT_TEXT_BOX[1] - 4)
                 rect = pymupdf.Rect(x0, y0, x0 + DEFAULT_TEXT_BOX[0], y0 + DEFAULT_TEXT_BOX[1])
-            text = ask_text(self.page, tr("Texto sobre la página"), tr("Escriba el texto que aparecerá en la página:"))
-            if text is None:
-                self.page.log_debug("Texto cancelado")
-                return
-            self._run(
-                lambda session: session.add_free_text(page_index, rect, text, self.style(), self.font_size), page_index
-            )
+            style_now, size = self.style(), self.font_size
+
+            def add(text: str) -> None:
+                self._run(lambda session: session.add_free_text(page_index, rect, text, style_now, size), page_index)
+
+            self.open_editor(page_index, rect, add, fontsize=size, color=style_now.color, what="cuadro de texto")
             return
         if kind in ("line", "arrow"):
             if abs(end[0] - start[0]) + abs(end[1] - start[1]) < 4:
@@ -421,20 +504,77 @@ class ViewerAnnotations:
         info = info or self.selected
         if info is None or not info.has_text:
             return
-        text = ask_text(
-            self.page,
-            tr("Editar {anotacion}", anotacion=info.label.lower()),
-            tr("Texto de la anotación:"),
+
+        def save(text: str) -> None:
+            self._run(
+                lambda session: session.set_annotation_text(info.page, info.xref, text), info.page, select=info.xref
+            )
+
+        if info.kind == "FreeText":
+            rect, size, background = info.rect, info.font_size or DEFAULT_FONT_SIZE, "#FFFFFF"
+        else:  # nota: el campo aparece junto al icono
+            rect = pymupdf.Rect(
+                info.rect.x1 + 6, info.rect.y0, info.rect.x1 + 6 + NOTE_BOX[0], info.rect.y0 + NOTE_BOX[1]
+            )
+            size, background = 11, NOTE_BACKGROUND
+        self.open_editor(
+            info.page,
+            rect,
+            save,
             initial=info.content,
+            fontsize=size,
+            color=info.color if info.kind == "FreeText" and info.color else (0.0, 0.0, 0.0),
+            background=background,
+            what="editar anotacion",
         )
-        if text is None or text == info.content:
+
+    # * Seleccionar elementos de la pagina --------------------------------------
+
+    def _select_element(self, selection: Selection | None) -> None:
+        if selection is not None and selection.annotation is not None:
+            self._clear_element()
+            self.select(selection.annotation)
             return
-        self._run(lambda session: session.set_annotation_text(info.page, info.xref, text), info.page, select=info.xref)
+        self.select(None)
+        self.element = selection
+        self.view.redraw_overlays()
+        if selection is None or selection.element is None:
+            hint = ""
+        elif selection.element.kind == "text":
+            hint = tr("Línea de texto seleccionada  ·  Doble clic: editar  ·  Supr: eliminar")
+        else:
+            hint = tr("Imagen seleccionada  ·  Supr: eliminar")
+        self.page.selection_label.configure(text=hint)
+
+    def _clear_element(self) -> None:
+        if self.element is not None:
+            self.element = None
+            self.view.redraw_overlays()
+
+    def _edit_element(self, selection: Selection) -> None:
+        if selection.annotation is not None:
+            if selection.annotation.has_text:
+                self.edit_text(selection.annotation)
+            return
+        element = selection.element
+        if element is not None and element.kind == "text":
+            self._replace_text({selection.page: [element.rect]}, element.text)
+
+    def delete_element(self) -> bool:
+        """Supr con una linea de texto o una imagen seleccionada: la elimina."""
+        selection, self.element = self.element, None
+        if selection is None or selection.element is None:
+            return False
+        element, index = selection.element, selection.page
+        if element.kind == "text":
+            rect = element.rect + (-1, -1, 1, 1)
+            return self._run(lambda session: session.erase_text(index, rect), index)
+        return self._run(lambda session: session.remove_image(index, element.rect), index)
 
     def delete_selected(self) -> bool:
         info = self.selected
         if info is None:
-            return False
+            return self.delete_element()
         self.selected = None
         return self._run(lambda session: session.delete_annotation(info.page, info.xref), info.page)
 
@@ -447,6 +587,9 @@ class ViewerAnnotations:
         self.select(info)
 
     def _paint_selection(self, view) -> None:
+        element = self.element
+        if element is not None and element.page in view.visible_pages():
+            view.draw_rect(element.page, element.rect, pad=2, outline=style.themed(style.accent_color()), width=2)
         info = self.selected
         if info is not None and info.page in view.visible_pages():
             view.draw_rect(
@@ -515,12 +658,18 @@ class ViewerAnnotations:
 
     def content_changed(self, pages) -> None:
         """Cambiaron las anotaciones de ``pages`` (aviso de la sesion)."""
+        if self.element is not None and self.element.page in pages:
+            self.element = None
         for page in pages:
             self._cache.pop(page, None)
         self.refresh_panel()
 
     def reset(self) -> None:
         """El documento cambio por completo (abrir, deshacer, editar paginas)."""
+        if self.editor is not None and not self.editor.done:
+            self.editor.cancel()  # el campo apuntaba a una pagina que pudo cambiar
+        self.editor = None
+        self.element = None
         self._cache.clear()
         if self.selected is not None and self.page.session is not None:
             current = (

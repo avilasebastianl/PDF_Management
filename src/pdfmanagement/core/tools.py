@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
+from PIL import Image
 
 from ..i18n import tr
 from .documents import open_document
@@ -290,6 +291,37 @@ def add_watermark(
     finally:
         document.close()
     return output
+
+
+def watermark_preview(
+    input_file: str | Path,
+    text: str,
+    *,
+    height: int = 300,
+    fontsize: float = 60,
+    opacity: float = 0.15,
+    angle: float = 45,
+    color: Color = (0.5, 0.5, 0.5),
+    behind: bool = False,
+    password: str | None = None,
+) -> Image.Image:
+    """
+    Primera pagina con la marca de agua tal como quedara, como imagen de
+    ``height`` pixeles de alto. No guarda nada: la marca se dibuja en memoria.
+    """
+    source = require_file(input_file, PDF_EXTENSIONS)
+    document = _open(source, password)
+    try:
+        if not document.page_count:
+            raise InvalidInputError(tr("El PDF no tiene páginas."))
+        page = document[0]
+        if text.strip():
+            _stamp_watermark(page, text.strip(), fontsize, opacity, angle, color, behind)
+        zoom = height / page.rect.height
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+        return Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+    finally:
+        document.close()
 
 
 def _stamp_watermark(

@@ -80,11 +80,11 @@ class SecurityPage(BasePage):
                     count=core.MIN_PASSWORD_LENGTH,
                 )
             )
-            self.run_button.configure(text=tr("Proteger PDF"), image=icon("lock", 16, style.WHITE))
+            self.run_button.configure(text=tr("Proteger PDF"), image=icon("lock", 16, style.ON_ACCENT))
         else:
             self.confirmation.hide()
             self.hint.configure(text=tr("Ingrese la contraseña actual del documento."))
-            self.run_button.configure(text=tr("Quitar contraseña"), image=icon("unlock", 16, style.WHITE))
+            self.run_button.configure(text=tr("Quitar contraseña"), image=icon("unlock", 16, style.ON_ACCENT))
         source = self.resolved(self.source_field.path)
         if source is not None and self.output_field.auto:
             self._set_default_output(source)

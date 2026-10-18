@@ -78,7 +78,7 @@ def primary_button(parent, text: str, command: Callable, icon_name: str | None =
         parent,
         text=text,
         command=command,
-        image=icon(icon_name, 16, style.WHITE) if icon_name else None,
+        image=icon(icon_name, 16, style.ON_ACCENT) if icon_name else None,
         height=38,
         font=style.fonts().body_bold,
         corner_radius=8,

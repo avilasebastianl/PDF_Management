@@ -73,7 +73,7 @@ def test_redaction_removes_text_for_good(session, tmp_path):
         visible = document[0]
         pixmap = visible.get_pixmap()
         x, y = int((hit.x0 + hit.x1) / 2), int((hit.y0 + hit.y1) / 2)
-        assert max(pixmap.pixel(x, y)) < 40, "la zona queda tapada en negro"
+        assert min(pixmap.pixel(x, y)) > 240, "queda del color del fondo (blanco), sin bloque negro"
 
 
 def test_replace_text_in_a_pdf_with_its_own_font(tmp_path):
@@ -100,3 +100,46 @@ def test_text_helvetica_cannot_write_is_rejected(session):
         session.add_fixed_text(0, (72, 200), "Привет", 12, (0, 0, 0))
     assert not session.history.can_undo, "no se cambio nada"
     assert content.helvetica_can_write("Página año €")
+
+
+def _dark_band_pdf(tmp_path, text_color):
+    """Franja oscura con texto encima (como la barra lateral de un CV)."""
+    path = tmp_path / "franja.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.draw_rect((40, 60, 300, 120), color=None, fill=(0.08, 0.12, 0.2))
+    page.insert_text((60, 95), "CONTACTO", fontsize=14, color=text_color)
+    document.save(path)
+    document.close()
+    return path
+
+
+def test_replaced_text_stays_readable_on_a_dark_band(tmp_path):
+    session = DocumentSession.open(_dark_band_pdf(tmp_path, (0.9, 0.9, 0.9)))
+    page = session.document[0]
+    [old] = page_search(page, "CONTACTO")
+    background, ink = content.visible_colors(page, old)
+    assert content.contrast(background, (0.08, 0.12, 0.2)) < 1.2 and ink is not None and sum(ink) > 2
+    session.replace_text(0, [old], "NUEVO")
+    [span] = [s for b in session.document[0].get_text("dict")["blocks"] for line in b["lines"] for s in line["spans"]]
+    assert span["color"] != 0, "texto claro sobre fondo oscuro: no negro"
+
+
+def test_declared_black_text_on_dark_band_uses_the_visible_color(tmp_path):
+    path = _dark_band_pdf(tmp_path, (0.0, 0.0, 0.0))
+    session = DocumentSession.open(path)
+    [old] = page_search(session.document[0], "CONTACTO")
+    session.replace_text(0, [old], "NUEVO")
+    [span] = [s for b in session.document[0].get_text("dict")["blocks"] for line in b["lines"] for s in line["spans"]]
+    assert span["color"] == 0xFFFFFF, "negro sobre la franja no se ve: se escribe en blanco"
+
+
+def test_redact_covers_with_the_background_color(tmp_path):
+    session = DocumentSession.open(_dark_band_pdf(tmp_path, (0.9, 0.9, 0.9)))
+    [old] = page_search(session.document[0], "CONTACTO")
+    session.redact(0, old + (-2, -2, 2, 2))
+    page = session.document[0]
+    assert "CONTACTO" not in page.get_text()
+    pixmap = page.get_pixmap(dpi=72)
+    red, green, blue = pixmap.pixel(int(old.x0 + 10), int((old.y0 + old.y1) / 2))
+    assert blue > red and max(red, green, blue) < 90, "queda del color de la franja, no un bloque negro"

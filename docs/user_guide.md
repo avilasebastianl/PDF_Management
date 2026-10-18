@@ -2,7 +2,7 @@
 
 Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+8**. Pulse **F1** para abrir esta guía.
 
-El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección. Debajo del botón de modo claro u oscuro, **Tamaño** cambia el tamaño de la interfaz solo por ahora: al reiniciar vuelve el de **Ajustes**, que es donde se cambia el predeterminado.
+El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección. Debajo del botón de modo claro u oscuro, los botones **−** y **+** a los lados de **Tamaño** achican o agrandan la interfaz (clic en el porcentaje para elegirlo de una lista). Es solo por ahora: al reiniciar vuelve el tamaño de **Ajustes**, que es donde se cambia el predeterminado.
 
 En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
 
@@ -29,7 +29,7 @@ Lea cualquier PDF sin salir de la aplicación. Es la primera sección y la que s
   El modo nocturno y la vista de dos páginas se recuerdan para la próxima vez.
 - **Leer en toda la ventana**: el botón de la ventana (o **Ctrl+Mayús+F**) oculta el menú, las barras y el panel lateral y deja el documento ocupando toda la ventana, con las pestañas a mano. **Esc** vuelve.
 - **Pantalla completa**: el botón de las flechas (o **F11**) deja solo el visor en toda la pantalla; **Esc** o **F11** vuelven.
-  Al entrar o salir de estos modos la ventana cambia con un fundido, sin verse cómo se reacomoda.
+  Al entrar o salir de estos modos la ventana cambia con un fundido, sin verse cómo se reacomoda. En pantalla completa puede cambiar de programa con **Alt+Tab** como siempre.
 - **Panel lateral** (botón de lista para mostrarlo u ocultarlo). Sus pestañas son iconos: pase el cursor por cada uno para ver su nombre; el de la pestaña activa se muestra debajo.
   - **Páginas**: miniaturas; haga clic en una para ir a esa página.
   - **Marcadores**: el índice del documento, si lo tiene.
@@ -68,9 +68,13 @@ Si el documento tiene **firmas digitales**, se le avisa antes del primer cambio:
 
 La **barra de anotación** aparece debajo de la navegación del visor al pulsar **Editar**:
 
+- **Seleccionar** (la flecha, primera de la barra, activa al pulsar **Editar**): al pasar el cursor se marca lo que hay debajo y un clic lo selecciona: una **anotación**, una **línea de texto** o una **imagen** de la página. Las anotaciones se mueven arrastrándolas; el **doble clic** edita el texto (de una línea o de una nota) y **Supr** elimina lo seleccionado (una línea se borra cubriéndola con el color del fondo; una imagen se quita sin tocar el texto).
+
 - **Resaltar, subrayar y tachar**: elija la herramienta y arrastre sobre el texto. Si ya tiene texto seleccionado con la herramienta **Texto**, un clic en el botón lo marca al instante.
-- **Nota**: haga clic donde quiere el icono y escriba el comentario.
+- **Nota**: haga clic donde quiere el icono y escriba el comentario en el campo que aparece junto a él.
 - **Texto**: arrastre para dibujar el cuadro (o haga clic) y escriba el texto que aparecerá en la página.
+
+El texto se escribe **directamente sobre la página**, en un campo que aparece en su lugar y con su tamaño, sin cuadros de diálogo: **Enter** lo aplica, **Mayús+Enter** agrega una línea, **Esc** cancela y hacer clic fuera también lo aplica.
 - **Rectángulo, elipse, línea y flecha**: arrastre de una esquina a otra.
 - **Dibujo a mano**: arrastre para trazar.
 - **Color** (amarillo, verde, azul, rojo o negro), **grosor** (fino, medio o grueso) y **Letra** (tamaño del texto) a la derecha de la barra.
@@ -78,7 +82,7 @@ La **barra de anotación** aparece debajo de la navegación del visor al pulsar 
 
 Pulse **Esc** o vuelva a pulsar la herramienta para terminar.
 
-Para **editar** una anotación use la herramienta **Texto**: haga clic sobre ella para seleccionarla (aparece un contorno discontinuo). Después puede arrastrarla para moverla, elegir otro color, hacer doble clic en una nota o un texto para cambiarlo, o pulsar **Supr** para eliminarla. El clic derecho sobre una anotación ofrece las mismas opciones.
+Para **editar** una anotación use **Seleccionar** (o la herramienta **Texto**): haga clic sobre ella para seleccionarla (aparece un contorno discontinuo). Después puede arrastrarla para moverla, elegir otro color, hacer doble clic en una nota o un texto para cambiarlo, o pulsar **Supr** para eliminarla. El clic derecho sobre una anotación ofrece las mismas opciones.
 
 El panel **Notas** lista todas las anotaciones del documento: haga clic en una para ir a ella; los botones permiten editar su texto o eliminarla.
 
@@ -88,10 +92,10 @@ Como el resto de cambios, las anotaciones se deshacen con **Ctrl+Z** y se guarda
 
 Después de las herramientas de anotación, la barra tiene cuatro herramientas que cambian el **contenido mismo de la página** (no son anotaciones: quedan escritas en ella):
 
-- **Reemplazar texto**: arrastre sobre el texto que quiere cambiar (o selecciónelo antes con **Texto** y pulse el botón) y escriba el texto nuevo. Se escribe en el mismo lugar, con el mismo tamaño, color y dirección, pero con letra Helvetica. Si la selección abarca varias páginas, solo se reemplaza la primera.
+- **Reemplazar texto**: arrastre sobre el texto que quiere cambiar (o selecciónelo antes con **Texto** y pulse el botón; o haga doble clic en la línea con **Seleccionar**). Aparece un campo sobre el texto, con el texto actual, para corregirlo ahí mismo. Se escribe en el mismo lugar, con el mismo tamaño, color y dirección, pero con letra Helvetica. Si el PDF declara un color que no es el que se ve (por ejemplo, texto claro sobre una franja oscura), se usa el color que se ve, para que siga leyéndose. Si la selección abarca varias páginas, solo se reemplaza la primera.
 - **Texto fijo**: haga clic donde va y escriba el texto. Usa el color y el tamaño de **Letra** elegidos en la barra (con el amarillo, que no se lee sobre blanco, se escribe en negro).
 - **Imagen**: arrastre el área donde irá (o haga clic para un tamaño estándar) y elija una imagen (PNG, JPG, BMP, GIF o TIFF). Se ajusta al área conservando su proporción y queda derecha aunque la página esté girada.
-- **Tapar**: arrastre sobre lo que quiere eliminar. La zona se pinta de negro y lo que hay debajo (texto, imágenes y dibujos) **se elimina de verdad**, no solo queda cubierto: ya no se puede copiar, buscar ni recuperar desde el archivo guardado.
+- **Tapar**: arrastre sobre lo que quiere eliminar. La zona se cubre con el **color del fondo que la rodea** (queda como borrada, sin un bloque negro) y lo que hay debajo (texto, imágenes y dibujos) **se elimina de verdad**, no solo queda cubierto: ya no se puede copiar, buscar ni recuperar desde el archivo guardado.
 
 Todo se deshace con **Ctrl+Z** y se guarda con **Guardar como**.
 
@@ -243,7 +247,7 @@ Elija el **PDF** de origen y, arriba, la herramienta: **Comprimir**, **Dividir**
   - **Posición**: arriba o abajo, a la izquierda, al centro o a la derecha (6 posiciones).
   - **Empezar en**: el primer número.
   - **Páginas**: deje el campo vacío para numerar todas, o escriba una selección como en Extraer (por ejemplo `3-`). Solo cuentan las páginas numeradas.
-- **Marca de agua**: escribe un texto grande y semitransparente en diagonal en el centro de cada página, por ejemplo CONFIDENCIAL o BORRADOR. Elija el **Texto**, la **Opacidad** y si va **Detrás del contenido** (si no, va delante). Los textos largos se reducen para que quepan en la página.
+- **Marca de agua**: escribe un texto grande y semitransparente en el centro de cada página, por ejemplo CONFIDENCIAL o BORRADOR. Elija el **Texto**, la **Opacidad**, la **Orientación** (**Diagonal**, **Horizontal**, **Vertical** o **Diagonal inversa**) y si va **Detrás del contenido** (si no, va delante). A la derecha, una **vista previa** de la primera página muestra cómo quedará y se actualiza al cambiar cualquier opción. Los textos largos se reducen para que quepan en la página.
 
 Los textos de **Numerar páginas** y **Marca de agua** se escriben con Helvetica; si contienen otros alfabetos (por ejemplo cirílico), se usa la letra Arial de Windows.
 

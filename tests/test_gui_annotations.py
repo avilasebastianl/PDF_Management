@@ -8,8 +8,6 @@ los haria el raton. Requiere una pantalla (se omite si Tk no puede crear ventana
 import pytest
 from conftest import make_pdf, pump
 
-from pdfmanagement.gui.pages import viewer_annotations
-
 
 class Event:
     def __init__(self, view, page, x, y):
@@ -80,15 +78,23 @@ def test_drag_shapes_lines_and_ink(viewer):
     assert kinds(viewer) == ["Square", "Line"]
 
 
-def test_note_and_free_text_ask_for_text(viewer, monkeypatch):
-    answers = iter(["Revisar", None, "APROBADO"])
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: next(answers))
+def write(viewer, text):
+    """Escribe en el campo abierto sobre la pagina y lo aplica (como pulsar Enter)."""
+    editor = viewer.annotations.editor
+    assert editor is not None and not editor.done, "debe haber un campo de texto sobre la pagina"
+    editor.commit(text)
+
+
+def test_note_and_free_text_are_written_on_the_page(viewer):
     annotations = viewer.annotations
     annotations.select_tool("note")
     gesture(viewer, [(400, 100)])
-    gesture(viewer, [(400, 200)])  # cancelada: no agrega nada
+    write(viewer, "Revisar")
+    gesture(viewer, [(400, 200)])
+    annotations.editor.cancel()  # Esc: no agrega nada
     annotations.select_tool("free_text")
     gesture(viewer, [(100, 600)])  # clic: cuadro de tamano estandar
+    write(viewer, "APROBADO")
     infos = viewer.session.annotations(0)
     assert [(info.kind, info.content) for info in infos] == [("Text", "Revisar"), ("FreeText", "APROBADO")]
     assert infos[1].rect.width == pytest.approx(220, abs=2)
@@ -113,10 +119,11 @@ def test_select_move_edit_and_delete(viewer, monkeypatch):
     viewer._on_delete_key()  # Supr: elimina la anotacion, no la pagina
     assert kinds(viewer) == [] and session.page_count == 3
 
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "nuevo texto")
     session.add_note(0, (300, 300), "viejo", annotations.style())
     annotations.reset()
     gesture(viewer, [(305, 305)], double=True)
+    assert annotations.editor.value() == "viejo", "el campo trae el texto actual"
+    write(viewer, "nuevo texto")
     assert session.annotations(0)[0].content == "nuevo texto"
 
 
@@ -143,8 +150,8 @@ def test_annotations_panel_and_context_menu(viewer, gui_app, monkeypatch):
     panel._selected(1)
     assert viewer.annotations.selected.content == "en la segunda" and viewer.view.current_page == 1
     assert panel.edit_button.cget("state") == "normal"
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "editada")
     viewer.annotations.edit_text()
+    write(viewer, "editada")
     assert session.annotations(1)[0].content == "editada"
     assert panel.list.listbox.get(1) == "p. 2  ·  Nota: editada"
     menu = viewer._page_menu(from_view=True, annotation=viewer.annotations.selected)
@@ -203,24 +210,24 @@ def _tooltips(widget):
 
 def test_adding_text_keeps_the_scroll_position(viewer, gui_app, monkeypatch):
     """Antes, al agregar un texto el visor saltaba al principio de la pagina."""
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "Comentario")
     viewer.view.go_to(1)
     viewer.view._scroll_units(12)  # a mitad de la pagina 2
     pump(gui_app, timeout=0.3)
     before = viewer.view.canvas.yview()[0]
     viewer.annotations.select_tool("free_text")
     gesture(viewer, [(100, 300)], page=1)
+    write(viewer, "Comentario")
     pump(gui_app, timeout=0.3)
     assert [info.content for info in viewer.session.annotations(1)] == ["Comentario"]
     assert viewer.view.canvas.yview()[0] == pytest.approx(before, abs=1e-6)
 
 
 def test_font_size_menu_changes_selected_text(viewer, monkeypatch):
-    monkeypatch.setattr(viewer_annotations, "ask_text", lambda *a, **k: "Titulo")
     annotations = viewer.annotations
     annotations._set_font_size("18")  # tamano para el texto nuevo
     annotations.select_tool("free_text")
     gesture(viewer, [(100, 200)])
+    write(viewer, "Titulo")
     info = viewer.session.annotations(0)[0]
     assert info.font_size == 18
     annotations.cancel_tool()

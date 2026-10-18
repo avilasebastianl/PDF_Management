@@ -91,6 +91,7 @@ GLYPHS = {
     "outline": "\ue8a4",
     "signature": "\uee56",
     "view_options": "\ue890",
+    "select": "\ue8b0",
     "blank": " ",  # sin dibujo: sangria de las opciones sin marca en los menus
 }
 

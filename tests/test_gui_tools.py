@@ -69,3 +69,15 @@ def test_compress_and_watermark(gui_app, tmp_path):
     run(gui_app, page)
     with pymupdf.open(page.output_field.path) as document:
         assert "BORRADOR" in document[0].get_text()
+
+
+def test_watermark_preview_in_the_interface(gui_app, tmp_path):
+    page, _source = open_tools(gui_app, tmp_path)
+    page.tool.set(tools_page.WATERMARK)
+    page._show_tool(tools_page.WATERMARK)
+    page.refresh_preview()
+    assert page._preview_image is not None, "con un PDF elegido se ve la primera pagina con la marca"
+    page.orientation.set("Vertical")
+    assert page.mark_angle == 90
+    page.refresh_preview()
+    assert page._preview_image is not None

@@ -80,7 +80,7 @@ class FindBar(ctk.CTkFrame):
         variable.set(not variable.get())
         on = variable.get()
         button.configure(
-            fg_color=style.accent_color() if on else "transparent", text_color=style.WHITE if on else style.TEXT
+            fg_color=style.accent_color() if on else "transparent", text_color=style.ON_ACCENT if on else style.TEXT
         )
         if self.search.query.get().strip():
             self.search.start()
