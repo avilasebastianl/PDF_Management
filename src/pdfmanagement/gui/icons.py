@@ -163,3 +163,24 @@ def icon(name: str, size: int = 18, color: tuple[str, str] = style.TEXT) -> ctk.
         dark_image=_render(glyph, size, dark, mirrored),
         size=(size, size),
     )
+
+
+@cache
+def brand_image(path: Path, size: int, monochrome: bool = False) -> ctk.CTkImage | None:
+    """
+    Imagen de ``assets/icons`` (logo de la app, GitHub, LinkedIn...) como
+    ``CTkImage``. Las monocromas (trazo negro) se aclaran en modo oscuro para
+    que se vean sobre el fondo. ``None`` si el archivo no existe.
+    """
+    try:
+        with Image.open(path) as source:
+            image = source.convert("RGBA")
+    except OSError:
+        logger.warning("No se pudo cargar el icono %s", path)
+        return None
+    dark = image
+    if monochrome:
+        alpha = image.getchannel("A")
+        dark = Image.new("RGBA", image.size, (235, 235, 235, 255))
+        dark.putalpha(alpha)
+    return ctk.CTkImage(light_image=image, dark_image=dark, size=(size, size))

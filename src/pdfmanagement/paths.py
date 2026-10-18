@@ -26,7 +26,11 @@ ICONS_DIR = ASSETS_DIR / "icons"
 THEMES_DIR = ASSETS_DIR / "themes"
 DOCS_DIR = RESOURCE_DIR / "docs"
 USER_GUIDE_FILE = DOCS_DIR / "user_guide.md"
-APP_ICON = ICONS_DIR / "app.ico"
+APP_ICON = ICONS_DIR / "app.ico"  # generado desde app.png (varios tamanos)
+APP_LOGO = ICONS_DIR / "app.png"
+GITHUB_ICON = ICONS_DIR / "github.ico"
+LINKEDIN_ICON = ICONS_DIR / "linkedin.ico"
+CODE_ICON = ICONS_DIR / "code.ico"
 
 # * Datos del usuario
 CONFIG_DIR = DATA_DIR / "config"

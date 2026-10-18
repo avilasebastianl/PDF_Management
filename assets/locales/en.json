@@ -503,7 +503,6 @@
   "PDF protegido": "PDF protected",
   "PDF protegido: la vista previa aparece al ingresar la contraseña.": "Protected PDF: the preview appears once you enter the password.",
   "PDF unido": "Merged PDF",
-  "PDF_unido": "Merged_PDF",
   "Palabras clave": "Keywords",
   "Pantalla completa (F11)": "Full screen (F11)",
   "Para enviar a {destino} la versión editada hay que guardarla primero.": "To send the edited version to {destino}, it must be saved first.",
@@ -743,6 +742,7 @@
   "páginas": "pages",
   "sin_clave": "no_password",
   "tamaño en Letra": "size in Font",
+  "unido": "merged",
   "{accion}: {cambio} ({teclas})": "{accion}: {cambio} ({teclas})",
   "{actual} de {total}": "{actual} of {total}",
   "{count} anotación · clic para ir": [

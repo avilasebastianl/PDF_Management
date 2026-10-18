@@ -115,3 +115,20 @@ def test_viewer_merge_button_sends_open_documents(gui_app, tmp_path):
         gui_app.pages["Unir"]._clear()
     assert viewer._exported_folder is not None
     viewer.forget_exported_copies()
+
+
+def test_output_name_follows_the_list(gui_app, tmp_path):
+    """Sin archivos el campo queda vacio (antes mostraba un 'PDF_unido.pdf' que parecia automatico)."""
+    gui_app.show_page("Unir")
+    page = gui_app.pages["Unir"]
+    page.output_field.set("", auto=True, notify=False)  # sin una ruta elegida antes por otra prueba
+    page._clear()
+    pump(gui_app, timeout=0.1)
+    assert page.output_field.get() == ""
+    page._add_files([make_pdf(tmp_path / "contrato.pdf", 1), make_pdf(tmp_path / "anexo.pdf", 1)])
+    pump(gui_app, lambda: all(entry.info is not None for entry in page.entries), timeout=5)
+    assert page.output_field.path.name == "contrato_unido.pdf" and page.output_field.auto
+    page.output_field.set(tmp_path / "elegido.pdf")  # elegido por el usuario: se respeta
+    page._move(1, -1)
+    assert page.output_field.path.name == "elegido.pdf"
+    page._clear()

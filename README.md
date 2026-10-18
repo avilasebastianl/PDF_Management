@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.6.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.7.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -650,7 +650,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 294 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 295 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -757,6 +757,7 @@ flowchart LR
 - [x] v5.4.1: Unir ya no firma por su cuenta: queda la marca de agua opcional y, para firmar, **Unir y firmar...** lleva el PDF unido a Firmar (`core/finish.py` conserva la firma para usos futuros).
 - [x] v5.5: seccion **Organizar** con cuadricula de paginas (arrastrar para reordenar, girar, eliminar, insertar); tambien desde Enviar a... del Visor.
 - [x] v5.6: Organizar con **Descartar cambios** y **Cerrar**; boton **Cerrar** junto a Examinar en las secciones con archivo de origen (`FileField(on_clear=...)` y `BasePage.close_source`).
+- [x] v5.7: Logo propio (`assets/icons/app.png`) como icono de la ventana, la barra de tareas y la tarjeta "Acerca de"; iconos de GitHub, LinkedIn y Codigo fuente en "Desarrollado por"; en Unir, la ruta de "Guardar como" queda vacia hasta agregar archivos y luego propone `<primer archivo>_unido.pdf`.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

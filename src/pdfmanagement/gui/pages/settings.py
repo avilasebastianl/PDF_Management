@@ -17,7 +17,7 @@ from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_them
 from ...i18n import LANGUAGES, tr
 from .. import style
 from ..dropdown import dropdown_menu
-from ..icons import icon
+from ..icons import brand_image, icon
 from ..system import open_path
 from ..widgets import Card, ToolTip, field_label, hide, muted_label, primary_button, secondary_button, show
 from .base import BasePage
@@ -220,9 +220,8 @@ class SettingsPage(BasePage):
         # Cabecera con el color de acento: logo, nombre y eslogan.
         banner = ctk.CTkFrame(about, corner_radius=style.CORNER - 2, fg_color=accent)
         banner.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
-        ctk.CTkLabel(banner, text="", image=icon("pdf", 48, style.ON_ACCENT)).grid(
-            row=0, column=0, rowspan=3, padx=(18, 12), pady=14
-        )
+        logo = brand_image(paths.APP_LOGO, 64) or icon("pdf", 48, style.ON_ACCENT)
+        ctk.CTkLabel(banner, text="", image=logo).grid(row=0, column=0, rowspan=3, padx=(18, 12), pady=14)
         ctk.CTkLabel(banner, text=__app_name__, font=style.fonts().title, text_color=style.ON_ACCENT, anchor="w").grid(
             row=0, column=1, sticky="w", pady=(14, 0)
         )
@@ -291,12 +290,16 @@ class SettingsPage(BasePage):
         )
         links = ctk.CTkFrame(author, fg_color="transparent")
         links.pack(anchor="w", padx=14, pady=(10, 14))
-        for text, url, make in (
-            ("GitHub", GITHUB_URL, primary_button),
-            ("LinkedIn", LINKEDIN_URL, primary_button),
-            (tr("Código fuente"), REPOSITORY_URL, secondary_button),
+        # Cada enlace con su icono de assets/icons (los monocromos se aclaran en modo oscuro).
+        for text, url, image_path, monochrome in (
+            ("GitHub", GITHUB_URL, paths.GITHUB_ICON, True),
+            ("LinkedIn", LINKEDIN_URL, paths.LINKEDIN_ICON, False),
+            (tr("Código fuente"), REPOSITORY_URL, paths.CODE_ICON, True),
         ):
-            button = make(links, text, lambda link=url: self._open_link(link), "open", width=108)
+            button = secondary_button(links, text, lambda link=url: self._open_link(link), width=112)
+            image = brand_image(image_path, 18, monochrome)
+            if image is not None:
+                button.configure(image=image, compound="left")
             button.pack(side="left", padx=(0, 8))
             ToolTip(button, url.removeprefix("https://"))
 

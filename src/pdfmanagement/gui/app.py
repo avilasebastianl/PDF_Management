@@ -16,7 +16,7 @@ from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
-from PIL import ImageGrab, ImageTk
+from PIL import Image, ImageGrab, ImageTk
 from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
@@ -93,6 +93,7 @@ class MainWindow:
         # descartan para poder crear otra ventana en el mismo proceso.
         ctk_fixes.apply()
         icons.icon.cache_clear()
+        icons.brand_image.cache_clear()
         style.fonts.cache_clear()
         ctk.set_appearance_mode(settings.appearance_mode)
         ctk.set_default_color_theme(str(paths.THEMES_DIR / f"{settings.color_theme}.json"))
@@ -101,7 +102,12 @@ class MainWindow:
         self.root = DnDCTk(fg_color=style.CONTENT_BG)
         self.root.title(__app_name__)
         if paths.APP_ICON.exists():
-            self.root.iconbitmap(str(paths.APP_ICON))
+            self.root.iconbitmap(default=str(paths.APP_ICON))  # default: tambien los dialogos
+        self._app_photo: ImageTk.PhotoImage | None = None
+        if paths.APP_LOGO.exists():
+            # iconphoto con el PNG: mas nitido en la barra de tareas y en Alt+Tab.
+            self._app_photo = ImageTk.PhotoImage(Image.open(paths.APP_LOGO).resize((64, 64)), master=self.root)
+            self.root.iconphoto(True, self._app_photo)
         self.root.geometry(self._initial_geometry())
         self.root.minsize(980, 640)
         if settings.window_maximized:

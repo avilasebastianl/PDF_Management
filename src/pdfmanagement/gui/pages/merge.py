@@ -552,6 +552,7 @@ class MergePage(BasePage):
 
     def _refresh_summary(self) -> None:
         self._schedule_preview()  # la primera o la ultima pagina pudieron cambiar
+        self._reset_output()  # el nombre propuesto sigue al primer archivo de la lista
         if not self.entries:
             self.summary.configure(text="")
             return
@@ -571,7 +572,17 @@ class MergePage(BasePage):
     # * Accion ----------------------------------------------------------------
 
     def _reset_output(self) -> None:
-        self.output_field.set(core.unique_path(self.app.settings.output_path / (tr("PDF_unido") + ".pdf")), auto=True)
+        """
+        Nombre de salida propuesto: vacio sin archivos (antes mostraba un
+        "PDF_unido.pdf" que parecia escrito solo) y, con archivos, el del primero
+        con "_unido" en la carpeta de salida. Si el usuario eligio uno, se respeta.
+        """
+        if not self.output_field.auto and self.output_field.get():
+            return
+        if not self.entries:
+            self.output_field.set("", auto=True, notify=False)
+            return
+        self.output_field.set(self.default_output(self.entries[0].path, tr("unido")), auto=True, notify=False)
 
     def _merged(self, result: Path, then_sign: bool) -> None:
         if self.output_field.auto:

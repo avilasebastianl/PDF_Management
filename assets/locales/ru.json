@@ -512,7 +512,6 @@
   "PDF protegido": "PDF защищён",
   "PDF protegido: la vista previa aparece al ingresar la contraseña.": "Защищённый PDF: предпросмотр появится после ввода пароля.",
   "PDF unido": "PDF объединён",
-  "PDF_unido": "Объединённый_PDF",
   "Palabras clave": "Ключевые слова",
   "Pantalla completa (F11)": "Полноэкранный режим (F11)",
   "Para enviar a {destino} la versión editada hay que guardarla primero.": "Чтобы отправить изменённую версию в {destino}, её нужно сначала сохранить.",
@@ -761,6 +760,7 @@
   "páginas": "страниц",
   "sin_clave": "без_пароля",
   "tamaño en Letra": "размер — в поле «Шрифт»",
+  "unido": "объединённый",
   "{accion}: {cambio} ({teclas})": "{accion}: {cambio} ({teclas})",
   "{actual} de {total}": "{actual} из {total}",
   "{count} anotación · clic para ir": [
