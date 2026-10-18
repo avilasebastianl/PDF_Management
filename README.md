@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.3.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.3.1-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -646,7 +646,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 277 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 278 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -746,6 +746,7 @@ flowchart LR
 - [x] v5.1: **Nuevo PDF** en blanco o desde plantilla; menus con el estilo de la app; fundido cruzado al cambiar de modo de lectura; cierre rapido.
 - [x] v5.2: texto escrito sobre la pagina (sin dialogos); herramienta Seleccionar; Tapar y Reemplazar con los colores visibles; Alt+Tab y desplegables correctos tras pantalla completa; transiciones mas rapidas; texto negro en modo claro; vista previa y orientacion de la marca de agua.
 - [x] v5.3: cuadros de texto sin fondo negro al editarlos; cambiar su tamano desde las esquinas y su color de fondo; submenus que ya no quedan abiertos; rueda y panel tactil en todos los visores; vista previa de la marca de agua mas grande; Unir con marca de agua, firma y vista previa. Se quito el tamano de interfaz del menu lateral (2,4 s de espera: CustomTkinter redibuja todos los controles); se cambia en Ajustes.
+- [x] v5.3.1: vista previa sin el error "image pyimageN does not exist" (la imagen se soltaba antes que el control); las pruebas fallan ante cualquier error inesperado de la interfaz en vez de abrir un aviso.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

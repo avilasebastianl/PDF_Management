@@ -16,7 +16,7 @@ from ..i18n import tr
 from . import style
 from .dialogs import _prepare_toplevel
 from .dropdown import dropdown_menu
-from .widgets import field_label, muted_label, primary_button, secondary_button
+from .widgets import field_label, muted_label, primary_button, secondary_button, set_label_image
 
 PREVIEW_HEIGHT = 128
 ORIENTATIONS = (tr("Vertical"), tr("Horizontal"))
@@ -120,8 +120,8 @@ class NewDocumentDialog(ctk.CTkToplevel):
     def _refresh_previews(self) -> None:
         for key in TEMPLATES:
             preview = self._render(key)
+            set_label_image(self._images[key], preview)  # suelta la anterior antes de liberarla
             self._previews[key] = preview
-            self._images[key].configure(image=preview)
 
     def _render(self, key: str) -> ctk.CTkImage:
         spec = NewDocument(key, self._size_key(), self._landscape(), 1)

@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
 from PIL import Image, ImageDraw
 
+from pdfmanagement import core
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
@@ -156,6 +158,22 @@ def gui_app(tmp_path_factory):
             if attempt == 2:
                 raise
     main.settings.save = lambda *args, **kwargs: None  # no escribe settings.ini (el registro de cambios si corre)
+    # Los errores inesperados no abren una ventana (bloquearia las pruebas y aparece en
+    # pantalla): se guardan con su traza y la prueba en curso falla (_no_unexpected_errors).
+    main.unexpected_errors = []
+    show_error = main.show_error
+
+    def record_error(error: BaseException) -> None:
+        if isinstance(error, core.PdfManagementError):
+            return show_error(error)
+        import traceback
+
+        main.unexpected_errors.append("".join(traceback.format_exception(error)))
+        return None
+
+    main.show_error = record_error
+    main._on_callback_exception = lambda exc_type, exc, tb: record_error(exc)
+    main.root.report_callback_exception = main._on_callback_exception
     main.animations = False  # fundidos instantaneos: las pruebas no esperan
     main.show_page("Unir")
     pump(main, timeout=0.5)  # la ventana debe estar visible, como cuando el usuario interactua
@@ -173,6 +191,17 @@ def pump(window, done=None, timeout: float = 0.3) -> None:
         window.root.update()
         time.sleep(0.01)
     window.root.update()
+
+
+@pytest.fixture(autouse=True)
+def _no_unexpected_errors(request):
+    """Una prueba de interfaz falla si aparece un error inesperado (antes: una ventana de aviso)."""
+    yield
+    if "gui_app" not in request.fixturenames:
+        return
+    app = request.getfixturevalue("gui_app")
+    errors, app.unexpected_errors = list(app.unexpected_errors), []
+    assert not errors, "Error inesperado en la interfaz:" + chr(10) + chr(10).join(errors)
 
 
 @pytest.fixture(autouse=True)

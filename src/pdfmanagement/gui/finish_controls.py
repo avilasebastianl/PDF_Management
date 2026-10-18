@@ -21,7 +21,7 @@ from ..core.finish import SignatureOptions, WatermarkOptions
 from ..i18n import tr
 from . import style
 from .dropdown import dropdown_menu, set_dropdown_values
-from .widgets import field_label, muted_label, secondary_button
+from .widgets import field_label, muted_label, secondary_button, set_label_image
 
 # Orientacion de la marca de agua -> angulo (grados, antihorario como se ve).
 ORIENTATIONS = {tr("Diagonal"): 45, tr("Horizontal"): 0, tr("Vertical"): 90, tr("Diagonal inversa"): -45}
@@ -210,9 +210,13 @@ class PreviewPane(ctk.CTkLabel):
         bordered.paste(image, (1, 1))
         scaling = ctk.ScalingTracker.get_widget_scaling(self)
         size = (round(bordered.width / scaling), round(bordered.height / scaling))
-        self.image = ctk.CTkImage(light_image=bordered, dark_image=bordered, size=size)
-        self.configure(image=self.image, text="", width=size[0], height=size[1], fg_color="transparent")
+        image_ctk = ctk.CTkImage(light_image=bordered, dark_image=bordered, size=size)
+        # Primero se suelta la imagen anterior del widget Tk y despues se libera (ver set_label_image).
+        set_label_image(self, image_ctk)
+        self.configure(width=size[0], height=size[1], fg_color="transparent")
+        self.image = image_ctk
 
     def set_message(self, text: str) -> None:
-        self.image = None
-        self.configure(image=None, text=text, width=self.box[0], height=self.box[1], fg_color=style.CANVAS_BG)
+        set_label_image(self, None, text)
+        self.configure(width=self.box[0], height=self.box[1], fg_color=style.CANVAS_BG)
+        self.image = None  # recien ahora: el widget ya no la usa

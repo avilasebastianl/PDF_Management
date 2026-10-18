@@ -67,3 +67,19 @@ def test_signature_without_certificate_is_reported(merge_page, gui_app, monkeypa
     merge_page.signature._on_kind("Firma digital")
     merge_page._merge()
     assert errors and "certificado" in str(errors[0])
+
+
+def test_preview_switches_between_image_and_message_safely(merge_page, gui_app):
+    """Antes: 'image pyimageN does not exist' al pasar de la imagen a un mensaje."""
+    import gc
+
+    merge_page.refresh_preview()
+    assert merge_page.preview.image is not None
+    merge_page.preview.set_message("sin vista previa")
+    gc.collect()  # la imagen anterior se libera de verdad
+    merge_page.preview.configure(width=200)  # cualquier redibujo fallaba
+    merge_page.refresh_preview()
+    gc.collect()
+    merge_page.preview.set_message("otra vez")
+    assert merge_page.preview.image is None
+    pump(gui_app, timeout=0.5)  # la vista previa programada vuelve a dibujarse sin errores
