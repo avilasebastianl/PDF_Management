@@ -9,6 +9,7 @@ from .base import BasePage
 from .convert import ConvertPage
 from .extract import ExtractPage
 from .merge import MergePage
+from .organize import OrganizePage
 from .security import SecurityPage
 from .settings import SettingsPage
 from .sign import SignPage
@@ -19,6 +20,7 @@ from .viewer import ViewerPage
 PAGES: list[type[BasePage]] = [
     ViewerPage,
     MergePage,
+    OrganizePage,
     ExtractPage,
     ConvertPage,
     SignPage,
@@ -32,6 +34,7 @@ PAGES: list[type[BasePage]] = [
 PAGE_LABELS = {
     "Visor": tr("Visor"),
     "Unir": tr("Unir"),
+    "Organizar": tr("Organizar"),
     "Extraer": tr("Extraer"),
     "Convertir": tr("Convertir"),
     "Firmar": tr("Firmar"),

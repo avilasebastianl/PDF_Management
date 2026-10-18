@@ -189,7 +189,7 @@ def test_sidebar_collapses_to_icons(gui_app):
     assert all(button.cget("text") == "" for button in gui_app.nav_buttons.values())
     assert not gui_app._brand.winfo_ismapped()
     # Contraido, el tooltip dice el nombre de la seccion.
-    assert _tooltips(gui_app.nav_buttons["Firmar"]) == ["Firmar  (Ctrl+5)"]
+    assert _tooltips(gui_app.nav_buttons["Firmar"]) == ["Firmar  (Ctrl+6)"]
     gui_app.toggle_sidebar()
     pump(gui_app, lambda: gui_app._sidebar_animation is None, timeout=0.3)
     assert gui_app.nav_buttons["Firmar"].cget("text") == "  Firmar"
@@ -197,7 +197,7 @@ def test_sidebar_collapses_to_icons(gui_app):
     from pdfmanagement.gui.pages.registry import PAGES
 
     title = next(page.title for page in PAGES if page.name == "Firmar")
-    assert _tooltips(gui_app.nav_buttons["Firmar"]) == [f"{title}  (Ctrl+5)"]
+    assert _tooltips(gui_app.nav_buttons["Firmar"]) == [f"{title}  (Ctrl+6)"]
 
 
 def _tooltips(widget):

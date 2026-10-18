@@ -1,6 +1,6 @@
 # PDF Management - User guide
 
-Move between sections with the sidebar or with **Ctrl+1** to **Ctrl+8**. Press **F1** to open this guide.
+Move between sections with the sidebar or with **Ctrl+1** to **Ctrl+9**. Press **F1** to open this guide.
 
 The **☰** button at the top left collapses the sidebar to icons only to save space; hover over an icon to see the section name. Press it again to expand the sidebar. The app remembers your choice.
 
@@ -128,6 +128,17 @@ Combine several PDFs into one. The whole section scrolls with a single scroll ba
 5. Check **Save as** and press **Merge PDFs**. To sign the result use **Merge and sign...**: it merges the PDFs and opens the merged one in the **Sign** section, so you can place the signature with the mouse or sign with a certificate.
 
 If any PDF is protected, the app will ask for its password.
+
+## Organize
+
+Reorder, rotate, delete or insert the pages of a PDF in a grid of large thumbnails.
+
+1. Press **Open PDF**, drag the file onto the grid, or send it from the Viewer with **Send to... > Organize**.
+2. **Select**: click a page; **Ctrl+click** adds or removes a page and **Shift+click** selects a range. You can also tick the checkbox on each page or use **Ctrl+A**.
+3. **Reorder**: drag a page (or the selected ones) and drop it where you want it; a colored bar shows where it will land.
+4. When you hover over a page (or when it is selected), **Rotate left**, **Rotate right** and **Delete** appear. The same buttons at the top act on all selected pages; **Del** deletes them.
+5. **Insert**: the **+** buttons between pages add a **Blank page** or **Pages from another PDF...** there.
+6. **Ctrl+Z** undoes and **Ctrl+Y** redoes. Save the result with **Save as** (**Ctrl+S**): the original is not modified.
 
 ## Extract
 

@@ -1,6 +1,6 @@
 # PDF Management - Guía de uso
 
-Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+8**. Pulse **F1** para abrir esta guía.
+Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+9**. Pulse **F1** para abrir esta guía.
 
 El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección.
 
@@ -127,6 +127,17 @@ Combine varios PDFs en uno solo. Toda la sección se recorre con una sola barra 
 5. Revise **Guardar como** y presione **Unir PDFs**. Para firmar el resultado use **Unir y firmar...**: une los PDFs y abre el unido en la sección **Firmar**, para ubicar la firma con el ratón o firmar con un certificado.
 
 Si algún PDF está protegido, la aplicación pedirá su contraseña.
+
+## Organizar
+
+Reordene, gire, elimine o inserte páginas de un PDF en una cuadrícula de miniaturas grandes.
+
+1. Presione **Abrir PDF**, arrastre el archivo a la cuadrícula o envíelo desde el Visor con **Enviar a... > Organizar**.
+2. **Seleccionar**: clic en una página; **Ctrl+clic** agrega o quita y **Mayús+clic** selecciona un rango. También puede marcar la casilla de cada página o usar **Ctrl+A**.
+3. **Reordenar**: arrastre una página (o las seleccionadas) y suéltela donde quiere; una barra de color muestra dónde quedará.
+4. Al pasar el cursor por una página (o con ella seleccionada) aparecen **girar a la izquierda**, **girar a la derecha** y **eliminar**. Los mismos botones arriba actúan sobre todas las seleccionadas; **Supr** las elimina.
+5. **Insertar**: los botones **+** entre las páginas agregan ahí una **página en blanco** o las **páginas de otro PDF**.
+6. **Ctrl+Z** deshace y **Ctrl+Y** rehace. Guarde el resultado con **Guardar como** (**Ctrl+S**): el original no se modifica.
 
 ## Extraer
 

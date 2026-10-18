@@ -30,7 +30,13 @@ if TYPE_CHECKING:
 
 
 # Texto mostrado en "Enviar a" -> seccion de destino (su identificador, sin traducir).
-SEND_TARGETS = {tr("Unir"): "Unir", tr("Extraer"): "Extraer", tr("Firmar"): "Firmar", tr("Proteger"): "Proteger"}
+SEND_TARGETS = {
+    tr("Unir"): "Unir",
+    tr("Organizar"): "Organizar",
+    tr("Extraer"): "Extraer",
+    tr("Firmar"): "Firmar",
+    tr("Proteger"): "Proteger",
+}
 RECENT_PLACEHOLDER = tr("Recientes")
 SEND_PLACEHOLDER = tr("Enviar a...")
 

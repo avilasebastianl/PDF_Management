@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.4.1-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.5.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -37,6 +37,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 |---|---|---|
 | **Visor** | Abre, lee, **anota**, **edita** y **organiza** PDFs | **Nuevo PDF** en blanco o desde plantilla (renglones, cuadricula, carta, acta, factura; A4, Carta u Oficio). Boton **Unir N PDFs** con 2 o mas documentos abiertos (lleva todos a Unir, con sus cambios sin guardar). **Varios documentos en pestanas** como un navegador (mismo ancho, punto de cambios sin guardar, cerrar al pasar el cursor o con clic central, boton **+**; cada una con su pagina, zoom e historial), dos modos de lectura: **visor en toda la ventana** (Ctrl+Mayus+F, con las pestanas) y **pantalla completa** (F11), desplazamiento continuo virtualizado, miniaturas, marcadores, **barra de busqueda flotante** (boton Buscar o Ctrl+F: contador, anterior/siguiente, mayusculas y palabras completas) con lista de resultados, seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Boton **Ver**: **modo nocturno** (colores invertidos), **dos paginas** lado a lado (ambos se recuerdan), **comparar** con otra pestana u otro PDF en vista dividida (sincronizar paginas) e **imprimir** (Ctrl+P, dialogo de Windows, incluye los cambios sin guardar). Panel lateral con pestanas de iconos: Paginas, Marcadores, Buscar, Notas y **Firmas** (verifica las firmas digitales con pyHanko, sin internet, y permite firmar). Herramientas de edicion con el boton **Editar**. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco. Anotar: resaltar, subrayar y tachar texto, notas, texto libre (con **tamano de letra** y cuadro que se ajusta al texto), rectangulos, elipses, lineas, flechas y dibujo a mano, con 5 colores y 3 grosores; seleccionar, mover, recolorear, editar y eliminar anotaciones, y panel **Notas** con todas. **Editar el contenido**: reemplazar texto, texto fijo, imagen y **tapar** (redaccion real: borra lo que hay debajo). Barras que se adaptan al ancho (iconos solos, anotacion en dos filas). Deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos; marca de agua del resultado; vista previa navegable de todas las paginas del resultado; Unir y firmar (abre el resultado en Firmar) |
+| **Organizar** | Reordena las paginas de un PDF | Cuadricula de miniaturas grandes: seleccionar (clic, Ctrl, Mayus, casillas), arrastrar para reordenar, girar y eliminar desde cada pagina o en grupo, insertar paginas en blanco o de otro PDF con los botones +, deshacer y Guardar como |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
 | **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, tamano ajustable (asas en las esquinas y control deslizante), paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
@@ -44,7 +45,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | **Herramientas** | Comprimir, dividir, numerar paginas y marca de agua | **Comprimir** en 3 niveles (baja / media / alta; si el resultado no es mas liviano se conserva una copia del original), **Dividir** por rangos, cada N paginas o por marcadores (archivos en una carpeta), **Numerar paginas** (formato como `Pagina {n} de {total}`, 6 posiciones, numero inicial, paginas a numerar), **Marca de agua** (texto, opacidad, detras o delante del contenido). Los PDFs protegidos conservan su contrasena (AES-256) |
 | **Ajustes** | Preferencias | Modo claro/oscuro/sistema, color de acento, escala, **idioma** (Español, English, Русский; al reiniciar), pagina inicial, carpeta de salida. Se guardan solos y quedan como predeterminados al abrir la aplicacion |
 
-Ademas: interfaz en **tres idiomas** (espanol, ingles y ruso), escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir**, **Mostrar en carpeta** y **Ver en el visor**), menu lateral contraible a solo iconos con animacion fluida (y el nombre de cada seccion al pasar el cursor), tooltips que no se salen del monitor y se ocultan al cambiar de programa (Alt+Tab), atajos `Ctrl+1..8` y `F1`, y una CLI con las operaciones principales.
+Ademas: interfaz en **tres idiomas** (espanol, ingles y ruso), escritura atomica (un error nunca deja archivos corruptos), nunca sobrescribe sin preguntar, barra de estado (listo / en curso con cola / exito / error, con tooltip explicativo y acciones **Abrir**, **Mostrar en carpeta** y **Ver en el visor**), menu lateral contraible a solo iconos con animacion fluida (y el nombre de cada seccion al pasar el cursor), tooltips que no se salen del monitor y se ocultan al cambiar de programa (Alt+Tab), atajos `Ctrl+1..9` y `F1`, y una CLI con las operaciones principales.
 
 **Limitaciones conocidas**: el texto que escriben **Reemplazar texto** y **Texto fijo** usa Helvetica, que solo tiene el alfabeto latino (no se puede escribir cirilico ni otros alfabetos en la pagina); **Numerar paginas** y **Marca de agua** usan Arial de Windows cuando el texto no es latino. La leyenda visible de la firma digital tambien queda en alfabeto latino (en ruso muestra la leyenda en ingles), porque la fuente de la estampa de pyHanko es solo latina.
 
@@ -215,6 +216,7 @@ PDFManagement/
 │       │   ├── element_tool.py # Seleccionar: anotaciones, lineas de texto e imagenes de la pagina
 │       │   ├── inline_editor.py  # Campo de texto sobre la pagina (en lugar de cuadros de dialogo)
 │       │   ├── wheel.py        # Rueda y panel tactil (<TouchpadScroll> de Tk 9) en pasos enteros
+│       │   ├── page_grid.py    # Cuadricula de paginas: seleccion, arrastrar y soltar, girar, eliminar, +
 │       │   ├── find_bar.py     # FindBar: barra de busqueda flotante (como en los navegadores)
 │       │   ├── tab_strip.py    # TabStrip: pestanas de documentos con aspecto de navegador
 │       │   ├── icon_tabs.py    # IconTabs: pestanas con icono del panel lateral
@@ -232,6 +234,7 @@ PDFManagement/
 │           ├── viewer_display.py   # Mixin: modo nocturno, dos paginas, comparar, imprimir, firmas
 │           ├── viewer_annotations.py  # ViewerAnnotations: barra, colores, seleccion, edicion de contenido y panel Notas
 │           ├── tools.py        # ToolsPage: seccion Herramientas
+│           ├── organize.py     # OrganizePage: seccion Organizar (cuadricula de paginas)
 │           └── merge.py · extract.py · convert.py · sign.py · security.py · settings.py
 └── tests/                      # Pruebas automatizadas (pytest)
 ```
@@ -334,6 +337,7 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `InlineEditor` (`viewer/inline_editor.py`) | Campo de texto dibujado en el lienzo del visor, con la letra al tamano real de la pagina: notas, cuadros de texto, texto fijo, reemplazar texto y editar anotaciones se escriben en su lugar. Enter aplica, Mayus+Enter agrega una linea, Esc cancela, clic fuera aplica; se reubica al cambiar el zoom |
 | `ElementTool`, `Selection` (`viewer/element_tool.py`) | Herramienta **Seleccionar**: marca al pasar el cursor y selecciona anotaciones (primero), lineas de texto o imagenes (`DocumentSession.elements`); arrastrar mueve anotaciones, doble clic edita, Supr elimina (`erase_text`, `remove_image`) |
 | `WatermarkControls`, `PreviewPane` (`finish_controls.py`) | Opciones de marca de agua y vista previa de una pagina; las mismas en Herramientas y Unir |
+| `PageGrid` (`viewer/page_grid.py`), `OrganizePage` (`pages/organize.py`) | Seccion **Organizar**: tarjetas dibujadas en un `tk.Canvas` con miniaturas pedidas al `RenderScheduler` solo para las filas visibles; casilla, numero, acciones al pasar el cursor, `+` entre tarjetas y marca de insercion al arrastrar. Usa `DocumentSession` (deshacer y Guardar como) |
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
@@ -646,7 +650,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 280 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 287 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -676,6 +680,7 @@ Hay 280 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 | `tests/test_gui_viewer_display.py` (v5.2) | Ademas: Seleccionar (activa al pulsar Editar; elimina una linea, quita una imagen, prioriza anotaciones), doble clic edita una linea en su lugar, texto escrito sobre la pagina |
 | `tests/test_finish.py` | Marca de agua y firma visual (ultima pagina o todas), firma digital valida tras la marca, vista previa sin modificar el archivo, faltantes |
 | `tests/test_gui_merge.py` | Unir con una sola barra de desplazamiento, vista previa navegable, marca de agua en el resultado (sin firma: se firma con Unir y firmar), Unir y firmar abre Firmar, boton Unir del Visor (requiere pantalla) |
+| `tests/test_gui_organize.py` | Organizar: seleccion con clic, Ctrl y Mayus, arrastrar para reordenar (y deshacer), girar, eliminar, insertar en blanco, boton +, Guardar como sin tocar el original (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` | Dos paginas, modo nocturno, comparar con otra pestana, imprimir el documento en memoria, panel Firmas, reemplazar texto seleccionado, tapar, texto fijo e imagen desde la barra (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -749,6 +754,7 @@ flowchart LR
 - [x] v5.3.1: vista previa sin el error "image pyimageN does not exist" (la imagen se soltaba antes que el control); las pruebas fallan ante cualquier error inesperado de la interfaz en vez de abrir un aviso.
 - [x] v5.4: boton **Unir N PDFs** en el Visor (documentos abiertos, con sus cambios sin guardar via `DocumentSession.write_copy` en una carpeta temporal); Unir con la vista previa en su propia columna, navegable por todas las paginas; **Unir y firmar...** abre el PDF unido en Firmar.
 - [x] v5.4.1: Unir ya no firma por su cuenta: queda la marca de agua opcional y, para firmar, **Unir y firmar...** lleva el PDF unido a Firmar (`core/finish.py` conserva la firma para usos futuros).
+- [x] v5.5: seccion **Organizar** con cuadricula de paginas (arrastrar para reordenar, girar, eliminar, insertar); tambien desde Enviar a... del Visor.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.
