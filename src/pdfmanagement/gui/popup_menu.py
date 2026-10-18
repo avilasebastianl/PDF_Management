@@ -52,6 +52,8 @@ class PopupMenu:
     """Menu emergente con el estilo de la aplicacion (ver el docstring del modulo)."""
 
     _active: ClassVar[PopupMenu | None] = None  # menu principal abierto (uno a la vez)
+    _open: ClassVar[set[PopupMenu]] = set()  # todos los menus y submenus con ventana abierta
+    _root: ClassVar[tk.Misc | None] = None  # ventana principal (para saber si la app tiene el foco)
     _hooked: ClassVar[set[str]] = set()
 
     def __init__(self, master, tearoff: int = 0) -> None:
@@ -95,11 +97,16 @@ class PopupMenu:
     def tk_popup(self, x: int, y: int) -> None:
         """Abre el menu con su esquina superior izquierda en ``(x, y)`` (pantalla), dentro del monitor."""
         if self.parent is None:
-            if PopupMenu._active is not None:
-                PopupMenu._active.close()
+            PopupMenu.close_everything()
             PopupMenu._active = self
             self._hook_root()
+        if self.window is not None and self.window.winfo_exists():
+            self.window.destroy()  # nunca dos ventanas para el mismo menu
         window = self.window = self._build()
+        PopupMenu._open.add(self)
+        # El foco queda en el menu (o en un submenu): si otra aplicacion pasa al frente, la
+        # ventana principal no se entera; cada menu vigila su propia perdida de foco.
+        window.bind("<FocusOut>", lambda _e: window.after(80, PopupMenu._close_if_inactive), add="+")
         window.update_idletasks()
         width, height = window.winfo_reqwidth(), window.winfo_reqheight()
         left, top, right, bottom = monitor_work_area(self.master)
@@ -124,14 +131,21 @@ class PopupMenu:
         if self.window is not None and self.window.winfo_exists():
             self.window.destroy()
         self.window = None
+        PopupMenu._open.discard(self)
         if PopupMenu._active is self:
             PopupMenu._active = None
 
     def close_all(self) -> None:
-        root = self
-        while root.parent is not None:
-            root = root.parent
-        root.close()
+        """Cierra este menu y todos los demas abiertos (submenus incluidos)."""
+        PopupMenu.close_everything()
+
+    @staticmethod
+    def close_everything() -> None:
+        """Cierra todas las ventanas de menu abiertas: ninguna puede quedar suelta encima de todo."""
+        for menu in list(PopupMenu._open):
+            menu.close()
+        PopupMenu._open.clear()
+        PopupMenu._active = None
 
     def just_opened(self) -> bool:
         return time.monotonic() - self._opened_at < OPEN_GRACE_SECONDS
@@ -244,6 +258,7 @@ class PopupMenu:
 
     def _hook_root(self) -> None:
         root = self.master.winfo_toplevel()
+        PopupMenu._root = root
         if str(root) in PopupMenu._hooked:
             return
         PopupMenu._hooked.add(str(root))
@@ -257,18 +272,19 @@ class PopupMenu:
     @staticmethod
     def _close_active() -> None:
         active = PopupMenu._active
-        if active is not None and not active.just_opened():
-            active.close()
+        if active is not None and active.just_opened():
+            return
+        PopupMenu.close_everything()
 
     @staticmethod
     def _close_if_inactive() -> None:
-        """Otra aplicacion paso al frente (Alt+Tab): el menu no debe quedar encima de ella."""
-        active = PopupMenu._active
-        if active is None or active.window is None:
+        """Otra aplicacion paso al frente (Alt+Tab): ningun menu debe quedar encima de ella."""
+        if not PopupMenu._open:
             return
+        root = PopupMenu._root
         try:
-            focused = active.window.focus_get()
+            focused = root.focus_get() if root is not None else None
         except (KeyError, tk.TclError):
             focused = None
         if focused is None:
-            active.close()
+            PopupMenu.close_everything()

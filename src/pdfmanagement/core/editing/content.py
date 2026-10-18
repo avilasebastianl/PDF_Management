@@ -62,7 +62,7 @@ def visible_colors(page: pymupdf.Page, rect: pymupdf.Rect) -> tuple[Color, Color
     """
     ``(fondo, texto)`` de la zona ``rect`` (coordenadas visibles) segun como se
     ve la pagina dibujada, no segun lo que declara el PDF. El fondo es el color
-    mas comun del borde de la zona; el texto, el que mas se aleja de el
+    mas comun de la zona; el texto, el que mas se aleja de el
     (``None`` si la zona es lisa).
     """
     area = pymupdf.Rect(rect) + (-2, -2, 2, 2)
@@ -78,14 +78,16 @@ def visible_colors(page: pymupdf.Page, rect: pymupdf.Rect) -> tuple[Color, Color
         offset = (y * width + x) * 3
         return samples[offset], samples[offset + 1], samples[offset + 2]
 
-    border = [pixel(x, y) for x in range(width) for y in (0, height - 1)]
-    border += [pixel(x, y) for y in range(height) for x in (0, width - 1)]
+    # El fondo es el color que mas ocupa la zona: el texto ocupa poco y las lineas de un
+    # recuadro ajustado (celdas de una tabla) tambien. Mirar solo el contorno tomaba el
+    # borde negro de la celda como fondo y el texto nuevo salia blanco sobre blanco.
+    every = [pixel(x, y) for y in range(height) for x in range(width)]
     counts: dict[tuple[int, int, int], int] = {}
-    for color in border:
+    for color in every:
         key = (color[0] // 16, color[1] // 16, color[2] // 16)
         counts[key] = counts.get(key, 0) + 1
     common = max(counts, key=lambda key: counts[key])
-    matching = [color for color in border if (color[0] // 16, color[1] // 16, color[2] // 16) == common]
+    matching = [color for color in every if (color[0] // 16, color[1] // 16, color[2] // 16) == common]
     background = tuple(sum(channel) / len(matching) for channel in zip(*matching, strict=True))
 
     def distance(color) -> float:

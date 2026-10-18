@@ -209,3 +209,42 @@ def test_free_text_font_size_and_fitting(session):
     note = session.add_note(0, (300, 300), "nota", AnnotationStyle())
     with pytest.raises(core.InvalidInputError):
         session.set_annotation_font_size(0, note, 20)
+
+
+def _external_free_text(tmp_path, declared="[0]"):
+    """Cuadro de texto como lo guardan otros programas: /C [0] (negro) pero dibujado sin fondo."""
+    path = tmp_path / "externo.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    annot = page.add_freetext_annot((100, 100, 300, 140), "Original", fontsize=12, text_color=(0, 0, 0))
+    document.xref_set_key(annot.xref, "C", declared)  # la apariencia guardada sigue sin fondo
+    document.save(path)
+    document.close()
+    return path
+
+
+def test_editing_an_external_text_box_keeps_it_transparent(tmp_path):
+    """Antes el cuadro editado quedaba negro (con letra negra: no se veia)."""
+    session = DocumentSession.open(_external_free_text(tmp_path))
+    info = session.annotations(0)[0]
+    session.set_annotation_text(0, info.xref, "Editado")
+    pixel = session.document[0].get_pixmap(dpi=72).pixel(296, 120)
+    assert min(pixel) > 240, f"el fondo sigue blanco, no negro: {pixel}"
+    assert session.annotations(0)[0].fill is None
+
+
+def test_resize_and_fill_a_text_box(tmp_path):
+    session = DocumentSession.open(_external_free_text(tmp_path))
+    xref = session.annotations(0)[0].xref
+    session.resize_annotation(0, xref, pymupdf.Rect(100, 100, 400, 220))
+    info = session.annotations(0)[0]
+    assert info.rect.width == pytest.approx(300, abs=1) and info.rect.height == pytest.approx(120, abs=1)
+    assert session.history.undo_label == "Cambiar tamaño de texto"
+    session.set_annotation_fill(0, info.xref, (1.0, 0.95, 0.6))
+    assert session.annotations(0)[0].fill == pytest.approx((1.0, 0.95, 0.6), abs=0.01)
+    red, _green, blue = session.document[0].get_pixmap(dpi=72).pixel(390, 210)
+    assert red > 240 and blue < 180, "se ve el fondo elegido"
+    session.set_annotation_fill(0, info.xref, None)
+    assert session.annotations(0)[0].fill is None
+    with pytest.raises(core.InvalidInputError):
+        session.resize_annotation(0, info.xref, pymupdf.Rect(100, 100, 105, 103))

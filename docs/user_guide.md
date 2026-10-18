@@ -2,7 +2,7 @@
 
 Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+8**. Pulse **F1** para abrir esta guía.
 
-El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección. Debajo del botón de modo claro u oscuro, los botones **−** y **+** a los lados de **Tamaño** achican o agrandan la interfaz (clic en el porcentaje para elegirlo de una lista). Es solo por ahora: al reiniciar vuelve el tamaño de **Ajustes**, que es donde se cambia el predeterminado.
+El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección.
 
 En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
 
@@ -38,7 +38,7 @@ Lea cualquier PDF sin salir de la aplicación. Es la primera sección y la que s
   - **Firmas**: las firmas digitales del documento y su estado (vea **Firmas digitales en el Visor**).
 - **Texto y Mano**: con **Texto** arrastre sobre el texto para seleccionarlo (**Ctrl+C** copia y **Ctrl+A** selecciona la página); con **Mano** arrastre para mover la página. El botón central del ratón también desplaza.
 - **Zoom**: **Ctrl + rueda** (centrado en el cursor), **Ctrl++** / **Ctrl+-**, **Ctrl+0** para ajustar al ancho, o la lista de zoom (ajustar ancho, ajustar página, 50-400 %).
-- **Navegar**: rueda, **Re Pág** / **Av Pág**, **Inicio** / **Fin**, o escriba el número de página.
+- **Navegar**: rueda o panel táctil (desplaza el visor que está bajo el cursor, también al comparar), **Re Pág** / **Av Pág**, **Inicio** / **Fin**, o escriba el número de página.
 - **Propiedades** (botón con la letra i, junto a deshacer y rehacer): título, autor, fechas, tamaño de página, cifrado y firmas del documento. A su lado, el botón de la **impresora** imprime el documento (**Ctrl+P**).
 - **Enviar a...**: abre el documento en Unir, Extraer, Firmar o Proteger sin buscarlo de nuevo.
 - **Esc** borra la selección y los resaltados de la búsqueda.
@@ -77,7 +77,8 @@ La **barra de anotación** aparece debajo de la navegación del visor al pulsar 
 El texto se escribe **directamente sobre la página**, en un campo que aparece en su lugar y con su tamaño, sin cuadros de diálogo: **Enter** lo aplica, **Mayús+Enter** agrega una línea, **Esc** cancela y hacer clic fuera también lo aplica.
 - **Rectángulo, elipse, línea y flecha**: arrastre de una esquina a otra.
 - **Dibujo a mano**: arrastre para trazar.
-- **Color** (amarillo, verde, azul, rojo o negro), **grosor** (fino, medio o grueso) y **Letra** (tamaño del texto) a la derecha de la barra.
+- **Color** (amarillo, verde, azul, rojo o negro), **grosor** (fino, medio o grueso), **Letra** (tamaño del texto) y **Fondo** (color de fondo de los cuadros de texto: sin fondo, blanco o un tono claro) a la derecha de la barra. Con un cuadro de texto seleccionado, **Letra** y **Fondo** cambian ese cuadro.
+- **Tamaño de un cuadro**: seleccione un cuadro de texto, un rectángulo o una elipse y arrastre una de sus **esquinas** (los cuadraditos de color); el texto se reacomoda al nuevo tamaño.
 - **Tamaño de un texto**: selecciónelo con un clic y elija el tamaño en **Letra**; el cuadro se ajusta solo. Al escribir un texto nuevo, el cuadro también se ajusta a lo escrito.
 
 Pulse **Esc** o vuelva a pulsar la herramienta para terminar.
@@ -114,12 +115,18 @@ La verificación es local: no consulta servidores en internet (OCSP ni CRL). Se 
 
 ## Unir
 
-Combine varios PDFs en uno solo.
+Combine varios PDFs en uno solo. Toda la sección se recorre con una sola barra de desplazamiento.
 
 1. Presione **Agregar PDFs** o arrastre archivos (o carpetas completas) a la lista. Puede seguir trabajando mientras se leen: cada fila muestra sus páginas y tamaño al terminar.
 2. Ordénelos con las flechas de cada fila o con **Ordenar A-Z**.
-3. Opcional: active **Crear un marcador por cada archivo**. El PDF unido tendrá en su índice lateral un marcador con el nombre de cada archivo de origen, para saltar directo a su inicio; los marcadores originales se conservan anidados dentro. Pase el cursor sobre la opción para ver esta explicación.
-4. Revise **Guardar como** y presione **Unir PDFs**.
+3. Opcional, en **Marca de agua y firma**:
+   - **Agregar marca de agua**: las mismas opciones que en **Herramientas** (texto, opacidad, orientación y si va detrás del contenido).
+   - **Firmar el resultado**: **Firma visual** (una firma guardada en la sección **Firmar**) o **Firma digital** (certificado .pfx/.p12 y su contraseña), con su **Posición**, la **Página** (última, primera o todas; la digital va en una sola) y el **Tamaño**.
+   - A la derecha, la **vista previa** muestra la primera o la última página del resultado con la marca y la firma; al activar la firma se muestra la página donde irá.
+
+   La marca de agua se aplica antes de firmar, así la firma digital queda válida.
+4. Opcional: active **Crear un marcador por cada archivo**. El PDF unido tendrá en su índice lateral un marcador con el nombre de cada archivo de origen, para saltar directo a su inicio; los marcadores originales se conservan anidados dentro. Pase el cursor sobre la opción para ver esta explicación.
+5. Revise **Guardar como** y presione **Unir PDFs**.
 
 Si algún PDF está protegido, la aplicación pedirá su contraseña.
 

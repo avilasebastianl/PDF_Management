@@ -10,13 +10,13 @@ from pathlib import Path
 from tkinter import filedialog
 
 import customtkinter as ctk
-from PIL import Image
 
 from ... import core
 from ...core import tools
 from ...i18n import tr, trn
 from .. import style
 from ..dropdown import dropdown_menu
+from ..finish_controls import PreviewPane, WatermarkControls
 from ..widgets import Card, FileField, field_label, format_size, muted_label, primary_button, secondary_button
 from .base import BasePage
 
@@ -37,8 +37,7 @@ POSITIONS = {
     tr("Arriba a la izquierda"): "arriba-izquierda",
 }
 # Orientacion de la marca de agua -> angulo (grados, antihorario como se ve).
-ORIENTATIONS = {tr("Diagonal"): 45, tr("Horizontal"): 0, tr("Vertical"): 90, tr("Diagonal inversa"): -45}
-PREVIEW_HEIGHT = 300
+PREVIEW_HEIGHT = 440
 PREVIEW_DELAY_MS = 250  # se espera a que deje de escribir antes de redibujar
 SUFFIXES = {COMPRESS: tr("comprimido"), NUMBER: tr("numerado"), WATERMARK: tr("marca")}
 
@@ -160,46 +159,28 @@ class ToolsPage(BasePage):
                 "Texto grande y semitransparente, por ejemplo CONFIDENCIAL o BORRADOR. A la derecha se ve cómo quedará."
             ),
         )
-        self.mark_text = tk.StringVar(value=tr("CONFIDENCIAL"))
-        self.mark_text.trace_add("write", lambda *_: self._schedule_preview())
-        self._row(card, 0, tr("Texto"), ctk.CTkEntry(card, textvariable=self.mark_text, width=260, height=34))
-        self.opacity = ctk.CTkSlider(
-            card, from_=5, to=60, number_of_steps=11, width=220, command=lambda _v: self._schedule_preview()
-        )
-        self.opacity.set(15)
-        self._row(card, 1, tr("Opacidad"), self.opacity)
-        self.orientation = ctk.CTkSegmentedButton(
-            card, values=list(ORIENTATIONS), command=lambda _v: self._schedule_preview(), font=style.fonts().small
-        )
-        self.orientation.set(next(iter(ORIENTATIONS)))
-        self._row(card, 2, tr("Orientación"), self.orientation)
-        self.behind = ctk.CTkSwitch(
-            card, text=tr("Detrás del contenido"), font=style.fonts().body, command=self._schedule_preview
-        )
-        self._row(card, 3, "", self.behind)
-        # Vista previa de la primera pagina con la marca.
-        self.preview = ctk.CTkLabel(
-            card,
-            text=tr("Elija un PDF para ver la vista previa"),
-            width=round(PREVIEW_HEIGHT * 0.72),
-            height=PREVIEW_HEIGHT,
-            fg_color=style.CANVAS_BG,
-            corner_radius=8,
-            text_color=style.TEXT_MUTED,
-            font=style.fonts().small,
-            wraplength=180,
-        )
-        self.preview.grid(row=card.row(0), column=2, rowspan=5, sticky="ne", padx=(style.GAP, style.CARD_PAD), pady=8)
+        # Controles a la izquierda y la vista previa, grande, a la derecha (los mismos que en Unir).
+        self.watermark = WatermarkControls(card, on_change=self._schedule_preview)
+        self.watermark.grid(row=card.row(0), column=0, columnspan=2, sticky="new", padx=style.CARD_PAD, pady=8)
+        self.mark_text = self.watermark.mark_text
+        self.opacity = self.watermark.opacity
+        self.orientation = self.watermark.orientation
+        self.behind = self.watermark.behind
+        self.preview = PreviewPane(card, PREVIEW_HEIGHT, tr("Elija un PDF para ver la vista previa"))
+        self.preview.grid(row=card.row(0), column=2, sticky="ne", padx=(style.GAP, style.CARD_PAD), pady=8)
         card.grid_columnconfigure(2, weight=0)
         self._preview_job: str | None = None
-        self._preview_image: ctk.CTkImage | None = None
         return card
 
     # * Vista previa de la marca de agua ------------------------------------------
 
     @property
     def mark_angle(self) -> float:
-        return ORIENTATIONS.get(self.orientation.get(), 45)
+        return self.watermark.angle
+
+    @property
+    def _preview_image(self):
+        return self.preview.image
 
     def _schedule_preview(self) -> None:
         if not hasattr(self, "preview"):
@@ -213,39 +194,26 @@ class ToolsPage(BasePage):
         self._preview_job = None
         source = self.resolved(self.source_field.path)
         if source is None:
-            self._show_preview_message(tr("Elija un PDF para ver la vista previa"))
+            self.preview.set_message(tr("Elija un PDF para ver la vista previa"))
             return
+        options = self.watermark.options()
         try:
             image = tools.watermark_preview(
                 source,
-                self.mark_text.get(),
-                height=round(PREVIEW_HEIGHT * ctk.ScalingTracker.get_widget_scaling(self)),
-                opacity=self.opacity.get() / 100,
-                angle=self.mark_angle,
-                behind=bool(self.behind.get()),
+                options.text,
+                height=self.preview.pixel_height,
+                opacity=options.opacity,
+                angle=options.angle,
+                behind=options.behind,
                 password=self.passwords.get(source),
             )
         except core.PasswordRequiredError:
-            self._show_preview_message(tr("PDF protegido: la vista previa aparece al ingresar la contraseña."))
+            self.preview.set_message(tr("PDF protegido: la vista previa aparece al ingresar la contraseña."))
             return
         except core.PdfManagementError as error:
-            self._show_preview_message(str(error))
+            self.preview.set_message(str(error))
             return
-        bordered = Image.new("RGB", (image.width + 2, image.height + 2), (190, 194, 202))  # borde de la hoja
-        bordered.paste(image, (1, 1))
-        image = bordered
-        scaling = ctk.ScalingTracker.get_widget_scaling(self)
-        size = (round(image.width / scaling), round(image.height / scaling))
-        self._preview_image = ctk.CTkImage(light_image=image, dark_image=image, size=size)
-        self.preview.configure(
-            image=self._preview_image, text="", width=size[0], height=size[1], fg_color="transparent"
-        )
-
-    def _show_preview_message(self, text: str) -> None:
-        self._preview_image = None
-        self.preview.configure(
-            image=None, text=text, width=round(PREVIEW_HEIGHT * 0.72), height=PREVIEW_HEIGHT, fg_color=style.CANVAS_BG
-        )
+        self.preview.set_image(image)
 
     # * Eventos -----------------------------------------------------------------------
 

@@ -282,10 +282,16 @@ class DocumentSession:
         return self._annotate(label, page, annots.add_note, point, text, style)
 
     def add_free_text(
-        self, page: int, rect, text: str, style: AnnotationStyle, fontsize: float = annots.DEFAULT_FONT_SIZE
+        self,
+        page: int,
+        rect,
+        text: str,
+        style: AnnotationStyle,
+        fontsize: float = annots.DEFAULT_FONT_SIZE,
+        fill=None,
     ) -> int:
         label = tr("Agregar texto (página {page})", page=page + 1)
-        return self._annotate(label, page, annots.add_free_text, rect, text, style, fontsize)
+        return self._annotate(label, page, annots.add_free_text, rect, text, style, fontsize, fill)
 
     def add_shape(self, page: int, shape: str, rect, style: AnnotationStyle) -> int:
         if shape == "rect":
@@ -320,6 +326,13 @@ class DocumentSession:
 
     def set_annotation_font_size(self, page: int, xref: int, size: float) -> None:
         self._annotate(tr("Cambiar tamaño de texto"), page, annots.set_font_size, xref, size)
+
+    def resize_annotation(self, page: int, xref: int, rect) -> None:
+        label = tr("Cambiar tamaño de {annotation}", annotation=self._annotation_label(page, xref))
+        self._annotate(label, page, annots.resize, xref, rect)
+
+    def set_annotation_fill(self, page: int, xref: int, fill) -> None:
+        self._annotate(tr("Cambiar fondo del texto"), page, annots.set_fill, xref, fill)
 
     def set_annotation_text(self, page: int, xref: int, text: str) -> None:
         label = tr("Editar texto de {annotation}", annotation=self._annotation_label(page, xref))

@@ -13,6 +13,7 @@ cambio en el historial) y se mantiene la vista al dia.
 
 from __future__ import annotations
 
+import tkinter as tk
 from tkinter import filedialog
 from typing import TYPE_CHECKING
 
@@ -21,8 +22,8 @@ import pymupdf
 
 from ... import core
 from ...core.editing import AnnotationInfo, AnnotationStyle
-from ...core.editing.annotations import DEFAULT_FONT_SIZE, FONT_SIZES
-from ...core.editing.content import text_style_at, visible_colors
+from ...core.editing.annotations import DEFAULT_FONT_SIZE, FONT_SIZES, RECT_KINDS
+from ...core.editing.content import contrast, text_style_at, visible_colors
 from ...i18n import tr
 from .. import style
 from ..dropdown import dropdown_menu
@@ -55,6 +56,27 @@ COLOR_NAMES = {
     "Negro": tr("Negro"),
 }
 WIDTH_NAMES = {"Fino": tr("Fino"), "Medio": tr("Medio"), "Grueso": tr("Grueso")}
+# Fondo de los cuadros de texto (clave interna -> color; None = transparente) y su nombre visible.
+FILLS: dict[str, tuple[float, float, float] | None] = {
+    "Sin fondo": None,
+    "Blanco": (1.0, 1.0, 1.0),
+    "Amarillo claro": (1.0, 0.97, 0.7),
+    "Verde claro": (0.85, 0.96, 0.85),
+    "Azul claro": (0.85, 0.92, 1.0),
+    "Rosa claro": (1.0, 0.88, 0.9),
+    "Gris claro": (0.92, 0.92, 0.92),
+}
+FILL_NAMES = {
+    "Sin fondo": tr("Sin fondo"),
+    "Blanco": tr("Blanco"),
+    "Amarillo claro": tr("Amarillo claro"),
+    "Verde claro": tr("Verde claro"),
+    "Azul claro": tr("Azul claro"),
+    "Rosa claro": tr("Rosa claro"),
+    "Gris claro": tr("Gris claro"),
+}
+HANDLE_PX = 7  # lado de los tiradores para cambiar el tamano (pixeles)
+CORNER_CURSORS = {"nw": "size_nw_se", "se": "size_nw_se", "ne": "size_ne_sw", "sw": "size_ne_sw"}
 # (clave, icono, descripcion); None = separador
 TOOLS = (
     (
@@ -100,6 +122,8 @@ class ViewerAnnotations:
         self.color = COLORS["Amarillo"]
         self.width = WIDTHS["Medio"]
         self.font_size: float = DEFAULT_FONT_SIZE
+        self.fill: tuple[float, float, float] | None = None  # fondo de los cuadros de texto nuevos
+        self._resize: tuple[AnnotationInfo, str, pymupdf.Rect] | None = None  # (anotacion, esquina, rect nuevo)
         self.active: str | None = None
         self.selected: AnnotationInfo | None = None
         self._cache: dict[int, list[AnnotationInfo]] = {}
@@ -166,6 +190,20 @@ class ViewerAnnotations:
         self.size_menu.set(str(DEFAULT_FONT_SIZE))
         self.size_menu.pack(side="left")
         ToolTip(self.size_menu, tr("Tamaño de letra del texto nuevo o del cuadro de texto seleccionado"))
+        muted_label(bar, tr("Fondo")).pack(side="left", padx=(12, 4))
+        self.fill_button = ctk.CTkButton(
+            bar,
+            text="",
+            width=28,
+            height=24,
+            corner_radius=6,
+            border_width=1,
+            border_color=style.CARD_BORDER,
+            command=self._show_fill_menu,
+        )
+        self.fill_button.pack(side="left")
+        ToolTip(self.fill_button, tr("Color de fondo del texto nuevo o del cuadro de texto seleccionado"))
+        self._refresh_fill_button()
         self._refresh_swatches()
         return tools.master
 
@@ -210,6 +248,7 @@ class ViewerAnnotations:
                 on_select=self._select_element,
                 on_move=self.move,
                 on_edit=self._edit_element,
+                resizer=self,
             ),
             "note": lambda: NoteTool(self._note_done),
             "fixed_text": lambda: NoteTool(self._fixed_text_done),
@@ -270,6 +309,102 @@ class ViewerAnnotations:
                 info.page,
                 select=info.xref,
             )
+
+    # * Fondo de los cuadros de texto ------------------------------------------
+
+    def _show_fill_menu(self) -> None:
+        menu = PopupMenu(self.fill_button)
+        for key, color in FILLS.items():
+            menu.add_checkbutton(
+                label=FILL_NAMES[key],
+                variable=tk.BooleanVar(value=color == self.fill),
+                command=lambda k=key: self.set_fill(k),  # type: ignore[misc]
+            )
+        button = self.fill_button
+        menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height() + 4)
+
+    def set_fill(self, key: str) -> None:
+        """``key``: clave de ``FILLS``. Cambia el fondo del texto nuevo y el del cuadro seleccionado."""
+        self.fill = FILLS[key]
+        self._refresh_fill_button()
+        info = self.selected
+        if info is not None and info.kind == "FreeText" and info.fill != self.fill:
+            fill = self.fill
+            self._run(
+                lambda session: session.set_annotation_fill(info.page, info.xref, fill), info.page, select=info.xref
+            )
+
+    def _refresh_fill_button(self) -> None:
+        if self.fill is None:
+            self.fill_button.configure(
+                fg_color="transparent", hover_color=style.HOVER, text="∅", text_color=style.TEXT_MUTED
+            )
+        else:
+            color = tk_color(self.fill)
+            self.fill_button.configure(fg_color=color, hover_color=color, text="")
+
+    # * Cambiar el tamano arrastrando una esquina ------------------------------------
+
+    def _resizable(self) -> AnnotationInfo | None:
+        info = self.selected
+        return info if info is not None and info.kind in RECT_KINDS else None
+
+    def handle_at(self, hit: PageHit | None) -> str | None:
+        """Esquina de la anotacion seleccionada bajo el punto (``"nw"``, ``"ne"``, ``"sw"``, ``"se"``)."""
+        info = self._resizable()
+        if info is None or hit is None or hit.page != info.page:
+            return None
+        tolerance = (HANDLE_PX + 3) / self.view.scale
+        corners = {
+            "nw": (info.rect.x0, info.rect.y0),
+            "ne": (info.rect.x1, info.rect.y0),
+            "sw": (info.rect.x0, info.rect.y1),
+            "se": (info.rect.x1, info.rect.y1),
+        }
+        for name, (x, y) in corners.items():
+            if abs(hit.x - x) <= tolerance and abs(hit.y - y) <= tolerance:
+                return name
+        return None
+
+    def cursor_at(self, hit: PageHit | None) -> str | None:
+        corner = self.handle_at(hit)
+        return CORNER_CURSORS[corner] if corner else None
+
+    def begin_resize(self, hit: PageHit | None) -> bool:
+        corner = self.handle_at(hit)
+        info = self._resizable()
+        if corner is None or info is None:
+            return False
+        self._resize = (info, corner, pymupdf.Rect(info.rect))
+        return True
+
+    def resize_drag(self, hit: PageHit | None) -> None:
+        if self._resize is None or hit is None:
+            return
+        info, corner, _rect = self._resize
+        if hit.page != info.page:
+            return
+        rect = pymupdf.Rect(info.rect)
+        if "w" in corner:
+            rect.x0 = hit.x
+        else:
+            rect.x1 = hit.x
+        if "n" in corner:
+            rect.y0 = hit.y
+        else:
+            rect.y1 = hit.y
+        self._resize = (info, corner, rect.normalize())
+        self.view.redraw_overlays()
+
+    def end_resize(self) -> None:
+        if self._resize is None:
+            return
+        info, _corner, rect = self._resize
+        self._resize = None
+        self.view.redraw_overlays()
+        if abs(rect.width - info.rect.width) < 1 and abs(rect.height - info.rect.height) < 1:
+            return
+        self._run(lambda session: session.resize_annotation(info.page, info.xref, rect), info.page, select=info.xref)
 
     def _set_width(self, name: str) -> None:
         """``name``: el grosor tal como se muestra (o su clave interna, p. ej. "Grueso")."""
@@ -375,6 +510,9 @@ class ViewerAnnotations:
         page = session.document[page_index]
         style = text_style_at(page, rects[0])
         background, ink = visible_colors(page, rects[0])
+        text_color = ink or style.color
+        if contrast(text_color, background) < 3:  # que el campo siempre se lea
+            text_color, background = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
 
         def replace(new_text: str) -> None:
             self._run(lambda session: session.replace_text(page_index, rects, new_text), page_index)
@@ -385,7 +523,7 @@ class ViewerAnnotations:
             replace,
             initial=current,
             fontsize=style.fontsize,
-            color=ink or style.color,
+            color=text_color,
             background=tk_color(background),
             what="reemplazo de texto",
         )
@@ -432,12 +570,22 @@ class ViewerAnnotations:
                 x0 = min(start[0], bounds.width - DEFAULT_TEXT_BOX[0] - 4)
                 y0 = min(start[1], bounds.height - DEFAULT_TEXT_BOX[1] - 4)
                 rect = pymupdf.Rect(x0, y0, x0 + DEFAULT_TEXT_BOX[0], y0 + DEFAULT_TEXT_BOX[1])
-            style_now, size = self.style(), self.font_size
+            style_now, size, fill = self.style(), self.font_size, self.fill
 
             def add(text: str) -> None:
-                self._run(lambda session: session.add_free_text(page_index, rect, text, style_now, size), page_index)
+                self._run(
+                    lambda session: session.add_free_text(page_index, rect, text, style_now, size, fill), page_index
+                )
 
-            self.open_editor(page_index, rect, add, fontsize=size, color=style_now.color, what="cuadro de texto")
+            self.open_editor(
+                page_index,
+                rect,
+                add,
+                fontsize=size,
+                color=style_now.color,
+                background=tk_color(fill) if fill else "#FFFFFF",
+                what="cuadro de texto",
+            )
             return
         if kind in ("line", "arrow"):
             if abs(end[0] - start[0]) + abs(end[1] - start[1]) < 4:
@@ -484,10 +632,15 @@ class ViewerAnnotations:
                 actions.insert(0, tr("arrastre para mover"))
             if info.has_text:
                 actions.insert(0, tr("doble clic para editar"))
+            if info.kind in RECT_KINDS:
+                actions.insert(0, tr("esquinas para cambiar el tamaño"))
             if info.font_size:
                 actions.insert(0, tr("tamaño en Letra"))
                 self.font_size = info.font_size
                 self.size_menu.set(f"{info.font_size:g}")
+            if info.kind == "FreeText":
+                self.fill = info.fill
+                self._refresh_fill_button()
             selected = tr("Anotación seleccionada: {anotacion}", anotacion=info.label)
             self.page.selection_label.configure(text="  ·  ".join([selected, *actions]))
             self.page.log_debug("Anotacion seleccionada: %s", info.label, pagina=info.page + 1)
@@ -511,7 +664,8 @@ class ViewerAnnotations:
             )
 
         if info.kind == "FreeText":
-            rect, size, background = info.rect, info.font_size or DEFAULT_FONT_SIZE, "#FFFFFF"
+            background = tk_color(info.fill) if info.fill else "#FFFFFF"
+            rect, size = info.rect, info.font_size or DEFAULT_FONT_SIZE
         else:  # nota: el campo aparece junto al icono
             rect = pymupdf.Rect(
                 info.rect.x1 + 6, info.rect.y0, info.rect.x1 + 6 + NOTE_BOX[0], info.rect.y0 + NOTE_BOX[1]
@@ -592,14 +746,17 @@ class ViewerAnnotations:
             view.draw_rect(element.page, element.rect, pad=2, outline=style.themed(style.accent_color()), width=2)
         info = self.selected
         if info is not None and info.page in view.visible_pages():
-            view.draw_rect(
-                info.page,
-                info.rect,
-                pad=3,
-                outline=style.themed(style.accent_color()),
-                width=2,
-                dash=(5, 3),
-            )
+            accent = style.themed(style.accent_color())
+            resizing = self._resize is not None and self._resize[0].xref == info.xref
+            rect = self._resize[2] if resizing and self._resize is not None else info.rect
+            view.draw_rect(info.page, rect, pad=3, outline=accent, width=2, dash=(5, 3))
+            if info.kind in RECT_KINDS:
+                half = HANDLE_PX / 2
+                for x, y in ((rect.x0, rect.y0), (rect.x1, rect.y0), (rect.x0, rect.y1), (rect.x1, rect.y1)):
+                    cx, cy = view.page_to_canvas(info.page, x, y)
+                    view.canvas.create_rectangle(
+                        cx - half, cy - half, cx + half, cy + half, fill=accent, outline="white", tags="overlay"
+                    )
 
     # * Menu contextual -------------------------------------------------------
 

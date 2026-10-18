@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.2.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.3.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -36,7 +36,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 | Seccion | Que hace | Detalles |
 |---|---|---|
 | **Visor** | Abre, lee, **anota**, **edita** y **organiza** PDFs | **Nuevo PDF** en blanco o desde plantilla (renglones, cuadricula, carta, acta, factura; A4, Carta u Oficio). **Varios documentos en pestanas** como un navegador (mismo ancho, punto de cambios sin guardar, cerrar al pasar el cursor o con clic central, boton **+**; cada una con su pagina, zoom e historial), dos modos de lectura: **visor en toda la ventana** (Ctrl+Mayus+F, con las pestanas) y **pantalla completa** (F11), desplazamiento continuo virtualizado, miniaturas, marcadores, **barra de busqueda flotante** (boton Buscar o Ctrl+F: contador, anterior/siguiente, mayusculas y palabras completas) con lista de resultados, seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Boton **Ver**: **modo nocturno** (colores invertidos), **dos paginas** lado a lado (ambos se recuerdan), **comparar** con otra pestana u otro PDF en vista dividida (sincronizar paginas) e **imprimir** (Ctrl+P, dialogo de Windows, incluye los cambios sin guardar). Panel lateral con pestanas de iconos: Paginas, Marcadores, Buscar, Notas y **Firmas** (verifica las firmas digitales con pyHanko, sin internet, y permite firmar). Herramientas de edicion con el boton **Editar**. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco. Anotar: resaltar, subrayar y tachar texto, notas, texto libre (con **tamano de letra** y cuadro que se ajusta al texto), rectangulos, elipses, lineas, flechas y dibujo a mano, con 5 colores y 3 grosores; seleccionar, mover, recolorear, editar y eliminar anotaciones, y panel **Notas** con todas. **Editar el contenido**: reemplazar texto, texto fijo, imagen y **tapar** (redaccion real: borra lo que hay debajo). Barras que se adaptan al ancho (iconos solos, anotacion en dos filas). Deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
-| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos |
+| **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos; marca de agua y firma (visual o digital) del resultado con vista previa |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
 | **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, tamano ajustable (asas en las esquinas y control deslizante), paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
@@ -179,6 +179,7 @@ PDFManagement/
 │   │   ├── verify.py           # Verificar firmas digitales existentes (pyHanko, sin internet)
 │   │   ├── printing.py         # Imprimir en Windows (ctypes PrintDlgW + GDI, sin pywin32)
 │   │   ├── create.py           # Documentos nuevos: en blanco o desde plantilla (dibujadas con PyMuPDF)
+│   │   ├── finish.py           # Terminaciones: marca de agua y firma de un PDF ya generado (Unir) y su vista previa
 │   │   └── editing/            # Base del visor/editor (sin GUI)
 │   │       ├── engine.py       # Unico modulo que toca internos de PyMuPDF (7 comportamientos rodeados)
 │   │       ├── session.py      # DocumentSession: documento abierto, ediciones, Guardar como
@@ -198,6 +199,7 @@ PDFManagement/
 │       ├── popup_menu.py       # Menus emergentes con el estilo de los desplegables (Ver, contextuales, tamano)
 │       ├── ctk_fixes.py        # Ajuste de rendimiento de CustomTkinter (barras sin repintar toda la ventana)
 │       ├── new_document.py     # Dialogo Nuevo PDF: plantillas con vista previa, tamano, orientacion
+│       ├── finish_controls.py  # Controles compartidos: marca de agua, firma y vista previa (Herramientas, Unir)
 │       ├── style.py            # Tipografia, espaciado y colores
 │       ├── icons.py            # Iconos desde la fuente de Windows
 │       ├── widgets.py          # Card, FileField, PasswordField, ToolTip...
@@ -212,6 +214,7 @@ PDFManagement/
 │       │   ├── annotation_tools.py  # Gestos de anotacion: marcar texto, arrastrar formas, trazo, nota, seleccionar/mover
 │       │   ├── element_tool.py # Seleccionar: anotaciones, lineas de texto e imagenes de la pagina
 │       │   ├── inline_editor.py  # Campo de texto sobre la pagina (en lugar de cuadros de dialogo)
+│       │   ├── wheel.py        # Rueda y panel tactil (<TouchpadScroll> de Tk 9) en pasos enteros
 │       │   ├── find_bar.py     # FindBar: barra de busqueda flotante (como en los navegadores)
 │       │   ├── tab_strip.py    # TabStrip: pestanas de documentos con aspecto de navegador
 │       │   ├── icon_tabs.py    # IconTabs: pestanas con icono del panel lateral
@@ -326,10 +329,11 @@ Cualquier otra excepcion se considera un **error inesperado**: se registra con t
 | `StatusBar` (`status_bar.py`) | Estados `idle` / `busy` / `success` / `error` con indicador de color, tareas en cola, hora de finalizacion, tooltip dinamico y acciones sobre el ultimo archivo |
 | `AppearanceScheduler` (`appearance.py`) | Al cambiar de tema redibuja primero lo que se ve, con el pintado congelado, y difiere por lotes las secciones ocultas y las filas fuera de vista; `flush_page()` actualiza una seccion pendiente antes de mostrarla |
 | `dropdown_menu()`, `set_dropdown_values()` (`dropdown.py`) | `CTkOptionMenu` con lista desplazable: muestra como mucho 5 opciones (`MAX_VISIBLE`) y las demas con una barra de desplazamiento con colores visibles (parametros `height`, `scrollbar_button_color` y `scrollbar_button_hover_color` del componente de `_vendor`), mide lo mismo que el control a cualquier escala, resalta la opcion actual, se abre hacia arriba si no cabe y se cierra con clic fuera, Escape o al mover la ventana. Se usa en todos los desplegables (recientes, zoom, tamano de letra, firmas guardadas y Ajustes) |
-| `PopupMenu` (`popup_menu.py`) | Menu emergente con el mismo aspecto que las listas desplegables; admite el subconjunto de `tk.Menu` que usa la app (`add_command`, `add_checkbutton`, `add_separator`, `add_cascade`, `tk_popup`). Se cierra al elegir, con Esc, al hacer clic fuera, al mover la ventana o al cambiar de aplicacion. Lo usan el menu **Ver**, los menus contextuales del Visor y el boton **Tamano** del menu lateral |
+| `PopupMenu` (`popup_menu.py`) | Menu emergente con el mismo aspecto que las listas desplegables; admite el subconjunto de `tk.Menu` que usa la app (`add_command`, `add_checkbutton`, `add_separator`, `add_cascade`, `tk_popup`). Se cierra al elegir, con Esc, al hacer clic fuera, al mover la ventana o al cambiar de aplicacion. Lo usan el menu **Ver**, los menus contextuales del Visor y el selector de **Fondo** |
 | `NewDocumentDialog`, `ask_new_document()` (`new_document.py`) | Dialogo **Nuevo PDF**: tarjetas de plantilla con vista previa real, tamano, orientacion y paginas; devuelve un `core.create.NewDocument` |
 | `InlineEditor` (`viewer/inline_editor.py`) | Campo de texto dibujado en el lienzo del visor, con la letra al tamano real de la pagina: notas, cuadros de texto, texto fijo, reemplazar texto y editar anotaciones se escriben en su lugar. Enter aplica, Mayus+Enter agrega una linea, Esc cancela, clic fuera aplica; se reubica al cambiar el zoom |
 | `ElementTool`, `Selection` (`viewer/element_tool.py`) | Herramienta **Seleccionar**: marca al pasar el cursor y selecciona anotaciones (primero), lineas de texto o imagenes (`DocumentSession.elements`); arrastrar mueve anotaciones, doble clic edita, Supr elimina (`erase_text`, `remove_image`) |
+| `WatermarkControls`, `SignatureControls`, `PreviewPane` (`finish_controls.py`) | Opciones de marca de agua y de firma (visual de la biblioteca o digital con certificado, posicion, pagina y tamano) y la vista previa de una pagina; las mismas en Herramientas y Unir |
 | `set_label_image()` (`widgets.py`) | Cambia o quita la imagen de un `CTkLabel` sin dejarla pegada ni referenciar imagenes ya liberadas (`image "pyimageN" does not exist`) |
 | `FileField`, `PasswordField`, `Card`, `ToolTip`, `enable_file_drop` (`widgets.py`) | Componentes reutilizables y consistentes |
 | `ask_password`, `ask_certificate_password`, `HelpWindow`, `SignaturePad` (`dialogs.py`) | Ventanas modales y secundarias. `HelpWindow` muestra la guia con indice lateral, bloques de codigo con boton Copiar y puede abrirse en una seccion (`open_help(section)`) |
@@ -603,6 +607,8 @@ Las **contrasenas nunca se registran**: los valores cuya clave parece una contra
 - **Edicion de contenido con redacciones.** Reemplazar texto y Tapar usan redacciones de MuPDF (`apply_redactions`): lo tapado desaparece del archivo, no queda debajo de un rectangulo. Reemplazar conserva fondos e imagenes y escribe con Helvetica porque la fuente original suele venir incrustada y recortada. Dentro del historial solo se puede usar Helvetica (alfabeto latino); las herramientas de archivo (`tools`), que no usan historial, recurren a Arial para otros alfabetos.
 - **Transiciones con cortina.** Reacomodar toda la ventana (entrar o salir de pantalla completa, cambiar el tamano de la interfaz) le cuesta a Tk 0,3-0,6 s y se pinta por partes. `MainWindow.transition` cubre el monitor con una captura de como se ve, aplica el cambio debajo, espera a que todo quede dibujado (paginas del visor incluidas) y desvanece la captura: un fundido cruzado sin estados intermedios. Al cerrar, la ventana se desvanece, se oculta y el proceso termina sin destruir los widgets uno por uno.
 - **Colores tal como se ven.** `content.visible_colors` toma el fondo y el color del texto de la pagina dibujada. Reemplazar texto usa el color visible si el declarado no contrasta con el fondo (texto claro sobre una franja oscura declarado negro quedaba como un bloque negro), y Tapar cubre con el color del fondo en vez de negro.
+- **Cuadros de texto de otros programas.** Muchos guardan el fondo de un cuadro de texto como `/C [0]` (negro) aunque lo dibujan transparente; al redibujarlo, PyMuPDF usaba ese negro. `annotations.keep_visible_background` mira la apariencia actual y corrige `/C` antes de editar, mover el tamano o cambiar el color. El fondo de la zona de texto se toma como el color mas comun del area (no su contorno, que en una celda ajustada es el borde).
+- **Rueda y panel tactil.** Tk 9 entrega la rueda al widget bajo el cursor; los paneles tactiles mandan `<TouchpadScroll>` con pasos pequenos, que `viewer/wheel.py` acumula (visores y miniaturas) y `ctk_fixes` agrega a las secciones desplazables. Los menus emergentes se cierran todos juntos (tambien al cambiar de aplicacion con el foco en un submenu).
 - **Pantalla completa sin "siempre encima".** Tk marca la ventana como `WS_EX_TOPMOST` al entrar o salir de pantalla completa: las demas aplicaciones quedaban detras (Alt+Tab) y las listas desplegables se abrian debajo. `system.clear_topmost` lo quita (con `SetWindowPos` y tipos explicitos: `HWND_NOTOPMOST` es -2) y los desplegables se abren siempre por encima. `ctk_fixes` evita que cada barra de desplazamiento repinte toda la ventana: los cambios de tamano pasaron de ~3 s a ~1 s, y la cortina de la transicion se atenua en otro hilo mientras tanto.
 - **Impresion sin dependencias.** `core/printing.py` llama a `PrintDlgW` con `ctypes` y dibuja con GDI mediante `PIL.ImageWin`, sin pywin32. Imprime el documento en memoria, asi que incluye los cambios sin guardar.
 - **Verificacion de firmas local.** `core/verify.py` usa pyHanko con `allow_fetching=False`: sin OCSP ni CRL, coherente con "sin internet"; un certificado sin raiz de confianza en el equipo aparece como "Identidad no verificada".
@@ -640,7 +646,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 265 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 277 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -666,8 +672,10 @@ Hay 265 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 | `tests/test_i18n.py` | Respaldo al espanol y marcadores, reglas de plural (ingles y ruso), catalogos completos y con marcadores coherentes, cambio de idioma y que los textos de la interfaz lleven tildes |
 | `tests/test_gui_tools.py` | Seccion Herramientas registrada; numerar, dividir (carpeta y partes), comprimir y marca de agua desde la interfaz (requiere pantalla) |
 | `tests/test_create.py` | Documento nuevo: cada plantilla, tamano y orientacion, rotulos en cirilico legibles, pedidos invalidos |
-| `tests/test_gui_v51.py` | Nuevo PDF (pestana temporal, no va a Recientes, se borra al cerrar, Guardar como en la carpeta de salida), dialogo y validacion, `PopupMenu` (opciones, marcas, submenus, deshabilitadas), menu Ver y tamano de interfaz temporal que no se guarda (requiere pantalla) |
+| `tests/test_gui_v51.py` | Nuevo PDF (pestana temporal, no va a Recientes, se borra al cerrar, Guardar como en la carpeta de salida), dialogo y validacion, `PopupMenu` (opciones, marcas, submenus, deshabilitadas), menu Ver y submenus que se cierran al elegir o al cambiar de aplicacion (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` (v5.2) | Ademas: Seleccionar (activa al pulsar Editar; elimina una linea, quita una imagen, prioriza anotaciones), doble clic edita una linea en su lugar, texto escrito sobre la pagina |
+| `tests/test_finish.py` | Marca de agua y firma visual (ultima pagina o todas), firma digital valida tras la marca, vista previa sin modificar el archivo, faltantes |
+| `tests/test_gui_merge.py` | Unir con una sola barra de desplazamiento, vista previa, marca de agua y firma en el resultado, aviso sin certificado (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` | Dos paginas, modo nocturno, comparar con otra pestana, imprimir el documento en memoria, panel Firmas, reemplazar texto seleccionado, tapar, texto fijo e imagen desde la barra (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -735,8 +743,9 @@ flowchart LR
 - [x] Fase 4: edicion de contenido en el Visor (reemplazar texto, texto fijo, imagen y tapar con redaccion real).
 - [x] Seccion **Herramientas**: comprimir, dividir, numerar paginas y marca de agua.
 - [x] Visor: modo nocturno, dos paginas, comparar documentos, imprimir y panel **Firmas** (verificar firmas digitales existentes).
-- [x] v5.1: **Nuevo PDF** en blanco o desde plantilla; menus con el estilo de la app; fundido cruzado al cambiar de modo de lectura; cierre rapido; tamano de interfaz temporal en el menu lateral.
-- [x] v5.2: texto escrito sobre la pagina (sin dialogos); herramienta Seleccionar; Tapar y Reemplazar con los colores visibles; Alt+Tab y desplegables correctos tras pantalla completa; transiciones mas rapidas; control - tamano +; texto negro en modo claro; vista previa y orientacion de la marca de agua.
+- [x] v5.1: **Nuevo PDF** en blanco o desde plantilla; menus con el estilo de la app; fundido cruzado al cambiar de modo de lectura; cierre rapido.
+- [x] v5.2: texto escrito sobre la pagina (sin dialogos); herramienta Seleccionar; Tapar y Reemplazar con los colores visibles; Alt+Tab y desplegables correctos tras pantalla completa; transiciones mas rapidas; texto negro en modo claro; vista previa y orientacion de la marca de agua.
+- [x] v5.3: cuadros de texto sin fondo negro al editarlos; cambiar su tamano desde las esquinas y su color de fondo; submenus que ya no quedan abiertos; rueda y panel tactil en todos los visores; vista previa de la marca de agua mas grande; Unir con marca de agua, firma y vista previa. Se quito el tamano de interfaz del menu lateral (2,4 s de espera: CustomTkinter redibuja todos los controles); se cambia en Ajustes.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

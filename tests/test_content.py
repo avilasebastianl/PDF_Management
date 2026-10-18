@@ -143,3 +143,22 @@ def test_redact_covers_with_the_background_color(tmp_path):
     pixmap = page.get_pixmap(dpi=72)
     red, green, blue = pixmap.pixel(int(old.x0 + 10), int((old.y0 + old.y1) / 2))
     assert blue > red and max(red, green, blue) < 90, "queda del color de la franja, no un bloque negro"
+
+
+def test_text_inside_a_tight_bordered_cell_keeps_its_color(tmp_path):
+    """El borde negro de una celda ajustada no es el fondo (antes: texto blanco sobre blanco)."""
+    path = tmp_path / "celda.pdf"
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((102, 116), "Total a pagar", fontsize=12)
+    cell = page.search_for("Total a pagar")[0]
+    page.draw_rect(cell + (-2, -2, 2, 2), color=(0, 0, 0), width=1.2)
+    document.save(path)
+    document.close()
+    session = DocumentSession.open(path)
+    [hit] = page_search(session.document[0], "Total a pagar")
+    background, ink = content.visible_colors(session.document[0], hit)
+    assert min(background) > 0.9 and ink is not None and max(ink) < 0.3
+    session.replace_text(0, [hit], "Total nuevo")
+    [span] = [s for b in session.document[0].get_text("dict")["blocks"] for line in b["lines"] for s in line["spans"]]
+    assert span["color"] == 0

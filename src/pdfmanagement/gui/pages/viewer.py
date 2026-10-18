@@ -307,6 +307,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
             on_select=lambda info: self.annotations.select(info),
             on_move=lambda info, dx, dy: self.annotations.move(info, dx, dy),
             on_edit=lambda info: self.annotations.edit_text(info),
+            resizer=lambda: self.annotations,
         )
         self.hand_tool = HandTool()
         self.view.set_tool(self.text_tool)

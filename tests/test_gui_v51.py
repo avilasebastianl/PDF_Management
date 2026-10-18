@@ -104,30 +104,24 @@ def test_view_menu_uses_the_app_style(viewer, gui_app, tmp_path):
     viewer.set_night_mode(False)
 
 
-def test_temporary_interface_size_is_not_saved(gui_app):
-    saved = gui_app.settings.ui_scaling
-    gui_app.preview_ui_scaling(1.1)
-    try:
-        assert gui_app.ui_scaling == 1.1 and gui_app.settings.ui_scaling == saved
-        assert "110" in gui_app.scaling_label.cget("text")
-    finally:
-        gui_app.preview_ui_scaling(saved)
-    assert gui_app.ui_scaling == saved
+def test_submenu_closes_when_a_color_is_chosen(viewer, gui_app, tmp_path):
+    """Antes el submenu de colores podia quedar abierto encima de todo tras elegir un color."""
+    import pymupdf
 
-
-def test_minus_and_plus_change_the_size_after_a_pause(gui_app):
-    saved = gui_app.settings.ui_scaling
-    gui_app.step_ui_scaling(1)
-    gui_app.step_ui_scaling(1)
-    assert gui_app.ui_scaling == saved, "aun no se aplica: se espera a que deje de pulsar"
-    assert "125" in gui_app.scaling_label.cget("text")
-    gui_app._apply_pending_scaling()
-    try:
-        assert gui_app.ui_scaling == 1.25 and gui_app.settings.ui_scaling == saved
-    finally:
-        gui_app.preview_ui_scaling(saved)
-    for _ in range(10):
-        gui_app.step_ui_scaling(-1)
-    assert gui_app.scaling_minus.cget("state") == "disabled", "en el minimo, - queda desactivado"
-    gui_app._apply_pending_scaling()
-    gui_app.preview_ui_scaling(saved)
+    assert viewer.open_file(make_pdf(tmp_path / "doc.pdf", 1))
+    viewer.session.add_shape(0, "rect", pymupdf.Rect(100, 100, 200, 160), viewer.annotations.style())
+    viewer.annotations.reset()
+    info = viewer.session.annotations(0)[0]
+    menu = viewer._page_menu(from_view=True, annotation=info)
+    menu.tk_popup(viewer.winfo_rootx() + 50, viewer.winfo_rooty() + 50)
+    colors = next(item for item in menu.items if item.kind == "cascade").submenu
+    colors.tk_popup(viewer.winfo_rootx() + 260, viewer.winfo_rooty() + 50)
+    pump(gui_app, timeout=0.1)
+    assert menu.is_open and colors.is_open
+    colors.invoke(colors.labels()[1])
+    assert not colors.is_open and not menu.is_open and not PopupMenu._open
+    menu.tk_popup(viewer.winfo_rootx() + 50, viewer.winfo_rooty() + 50)
+    colors.tk_popup(viewer.winfo_rootx() + 260, viewer.winfo_rooty() + 50)
+    PopupMenu._root = None  # como si otra aplicacion tuviera el foco
+    PopupMenu._close_if_inactive()
+    assert not PopupMenu._open, "al cambiar de aplicacion se cierran todos los menus"

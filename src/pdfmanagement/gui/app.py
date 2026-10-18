@@ -20,7 +20,7 @@ from PIL import ImageGrab, ImageTk
 from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
-from ..config import UI_SCALING_OPTIONS, Settings
+from ..config import Settings
 from ..i18n import tr
 from . import ctk_fixes, icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
@@ -30,11 +30,10 @@ from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
 from .pages.registry import page_label
-from .popup_menu import PopupMenu
 from .status_bar import StatusBar
 from .system import open_path
 from .tasks import TaskRunner
-from .widgets import ToolTip, hide, monitor_work_area, set_enabled, show
+from .widgets import ToolTip, hide, monitor_work_area, show
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,6 @@ RESIZE_LOG_DELAY_MS = 600  # se registra el tamano final, no cada paso del arras
 FADE_IN_MS = 240  # la cortina con la imagen anterior se desvanece en este tiempo
 CLOSE_FADE_MS = 140
 FADE_FRAME_MS = 8
-SCALING_DELAY_MS = 450  # tras el ultimo clic en - o +, se aplica el tamano
 
 # Nombres legibles de las preferencias para el registro de cambios.
 SETTING_LABELS = {
@@ -87,7 +85,7 @@ class MainWindow:
         self._closing = False
         self.animations = True  # las pruebas las desactivan (fundidos instantaneos)
         self._in_transition = False
-        self.ui_scaling = settings.ui_scaling  # tamano actual; puede diferir del guardado (cambio temporal)
+        self.ui_scaling = settings.ui_scaling  # tamano aplicado ahora (se cambia en Ajustes)
         self._settings_snapshot = asdict(settings)
         if settings.debug_logging:
             logging_setup.set_debug(True)
@@ -240,59 +238,10 @@ class MainWindow:
         self.theme_button.grid(row=0, column=0, sticky="ew")
         ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
 
-        # Tamano de la interfaz: "-  Tamano 100 %  +" (con el menu contraido, un icono con la lista).
-        def scaling_tip() -> str:
-            return tr(
-                "Tamaño de la interfaz solo por ahora: al reiniciar vuelve el de Ajustes ({predeterminado} %)",
-                predeterminado=round(self.settings.ui_scaling * 100),
-            )
-
-        self.scaling_row = ctk.CTkFrame(footer, fg_color="transparent")
-        self.scaling_row.grid_columnconfigure(1, weight=1)
-        step_style = {"width": 32, "height": 32, "corner_radius": 8, "fg_color": "transparent", "text": ""}
-        self.scaling_minus = ctk.CTkButton(
-            self.scaling_row,
-            image=icon("minus", 16),
-            hover_color=style.HOVER,
-            command=lambda: self.step_ui_scaling(-1),
-            **step_style,
-        )
-        self.scaling_minus.icon_key = "minus"  # para set_enabled (atenua el icono)
-        self.scaling_minus.grid(row=0, column=0)
-        ToolTip(self.scaling_minus, tr("Reducir el tamaño de la interfaz"))
-        self.scaling_label = ctk.CTkButton(
-            self.scaling_row,
-            text="",
-            height=32,
-            corner_radius=8,
-            fg_color="transparent",
-            hover_color=style.HOVER,
-            text_color=style.TEXT,
-            font=style.fonts().body,
-            command=self.show_scaling_menu,
-        )
-        self.scaling_label.grid(row=0, column=1, sticky="ew", padx=2)
-        ToolTip(self.scaling_label, scaling_tip)
-        self.scaling_plus = ctk.CTkButton(
-            self.scaling_row,
-            image=icon("add", 16),
-            hover_color=style.HOVER,
-            command=lambda: self.step_ui_scaling(1),
-            **step_style,
-        )
-        self.scaling_plus.icon_key = "add"
-        self.scaling_plus.grid(row=0, column=2)
-        ToolTip(self.scaling_plus, tr("Aumentar el tamaño de la interfaz"))
-        self.scaling_button = ctk.CTkButton(
-            footer, text="", image=icon("zoom_in", 18), command=self.show_scaling_menu, **footer_style
-        )
-        ToolTip(self.scaling_button, scaling_tip)
-        self._pending_scaling: float | None = None
-        self._scaling_job: str | None = None
         self.help_button = ctk.CTkButton(
             footer, text=f"  {tr('Ayuda')}", image=icon("help", 18), command=self.open_help, **footer_style
         )
-        self.help_button.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        self.help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         ToolTip(self.help_button, tr("Guía de uso (F1)"))
         self._apply_sidebar_mode()
         self._refresh_nav()
@@ -414,7 +363,6 @@ class MainWindow:
             self.nav_buttons[page_class.name].configure(text="" if collapsed else f"  {page_label(page_class.name)}")
         self.help_button.configure(text="" if collapsed else f"  {tr('Ayuda')}")
         self._refresh_theme_button()
-        self._refresh_scaling_button()
 
     def _build_content(self) -> None:
         # Contenido y barra de estado van juntos: al contraer el menu se desplazan como un bloque.
@@ -574,72 +522,11 @@ class MainWindow:
         self.save_settings()
         self.transition(lambda: self._apply_scaling(scaling))
 
-    def preview_ui_scaling(self, scaling: float) -> None:
-        """Tamano de la interfaz solo para esta sesion (boton del menu lateral); no se guarda."""
-        if scaling == self.ui_scaling:
-            return
-        log_event("Apariencia", "Tamano temporal de la interfaz: %d%%", round(scaling * 100), guardado=False)
-        self.transition(lambda: self._apply_scaling(scaling))
-
     def _apply_scaling(self, scaling: float) -> None:
         self.ui_scaling = scaling
         _prune_scaling_callbacks()
         ctk.set_widget_scaling(scaling)
         self._place_main()
-        self._refresh_scaling_button()
-
-    def show_scaling_menu(self) -> None:
-        menu = PopupMenu(self.root)
-        for option in UI_SCALING_OPTIONS:
-            menu.add_checkbutton(
-                label=f"{round(option * 100)} %",
-                variable=tk.BooleanVar(value=option == self.ui_scaling),
-                command=lambda value=option: self.preview_ui_scaling(value),  # type: ignore[misc]
-            )
-        if self.ui_scaling != self.settings.ui_scaling:
-            menu.add_separator()
-            menu.add_command(
-                label=tr("Volver al predeterminado ({valor} %)", valor=round(self.settings.ui_scaling * 100)),
-                command=lambda: self.preview_ui_scaling(self.settings.ui_scaling),
-            )
-        button = self.scaling_button
-        menu.tk_popup(button.winfo_rootx() + button.winfo_width() + 6, button.winfo_rooty())
-
-    def step_ui_scaling(self, direction: int) -> None:
-        """Botones - y +: el numero cambia al instante y el tamano se aplica al dejar de pulsar."""
-        current = self._pending_scaling if self._pending_scaling is not None else self.ui_scaling
-        options = list(UI_SCALING_OPTIONS)
-        index = min(range(len(options)), key=lambda i: abs(options[i] - current))
-        target = options[max(0, min(index + direction, len(options) - 1))]
-        if target == current:
-            return
-        self._pending_scaling = target
-        self._refresh_scaling_button()
-        if self._scaling_job is not None:
-            self.root.after_cancel(self._scaling_job)
-        self._scaling_job = self.root.after(SCALING_DELAY_MS, self._apply_pending_scaling)
-
-    def _apply_pending_scaling(self) -> None:
-        self._scaling_job = None
-        target, self._pending_scaling = self._pending_scaling, None
-        if target is not None:
-            self.preview_ui_scaling(target)
-        self._refresh_scaling_button()
-
-    def _refresh_scaling_button(self) -> None:
-        shown = self._pending_scaling if self._pending_scaling is not None else self.ui_scaling
-        collapsed = self.settings.sidebar_collapsed
-        if collapsed:
-            self.scaling_row.grid_remove()
-            self.scaling_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        else:
-            self.scaling_button.grid_remove()
-            self.scaling_row.grid(row=1, column=0, sticky="ew", pady=(2, 0))
-        text = tr("Tamaño {valor} %", valor=round(shown * 100))
-        if self.scaling_label.cget("text") != text:
-            self.scaling_label.configure(text=text)
-        set_enabled(self.scaling_minus, shown > UI_SCALING_OPTIONS[0])
-        set_enabled(self.scaling_plus, shown < UI_SCALING_OPTIONS[-1])
 
     # * Fundidos ----------------------------------------------------------------
 

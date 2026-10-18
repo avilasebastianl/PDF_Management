@@ -97,6 +97,7 @@ class AnnotationInfo:
     content: str
     color: Color | None
     font_size: float | None = None  # solo texto libre
+    fill: Color | None = None  # fondo del texto libre (None: transparente)
 
     @property
     def label(self) -> str:
@@ -132,6 +133,7 @@ def list_annotations(page: pymupdf.Page, index: int) -> list[AnnotationInfo]:
                 content=(annot.info.get("content") or "").strip(),
                 color=_free_text_color(annot) or color if kind == "FreeText" else color,
                 font_size=font_size(annot) if kind == "FreeText" else None,
+                fill=free_text_fill(annot) if kind == "FreeText" else None,
             )
         )
     return result
@@ -167,7 +169,12 @@ def add_note(page: pymupdf.Page, point: Point, text: str, style: AnnotationStyle
 
 
 def add_free_text(
-    page: pymupdf.Page, rect: pymupdf.Rect, text: str, style: AnnotationStyle, fontsize: float = DEFAULT_FONT_SIZE
+    page: pymupdf.Page,
+    rect: pymupdf.Rect,
+    text: str,
+    style: AnnotationStyle,
+    fontsize: float = DEFAULT_FONT_SIZE,
+    fill: Color | None = None,
 ) -> int:
     """
     Texto escrito sobre la pagina, derecho aunque la pagina este girada. El
@@ -183,6 +190,7 @@ def add_free_text(
         fontsize=fontsize,
         fontname="helv",
         text_color=style.color,
+        fill_color=fill,
         rotate=page.rotation,
     )
     if style.opacity < 1:
@@ -253,6 +261,7 @@ def delete(page: pymupdf.Page, xref: int) -> None:
 def set_color(page: pymupdf.Page, xref: int, color: Color) -> None:
     annot = find(page, xref)
     if annot.type[1] == "FreeText":
+        keep_visible_background(annot)
         annot.update(text_color=color)
     else:
         annot.set_colors(stroke=color)
@@ -264,6 +273,8 @@ def set_text(page: pymupdf.Page, xref: int, text: str) -> None:
     if annot.type[1] == "FreeText" and not text.strip():
         raise InvalidInputError(tr("El texto no puede quedar vacío; elimine la anotación si ya no la necesita."))
     color = _free_text_color(annot)
+    if annot.type[1] == "FreeText":
+        keep_visible_background(annot)  # antes de set_info, que ya redibuja el cuadro
     annot.set_info(content=text)
     if annot.type[1] == "FreeText":
         _refit(page, annot, text, font_size(annot) or DEFAULT_FONT_SIZE)
@@ -278,8 +289,95 @@ def set_font_size(page: pymupdf.Page, xref: int, size: float) -> None:
     if not 4 <= size <= 200:
         raise InvalidInputError(tr("El tamaño de letra debe estar entre 4 y 200 puntos."))
     color = _free_text_color(annot)
+    keep_visible_background(annot)
     _refit(page, annot, annot.info.get("content") or "", size)
     annot.update(fontsize=size, text_color=color)
+
+
+MIN_SIZE = (16.0, 10.0)  # ancho y alto minimos al cambiar el tamano (puntos)
+
+
+def resize(page: pymupdf.Page, xref: int, rect: pymupdf.Rect) -> None:
+    """Cambia el tamano de un cuadro de texto o una forma a ``rect`` (coordenadas visibles)."""
+    annot = find(page, xref)
+    kind = annot.type[1]
+    if kind not in RECT_KINDS:
+        raise InvalidInputError(tr("Este tipo de anotación no se puede cambiar de tamaño."))
+    rect = pymupdf.Rect(rect).normalize()
+    if rect.width < MIN_SIZE[0] or rect.height < MIN_SIZE[1]:
+        raise InvalidInputError(tr("El cuadro es demasiado pequeño."))
+    target = (rect * page.derotation_matrix).normalize()
+    if kind in BORDERED_KINDS:
+        half = (annot.border.get("width") or 0) / 2
+        target = target + (half, half, -half, -half)
+    if kind == "FreeText":
+        keep_visible_background(annot)
+        color = _free_text_color(annot)
+        annot.set_rect(target)
+        annot.update(text_color=color)  # el texto se reacomoda al nuevo ancho
+    else:
+        annot.set_rect(target)
+        annot.update()
+
+
+def set_fill(page: pymupdf.Page, xref: int, fill: Color | None) -> None:
+    """Color de fondo de un cuadro de texto (``None``: transparente)."""
+    annot = find(page, xref)
+    if annot.type[1] != "FreeText":
+        raise InvalidInputError(tr("Solo los cuadros de texto tienen color de fondo."))
+    color = _free_text_color(annot)
+    document = annot.parent.parent
+    if fill is None:
+        document.xref_set_key(annot.xref, "C", "null")
+        annot.update(text_color=color)
+    else:
+        annot.update(text_color=color, fill_color=fill)
+
+
+def free_text_fill(annot: pymupdf.Annot) -> Color | None:
+    """Fondo de un cuadro de texto segun su /C (RGB); ``None`` si es transparente."""
+    kind, value = annot.parent.parent.xref_get_key(annot.xref, "C")
+    if kind != "array":
+        return None
+    try:
+        numbers = [float(number) for number in value.strip("[]").split()]
+    except ValueError:
+        return None
+    if len(numbers) == 3:
+        return numbers[0], numbers[1], numbers[2]
+    if len(numbers) == 1:
+        return numbers[0], numbers[0], numbers[0]
+    return None
+
+
+def keep_visible_background(annot: pymupdf.Annot) -> None:
+    """
+    Antes de redibujar un cuadro de texto hecho por otro programa: deja su
+    fondo como se ve, no como lo declara su /C.
+
+    Muchos programas guardan ``/C [0]`` (gris 0 = negro) pero dibujan el cuadro
+    transparente o blanco. PyMuPDF, al redibujarlo, usaba ese negro: el cuadro
+    editado quedaba negro con letra negra. Se mira la apariencia actual y se
+    corrige /C (transparente o el color que se ve).
+    """
+    document = annot.parent.parent
+    if document.xref_get_key(annot.xref, "C")[0] != "array":
+        return
+    try:
+        pixmap = annot.get_pixmap(alpha=True)
+    except (RuntimeError, ValueError):
+        return
+    width, height = pixmap.width, pixmap.height
+    if width < 6 or height < 6:
+        return
+    # Esquinas por dentro del borde: el texto suele estar arriba a la izquierda.
+    samples = [pixmap.pixel(x, y) for x, y in ((width - 3, height - 3), (3, height - 3), (width - 3, 3))]
+    opaque = [sample for sample in samples if len(sample) == 4 and sample[3] > 128]
+    if len(opaque) < 2:
+        document.xref_set_key(annot.xref, "C", "null")
+        return
+    red, green, blue = (sum(sample[channel] for sample in opaque) / len(opaque) / 255 for channel in range(3))
+    document.xref_set_key(annot.xref, "C", f"[{red:.3f} {green:.3f} {blue:.3f}]")
 
 
 def font_size(annot: pymupdf.Annot) -> float | None:

@@ -324,6 +324,19 @@ def watermark_preview(
         document.close()
 
 
+def stamp_watermark(
+    page: pymupdf.Page,
+    text: str,
+    fontsize: float = 60,
+    opacity: float = 0.15,
+    angle: float = 45,
+    behind: bool = False,
+    color: Color = (0.5, 0.5, 0.5),
+) -> None:
+    """Dibuja la marca de agua en ``page`` (para vistas previas y otras secciones)."""
+    _stamp_watermark(page, text, fontsize, opacity, angle, color, behind)
+
+
 def _stamp_watermark(
     page: pymupdf.Page, text: str, fontsize: float, opacity: float, angle: float, color: Color, behind: bool
 ) -> None:

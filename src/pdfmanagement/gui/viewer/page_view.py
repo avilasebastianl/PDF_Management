@@ -33,6 +33,7 @@ from ..events import debug_event
 from ..icons import GLYPHS, render_glyph
 from ..widgets import enable_file_drop, hide, show
 from .render import RenderScheduler, scale_key
+from .wheel import WheelSteps, precise_deltas
 
 MARGIN = 24
 GAP = 16
@@ -138,6 +139,8 @@ class PageView(ctk.CTkFrame):
         canvas = self.canvas
         canvas.bind("<Configure>", self._on_resize)
         canvas.bind("<MouseWheel>", self._on_wheel)
+        canvas.bind("<TouchpadScroll>", self._on_touchpad)
+        self._wheel = WheelSteps()
         canvas.bind("<ButtonPress-1>", lambda e: self._dispatch("press", e))
         canvas.bind("<B1-Motion>", lambda e: self._dispatch("drag", e))
         canvas.bind("<ButtonRelease-1>", lambda e: self._dispatch("release", e))
@@ -718,13 +721,36 @@ class PageView(ctk.CTkFrame):
         if not self.sizes:
             return
         if event.state & 0x0004:  # Ctrl: zoom con el punto bajo el cursor fijo
-            (self.zoom_in if event.delta > 0 else self.zoom_out)(anchor=(event.x, event.y))
+            self._zoom_steps(self._wheel.zoom(event.delta), event)
         elif event.state & 0x0001:  # Shift: horizontal
-            self.canvas.xview_scroll(-2 if event.delta > 0 else 2, "units")
-        elif self.continuous:
-            self._scroll_units(-3 if event.delta > 0 else 3)
+            self._scroll_by(self._wheel.wheel(event.delta), 0)
         else:
-            self.canvas.yview_scroll(-3 if event.delta > 0 else 3, "units")
+            self._scroll_by(0, self._wheel.wheel(event.delta))
+
+    def _on_touchpad(self, event) -> None:
+        """Panel tactil o rueda de alta resolucion (pasos pequenos, en dos ejes)."""
+        if not self.sizes:
+            return
+        if event.state & 0x0004:
+            _dx, dy = precise_deltas(self.canvas, event.delta)
+            self._zoom_steps(self._wheel.zoom(dy), event)
+            return
+        dx, dy = self._wheel.touchpad(self.canvas, event.delta)
+        if event.state & 0x0001:
+            dx, dy = dx + dy, 0
+        self._scroll_by(dx, dy)
+
+    def _scroll_by(self, columns: int, rows: int) -> None:
+        if columns:
+            self.canvas.xview_scroll(columns, "units")
+        if rows:
+            self.canvas.yview_scroll(rows, "units")
+        if columns or rows:
+            self._schedule_update()
+
+    def _zoom_steps(self, steps: int, event) -> None:
+        for _ in range(abs(steps)):
+            (self.zoom_in if steps > 0 else self.zoom_out)(anchor=(event.x, event.y))
 
     def _dispatch(self, kind: str, event) -> None:
         if kind == "press":

@@ -39,7 +39,7 @@ Read any PDF without leaving the app. It is the first section and the one that o
   - **Signatures**: the document's digital signatures and their status (see **Digital signatures in the Viewer**).
 - **Text and Hand**: with **Text**, drag over the text to select it (**Ctrl+C** copies and **Ctrl+A** selects the page); with **Hand**, drag to move the page. The middle mouse button also scrolls.
 - **Zoom**: **Ctrl + wheel** (centered on the cursor), **Ctrl++** / **Ctrl+-**, **Ctrl+0** to fit the width, or the zoom list (fit width, fit page, 50-400%).
-- **Navigate**: wheel, **PgUp** / **PgDn**, **Home** / **End**, or type the page number.
+- **Navigate**: wheel or touchpad (scrolls the viewer under the cursor, also when comparing), **PgUp** / **PgDn**, **Home** / **End**, or type the page number.
 - **Properties** (the button with the letter i, next to undo and redo): title, author, dates, page size, encryption and signatures of the document. Next to it, the **printer** button prints the document (**Ctrl+P**).
 - **Send to...**: opens the document in Merge, Extract, Sign or Protect without having to find it again.
 - **Esc** clears the selection and the search highlights.
@@ -78,7 +78,8 @@ The **annotation bar** appears below the viewer's navigation when you press **Ed
 Text is typed **directly on the page**, in a field that appears in its place and at its size, without dialog boxes: **Enter** applies it, **Shift+Enter** adds a line, **Esc** cancels and clicking outside also applies it.
 - **Rectangle, ellipse, line and arrow**: drag from one corner to the other.
 - **Freehand drawing**: drag to draw.
-- **Color** (yellow, green, blue, red or black), **thickness** (thin, medium or thick) and **Font** (text size) on the right of the bar.
+- **Color** (yellow, green, blue, red or black), **thickness** (thin, medium or thick), **Font** (text size) and **Background** (background color of text boxes: no background, white or a light tone) on the right of the bar. With a text box selected, **Font** and **Background** change that box.
+- **Size of a box**: select a text box, a rectangle or an ellipse and drag one of its **corners** (the small colored squares); the text reflows to the new size.
 - **Size of a text**: select it with a click and choose the size in **Font**; the box adjusts by itself. When you type a new text, the box also adjusts to what you type.
 
 Press **Esc** or click the tool again to finish.
@@ -115,12 +116,18 @@ Verification is local: it does not query servers on the internet (OCSP or CRL). 
 
 ## Merge
 
-Combine several PDFs into one.
+Combine several PDFs into one. The whole section scrolls with a single scroll bar.
 
 1. Press **Add PDFs** or drag files (or whole folders) into the list. You can keep working while they are read: each row shows its pages and size when done.
 2. Order them with the arrows on each row or with **Sort A-Z**.
-3. Optional: turn on **Create a bookmark for each file**. The merged PDF will have a bookmark in its side outline with the name of each source file, to jump straight to its start; the original bookmarks are kept nested inside. Hover over the option to see this explanation.
-4. Check **Save as** and press **Merge PDFs**.
+3. Optional, in **Watermark and signature**:
+   - **Add a watermark**: the same options as in **Tools** (text, opacity, orientation and whether it goes behind the content).
+   - **Sign the result**: **Visual signature** (a signature saved in the **Sign** section) or **Digital signature** (.pfx/.p12 certificate and its password), with its **Position**, the **Page** (last, first or all; the digital one goes on a single page) and the **Size**.
+   - On the right, the **preview** shows the first or last page of the result with the watermark and signature; when you turn on the signature, it shows the page where it will go.
+
+   The watermark is applied before signing, so the digital signature stays valid.
+4. Optional: turn on **Create a bookmark for each file**. The merged PDF will have a bookmark in its side outline with the name of each source file, to jump straight to its start; the original bookmarks are kept nested inside. Hover over the option to see this explanation.
+5. Check **Save as** and press **Merge PDFs**.
 
 If any PDF is protected, the app will ask for its password.
 

@@ -227,8 +227,11 @@ class SelectTool(TextSelectTool):
         on_select: Callable[[AnnotationInfo | None], None],
         on_move: Callable[[AnnotationInfo, float, float], None],
         on_edit: Callable[[AnnotationInfo], None],
+        resizer: Callable[[], object] | None = None,
     ) -> None:
         super().__init__(words_for, on_change)
+        self.resizer = resizer  # devuelve el controlador (begin_resize, resize_drag, end_resize, cursor_at)
+        self._resizing = False
         self.hit_annotation = hit_annotation
         self.on_select = on_select
         self.on_move = on_move
@@ -239,7 +242,18 @@ class SelectTool(TextSelectTool):
         self._offset: Point | None = None  # desplazamiento de la vista previa
         self._texting = False
 
+    def motion(self, view: PageView, event, hit: PageHit | None) -> None:
+        controller = self.resizer() if self.resizer is not None else None
+        cursor = controller.cursor_at(hit) if controller is not None else None  # type: ignore[attr-defined]
+        wanted = cursor or self.cursor
+        if str(view.canvas.cget("cursor")) != wanted:
+            view.canvas.configure(cursor=wanted)
+
     def press(self, view: PageView, event, hit: PageHit | None) -> None:
+        controller = self.resizer() if self.resizer is not None else None
+        if controller is not None and controller.begin_resize(hit):  # type: ignore[attr-defined]
+            self._resizing = True
+            return
         self._press_xy = (event.x, event.y)
         self._offset = None
         self._texting = False
@@ -253,6 +267,9 @@ class SelectTool(TextSelectTool):
         self.on_select(annotation)
 
     def drag(self, view: PageView, event, hit: PageHit | None) -> None:
+        if self._resizing and self.resizer is not None:
+            self.resizer().resize_drag(hit)  # type: ignore[attr-defined]
+            return
         if self._grabbed is None:
             super().drag(view, event, hit)
             return
@@ -273,6 +290,10 @@ class SelectTool(TextSelectTool):
         view.redraw_overlays()
 
     def release(self, view: PageView, event, hit: PageHit | None) -> None:
+        if self._resizing and self.resizer is not None:
+            self._resizing = False
+            self.resizer().end_resize()  # type: ignore[attr-defined]
+            return
         grabbed, offset = self._grabbed, self._offset
         self._grabbed = self._offset = None
         view.canvas.configure(cursor=self.cursor)

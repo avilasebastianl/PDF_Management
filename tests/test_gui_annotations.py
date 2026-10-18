@@ -8,6 +8,8 @@ los haria el raton. Requiere una pantalla (se omite si Tk no puede crear ventana
 import pytest
 from conftest import make_pdf, pump
 
+from pdfmanagement.gui.pages import viewer_annotations
+
 
 class Event:
     def __init__(self, view, page, x, y):
@@ -236,3 +238,36 @@ def test_font_size_menu_changes_selected_text(viewer, monkeypatch):
     annotations._set_font_size("32")
     assert viewer.session.annotations(0)[0].font_size == 32
     assert viewer.session.history.undo_label == "Cambiar tamaño de texto"
+
+
+def test_resize_a_text_box_by_dragging_a_corner(viewer):
+    annotations = viewer.annotations
+    annotations.select_tool("free_text")
+    gesture(viewer, [(100, 200), (300, 240)])
+    write(viewer, "Cuadro")
+    info = viewer.session.annotations(0)[0]
+    annotations.select_tool("select")
+    gesture(viewer, [(info.rect.x0 + 20, info.rect.y0 + 5)])  # seleccionar
+    assert annotations.selected is not None and annotations.selected.xref == info.xref
+    corner = (info.rect.x1, info.rect.y1)
+    assert annotations.handle_at(type("H", (), {"page": 0, "x": corner[0], "y": corner[1]})()) == "se"
+    gesture(viewer, [corner, (corner[0] + 60, corner[1] + 40), (corner[0] + 100, corner[1] + 80)])
+    resized = viewer.session.annotations(0)[0]
+    assert resized.rect.width == pytest.approx(info.rect.width + 100, abs=3)
+    assert resized.rect.height == pytest.approx(info.rect.height + 80, abs=3)
+    assert viewer.session.history.undo_label == "Cambiar tamaño de texto"
+
+
+def test_text_box_background_color(viewer):
+    annotations = viewer.annotations
+    annotations.set_fill("Amarillo claro")
+    annotations.select_tool("free_text")
+    gesture(viewer, [(100, 300)])
+    assert annotations.editor.text.cget("background").lower() != "#ffffff", "el campo muestra el fondo elegido"
+    write(viewer, "Con fondo")
+    info = viewer.session.annotations(0)[0]
+    assert info.fill == pytest.approx(viewer_annotations.FILLS["Amarillo claro"], abs=0.01)
+    annotations.select(info)
+    annotations.set_fill("Sin fondo")  # cambia el del cuadro seleccionado
+    assert viewer.session.annotations(0)[0].fill is None
+    assert viewer.session.history.undo_label == "Cambiar fondo del texto"

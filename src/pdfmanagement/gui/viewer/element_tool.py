@@ -50,7 +50,10 @@ class ElementTool(Tool):
         on_select: Callable[[Selection | None], None],
         on_move: Callable[[AnnotationInfo, float, float], None],
         on_edit: Callable[[Selection], None],
+        resizer=None,
     ) -> None:
+        self.resizer = resizer  # controlador con begin_resize/resize_drag/end_resize/cursor_at
+        self._resizing = False
         self.elements_for = elements_for
         self.hit_annotation = hit_annotation
         self.on_select = on_select
@@ -81,20 +84,29 @@ class ElementTool(Tool):
     # * Eventos ---------------------------------------------------------------
 
     def motion(self, view: PageView, event, hit: PageHit | None) -> None:
+        corner_cursor = self.resizer.cursor_at(hit) if self.resizer is not None else None
         found = self.find(hit)
+        cursor = corner_cursor or ("hand2" if found is not None else self.cursor)
+        if str(view.canvas.cget("cursor")) != cursor:
+            view.canvas.configure(cursor=cursor)
         if found != self.hover:
             self.hover = found
-            view.canvas.configure(cursor="hand2" if found is not None else self.cursor)
             view.redraw_overlays()
 
     def press(self, view: PageView, event, hit: PageHit | None) -> None:
         self._press_xy = (event.x, event.y)
         self._offset = None
+        if self.resizer is not None and self.resizer.begin_resize(hit):
+            self._resizing = True
+            return
         found = self.find(hit)
         self._grabbed = found.annotation if found is not None else None
         self.on_select(found)
 
     def drag(self, view: PageView, event, hit: PageHit | None) -> None:
+        if self._resizing and self.resizer is not None:
+            self.resizer.resize_drag(hit)
+            return
         grabbed = self._grabbed
         if grabbed is None or not grabbed.movable:
             return
@@ -105,6 +117,10 @@ class ElementTool(Tool):
         view.redraw_overlays()
 
     def release(self, view: PageView, event, hit: PageHit | None) -> None:
+        if self._resizing and self.resizer is not None:
+            self._resizing = False
+            self.resizer.end_resize()
+            return
         grabbed, offset = self._grabbed, self._offset
         self._grabbed = self._offset = None
         view.canvas.configure(cursor=self.cursor)

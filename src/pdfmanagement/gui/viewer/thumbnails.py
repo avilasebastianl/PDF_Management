@@ -20,6 +20,7 @@ from PIL import ImageTk
 from .. import style
 from .page_view import PageView
 from .render import scale_key
+from .wheel import WheelSteps
 
 THUMB_WIDTH = 120
 PADDING = 14
@@ -66,6 +67,8 @@ class ThumbnailStrip(ctk.CTkFrame):
         self.canvas.configure(yscrollcommand=self._on_yscroll)
         self.canvas.bind("<Configure>", lambda _e: self._schedule())
         self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<TouchpadScroll>", self._on_touchpad)
+        self._wheel = WheelSteps()
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
@@ -91,8 +94,15 @@ class ThumbnailStrip(ctk.CTkFrame):
         self._schedule()
 
     def _on_wheel(self, event) -> None:
-        self.canvas.yview_scroll(-3 if event.delta > 0 else 3, "units")
-        self._schedule()
+        self._scroll(self._wheel.wheel(event.delta))
+
+    def _on_touchpad(self, event) -> None:
+        self._scroll(self._wheel.touchpad(self.canvas, event.delta)[1])
+
+    def _scroll(self, rows: int) -> None:
+        if rows:
+            self.canvas.yview_scroll(rows, "units")
+            self._schedule()
 
     def _on_layout_changed(self) -> None:
         if len(self._slots) != self.view.page_count:
