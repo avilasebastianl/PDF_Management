@@ -102,6 +102,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         self._compare_unsubscribe: Callable[[], None] | None = None
         self._verified_path: Path | None = None  # archivo cuyas firmas muestra el panel
         self._new_documents = 0  # numera los documentos nuevos de la sesion
+        self._exported_folder: Path | None = None  # copias temporales enviadas a Unir
         # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
@@ -161,11 +162,21 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
 
     def _build_tab_bar(self) -> None:
         """Pestanas de los documentos abiertos (se muestra con al menos uno)."""
+        # Fila de pestanas y, con 2 o mas documentos abiertos, el boton para unirlos.
+        self.tab_row = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.tab_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.tab_row.grid_columnconfigure(0, weight=1)
         self.tab_bar = TabStrip(
-            self.body, on_select=self.switch_to, on_close=self._close_tab_clicked, on_new=self.browse
+            self.tab_row, on_select=self.switch_to, on_close=self._close_tab_clicked, on_new=self.browse
         )
-        self.tab_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6))
-        self.tab_bar.grid_remove()
+        self.tab_bar.grid(row=0, column=0, sticky="ew")
+        self.merge_open_button = primary_button(self.tab_row, "", self.merge_open_documents, "merge", width=150)
+        self.merge_open_button.configure(height=32)
+        ToolTip(
+            self.merge_open_button,
+            tr("Abre la sección Unir con los documentos abiertos, en el orden de las pestañas (con sus cambios)"),
+        )
+        self.tab_row.grid_remove()
 
     def _build_side_panel(self) -> None:
         self.side = ctk.CTkFrame(

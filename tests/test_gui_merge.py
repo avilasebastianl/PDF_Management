@@ -43,7 +43,7 @@ def test_preview_and_merge_with_watermark_and_signature(merge_page, gui_app, tmp
     merge_page.add_signature.select()
     merge_page._on_finish_toggled(log=False)
     merge_page.watermark.mark_text.set("BORRADOR")
-    merge_page.preview_page.set("Última página")
+    merge_page.go_to_preview_page(-1)
     merge_page.refresh_preview()
     assert merge_page.preview.image is not None
     output = tmp_path / "unido.pdf"
@@ -83,3 +83,56 @@ def test_preview_switches_between_image_and_message_safely(merge_page, gui_app):
     merge_page.preview.set_message("otra vez")
     assert merge_page.preview.image is None
     pump(gui_app, timeout=0.5)  # la vista previa programada vuelve a dibujarse sin errores
+
+
+def test_preview_walks_through_every_page_of_the_result(merge_page, gui_app):
+    assert merge_page.preview_total == 5
+    merge_page.go_to_preview_page(0)
+    merge_page.refresh_preview()
+    assert merge_page.preview_label.cget("text") == "Página 1 de 5"
+    assert merge_page.preview_source.cget("text").startswith("a.pdf")
+    for _ in range(2):
+        merge_page.step_preview(1)
+    merge_page.refresh_preview()
+    assert merge_page.preview_label.cget("text") == "Página 3 de 5"
+    assert merge_page.preview_source.cget("text") == "b.pdf  ·  página 1", "la tercera es la primera de b.pdf"
+    merge_page.go_to_preview_page(-1)
+    merge_page.refresh_preview()
+    assert merge_page.preview_next.cget("state") == "disabled"
+
+
+def test_merge_and_sign_opens_the_result_in_sign(merge_page, gui_app, tmp_path):
+    output = tmp_path / "para_firmar.pdf"
+    merge_page.output_field.set(output)
+    merge_page._merge_and_sign()
+    pump(gui_app, lambda: output.exists() and not gui_app.runner.busy, timeout=10)
+    pump(gui_app, lambda: gui_app.current_page == "Firmar", timeout=2)
+    assert gui_app.current_page == "Firmar"
+    assert gui_app.pages["Firmar"].source_field.path == output
+    gui_app.show_page("Unir")
+
+
+def test_viewer_merge_button_sends_open_documents(gui_app, tmp_path):
+    gui_app.show_page("Visor")
+    viewer = gui_app.pages["Visor"]
+    try:
+        assert viewer.open_file(make_pdf(tmp_path / "uno.pdf", 2))
+        assert not viewer.merge_open_button.winfo_ismapped(), "con un solo documento no aparece"
+        assert viewer.open_file(make_pdf(tmp_path / "dos.pdf", 1))
+        pump(gui_app, timeout=0.1)
+        assert viewer.merge_open_button.winfo_ismapped() and viewer.merge_open_button.cget("text") == "Unir 2 PDFs"
+        viewer.tabs[0].session.rotate([0], 90)  # cambio sin guardar: va como copia con el cambio
+        viewer.merge_open_documents()
+        merge = gui_app.pages["Unir"]
+        assert gui_app.current_page == "Unir"
+        paths = merge.files
+        assert len(paths) == 2 and paths[1] == tmp_path / "dos.pdf"
+        assert paths[0] != tmp_path / "uno.pdf" and paths[0].exists(), "copia temporal con el cambio"
+        with pymupdf.open(paths[0]) as copy:
+            assert copy[0].rotation == 90
+        assert viewer.tabs[0].session.modified, "el documento sigue sin guardar en el Visor"
+    finally:
+        viewer.close_all_documents()
+        gui_app.pages["Unir"]._clear()
+    assert viewer._exported_folder is not None
+    viewer.forget_exported_copies()

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...core.editing import DocumentSession
+from ...i18n import trn
 from ..viewer import FIT_WIDTH
 from ..viewer.tab_strip import TabInfo
 from .viewer_modes import FULLSCREEN
@@ -182,13 +183,23 @@ class TabsMixin:
 
     def _render_tabs(self: ViewerPage) -> None:
         """Vuelve a dibujar la barra de pestanas (al abrir, cerrar o cambiar de pestana)."""
+        self._refresh_merge_button()
         if not self.tabs:
             self.tab_bar.set_tabs([], -1)
-            self.tab_bar.grid_remove()
+            self.tab_row.grid_remove()
             return
         if self.view_mode != FULLSCREEN:
-            self.tab_bar.grid()
+            self.tab_row.grid()
         self.tab_bar.set_tabs([self._tab_info(tab) for tab in self.tabs], self.active)
+
+    def _refresh_merge_button(self: ViewerPage) -> None:
+        """Con 2 o mas documentos abiertos aparece "Unir N PDFs" junto a las pestanas."""
+        count = len(self.tabs)
+        if count < 2:
+            self.merge_open_button.grid_remove()
+            return
+        self.merge_open_button.configure(text=trn("Unir {count} PDF", "Unir {count} PDFs", count))
+        self.merge_open_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
     @staticmethod
     def _tab_info(tab: DocumentTab) -> TabInfo:
@@ -214,6 +225,7 @@ class TabsMixin:
 
     def on_close(self: ViewerPage) -> None:
         self.close_compare(log=False)
+        self.forget_exported_copies()
         self.search.set_document(None)
         self.view.set_document(None)
         for tab in self.tabs:

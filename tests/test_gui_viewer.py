@@ -251,7 +251,7 @@ def test_save_as_and_unsaved_changes_prompts(viewer, gui_app, tmp_path, manual_p
     assert not closed and gui_app.current_page == "Visor", "cerrar con cambios sin guardar se puede cancelar"
     monkeypatch.setattr(messagebox, "askyesnocancel", lambda *a, **k: False)
     assert viewer.close_tab(viewer.active), "No descarta los cambios y cierra la pestana"
-    assert viewer.session is None and not viewer.tab_bar.winfo_manager()
+    assert viewer.session is None and not viewer.tab_row.winfo_manager()
 
 
 def test_signed_document_warns_once_before_editing(gui_app, tmp_path, certificate, monkeypatch):

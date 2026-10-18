@@ -21,6 +21,7 @@ Read any PDF without leaving the app. It is the first section and the one that o
 - **Open**: the **Open** button, **Ctrl+O**, a click on the empty area, or drag in a PDF. If it is protected, you are asked for the password. **Recent** shows the last 10 files.
 - **New PDF**: the **New PDF** button (next to **Open**), **Ctrl+N** or the large button in the empty viewer. Choose a template with its preview (**Blank**, **Lined paper**, **Grid**, **Letter**, **Meeting minutes** or **Invoice**), the size (A4, Letter or Legal), the orientation and, for the first three, how many pages. It opens in a new tab ready to annotate or to write on with **Fixed text**; save it with **Save as** (the output folder is suggested).
 - **Tabs**: each document opens in its own tab, as in a browser, and keeps its page, zoom and changes. Tabs have the same width and shrink when there are many; a dot (•) indicates unsaved changes. Switch with a click or **Ctrl+Tab**; close with the **x** (shown when you hover), with a middle mouse button click, or with **Ctrl+W**, and open another document with **+**. If you open a file that is already open, its tab is shown.
+- **Merge the open ones**: with two or more documents open, the **Merge N PDFs** button appears next to the tabs. It takes all of them to the **Merge** section, in tab order; those with unsaved changes go with those changes (without saving them). To use a single document in another section, use **Send to...**.
 - **Search**: press the **Search** button (or **Ctrl+F**), type and press **Enter**; each **Enter** goes to the next result (**Shift+Enter** to the previous one). The bar shows how many there are; **Aa** matches case, **ab** searches whole words only, and the list button shows all of them with their context in the side panel. **Esc** closes it.
 - **View** (eye button): groups the reading options:
   - **Night mode**: shows the pages with inverted colors (light text on a dark background), more comfortable at night.
@@ -123,11 +124,11 @@ Combine several PDFs into one. The whole section scrolls with a single scroll ba
 3. Optional, in **Watermark and signature**:
    - **Add a watermark**: the same options as in **Tools** (text, opacity, orientation and whether it goes behind the content).
    - **Sign the result**: **Visual signature** (a signature saved in the **Sign** section) or **Digital signature** (.pfx/.p12 certificate and its password), with its **Position**, the **Page** (last, first or all; the digital one goes on a single page) and the **Size**.
-   - On the right, the **preview** shows the first or last page of the result with the watermark and signature; when you turn on the signature, it shows the page where it will go.
+   - The **Result preview**, to the right of the list, goes through all the pages of the merged PDF with **‹** and **›** (below it says which file each one is from) and shows the watermark and signature where they will go; when you turn on the signature, it jumps to the page where it goes.
 
    The watermark is applied before signing, so the digital signature stays valid.
 4. Optional: turn on **Create a bookmark for each file**. The merged PDF will have a bookmark in its side outline with the name of each source file, to jump straight to its start; the original bookmarks are kept nested inside. Hover over the option to see this explanation.
-5. Check **Save as** and press **Merge PDFs**.
+5. Check **Save as** and press **Merge PDFs**. With **Merge and sign...** the merged PDF also opens in the **Sign** section, so you can place the signature with the mouse or sign with a certificate.
 
 If any PDF is protected, the app will ask for its password.
 

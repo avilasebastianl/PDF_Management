@@ -53,9 +53,8 @@ BOOKMARKS_HELP = tr(
     "anidados dentro del marcador de su archivo.\n"
     "Si lo deja desactivado, el resultado conserva solo los marcadores originales."
 )
-PREVIEW_HEIGHT = 420
+PREVIEW_HEIGHT = 470
 PREVIEW_DELAY_MS = 300  # se espera a que deje de cambiar opciones antes de redibujar
-PREVIEW_PAGES = (tr("Primera página"), tr("Última página"))
 SIGNATURE_PAGE_FIRST = next(label for label, key in SIGNATURE_PAGES.items() if key == "primera")
 ROWS_PER_BATCH = 3  # filas construidas por ciclo (~50 ms cada una en CustomTkinter)
 DESTROY_PER_BATCH = 10  # filas destruidas por ciclo al vaciar la lista
@@ -168,7 +167,7 @@ class MergePage(BasePage):
         self._preview_job: str | None = None
 
         toolbar = ctk.CTkFrame(self.body, fg_color="transparent")
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
+        toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
         toolbar.grid_columnconfigure(3, weight=1)
         primary_button(toolbar, tr("Agregar PDFs"), self._browse_files, "add").grid(row=0, column=0)
         secondary_button(toolbar, tr("Ordenar A-Z"), self._sort_by_name, "sort").grid(row=0, column=1, padx=8)
@@ -189,6 +188,7 @@ class MergePage(BasePage):
         self._build_empty_state()
 
         self._build_finish_card()
+        self._build_preview_card()
 
         output = Card(self.body)
         output.grid(row=3, column=0, sticky="ew", pady=(style.GAP, style.PAD))
@@ -206,8 +206,11 @@ class MergePage(BasePage):
         )
         self.bookmarks.grid(row=0, column=0, sticky="w")
         ToolTip(self.bookmarks, BOOKMARKS_HELP, above=True)  # la casilla esta al pie de la seccion
+        self.sign_button = secondary_button(options, tr("Unir y firmar..."), self._merge_and_sign, "sign", width=150)
+        self.sign_button.grid(row=0, column=1, sticky="e", padx=(0, 8))
+        ToolTip(self.sign_button, tr("Une los PDFs y abre el resultado en Firmar para ubicar la firma"), above=True)
         self.run_button = primary_button(options, tr("Unir PDFs"), self._merge, "merge", width=150)
-        self.run_button.grid(row=0, column=1, sticky="e")
+        self.run_button.grid(row=0, column=2, sticky="e")
 
         # Contenedores registrados una sola vez; las filas heredan el destino.
         enable_file_drop(self.list_frame, self._add_files, recursive=False)
@@ -219,7 +222,7 @@ class MergePage(BasePage):
         self._refresh_summary()
 
     def _build_finish_card(self) -> None:
-        """Marca de agua y firma del resultado, con la vista previa a la derecha."""
+        """Marca de agua y firma del resultado (la vista previa esta en su propia columna)."""
         card = Card(
             self.body,
             tr("Marca de agua y firma (opcional)"),
@@ -238,17 +241,29 @@ class MergePage(BasePage):
             left, text=tr("Firmar el resultado"), font=style.fonts().body_bold, command=self._on_finish_toggled
         )
         self.add_signature.grid(row=2, column=0, sticky="w", pady=(12, 4))
-        self.signature = SignatureControls(left, on_change=self._schedule_preview)
-        right = ctk.CTkFrame(card, fg_color="transparent")
-        right.grid(row=card.row(0), column=2, sticky="ne", padx=(style.GAP, style.CARD_PAD), pady=8)
-        self.preview = PreviewPane(right, PREVIEW_HEIGHT, tr("Agregue PDFs para ver la vista previa"))
-        self.preview.pack()
-        self.preview_page = ctk.CTkSegmentedButton(
-            right, values=list(PREVIEW_PAGES), command=lambda _v: self._schedule_preview(), font=style.fonts().small
+        self.signature = SignatureControls(left, on_change=self._on_signature_changed)
+
+    def _build_preview_card(self) -> None:
+        """Vista previa del resultado: todas sus paginas, con la marca de agua y la firma elegidas."""
+        card = Card(self.body, tr("Vista previa del resultado"))
+        card.grid(row=1, column=1, rowspan=3, sticky="n", padx=(style.GAP, 0))
+        self.preview = PreviewPane(card, PREVIEW_HEIGHT, tr("Agregue PDFs para ver la vista previa"))
+        self.preview.grid(row=card.row(0), column=0, columnspan=3, padx=style.CARD_PAD, pady=(8, 4))
+        navigation = ctk.CTkFrame(card, fg_color="transparent")
+        navigation.grid(row=card.row(1), column=0, columnspan=3, pady=(0, 2))
+        self.preview_previous = icon_button(
+            navigation, "previous", lambda: self.step_preview(-1), tr("Página anterior del resultado")
         )
-        self.preview_page.set(PREVIEW_PAGES[0])
-        self.preview_page.pack(pady=(6, 0))
-        card.grid_columnconfigure(2, weight=0)
+        self.preview_previous.pack(side="left")
+        self.preview_label = ctk.CTkLabel(navigation, text="", width=130, font=style.fonts().body)
+        self.preview_label.pack(side="left", padx=4)
+        self.preview_next = icon_button(
+            navigation, "next", lambda: self.step_preview(1), tr("Página siguiente del resultado")
+        )
+        self.preview_next.pack(side="left")
+        self.preview_source = muted_label(card, "", anchor="center", wraplength=round(PREVIEW_HEIGHT * 0.72))
+        self.preview_source.grid(row=card.row(2), column=0, columnspan=3, padx=style.CARD_PAD, pady=(0, 4))
+        self.preview_index = 0
         self._on_finish_toggled(log=False)
 
     def _on_finish_toggled(self, log: bool = True) -> None:
@@ -259,9 +274,7 @@ class MergePage(BasePage):
         if self.add_signature.get():
             self.signature.reload_library()  # pudo agregarse una firma en Firmar
             self.signature.grid(row=3, column=0, sticky="ew")
-            # La vista previa muestra la pagina donde ira la firma.
-            first = self.signature.pages.get() == SIGNATURE_PAGE_FIRST
-            self.preview_page.set(PREVIEW_PAGES[0] if first else PREVIEW_PAGES[1])
+            self._show_signature_page()
         else:
             self.signature.grid_remove()
         if log:
@@ -277,33 +290,78 @@ class MergePage(BasePage):
         signature = self.signature.options(for_preview=for_preview) if self.add_signature.get() else None
         return watermark, signature
 
-    def _schedule_preview(self) -> None:
-        if not hasattr(self, "preview"):
+    # * Vista previa navegable ------------------------------------------------------
+
+    def _page_map(self) -> list[tuple[_Entry, int]]:
+        """Cada archivo con sus paginas (1 mientras se lee o si esta protegido)."""
+        return [(entry, max(1, (entry.info.page_count or 1) if entry.info else 1)) for entry in self.entries]
+
+    @property
+    def preview_total(self) -> int:
+        return sum(count for _entry, count in self._page_map())
+
+    def go_to_preview_page(self, index: int) -> None:
+        """Pagina ``index`` del resultado (negativo: desde el final)."""
+        total = self.preview_total
+        if total:
+            self.preview_index = max(0, min(index + total if index < 0 else index, total - 1))
+        self._schedule_preview(delay=0)
+
+    def step_preview(self, step: int) -> None:
+        self.go_to_preview_page(self.preview_index + step)
+
+    def _on_signature_changed(self) -> None:
+        self._show_signature_page()
+        self._schedule_preview()
+
+    def _show_signature_page(self) -> None:
+        """Al elegir la firma se muestra la pagina donde ira."""
+        if self.add_signature.get() and self.entries:
+            first = self.signature.pages.get() == SIGNATURE_PAGE_FIRST
+            self.preview_index = 0 if first else self.preview_total - 1
+
+    def _schedule_preview(self, delay: int = PREVIEW_DELAY_MS) -> None:
+        if not hasattr(self, "preview_label"):
             return
         if self._preview_job is not None:
             self.after_cancel(self._preview_job)
-        self._preview_job = self.after(PREVIEW_DELAY_MS, self.refresh_preview)
+        self._preview_job = self.after(delay, self.refresh_preview)
 
     def refresh_preview(self) -> None:
-        """Primera o ultima pagina del resultado con la marca de agua y la firma elegidas."""
+        """La pagina elegida del resultado con la marca de agua y la firma (si va en ella)."""
         self._preview_job = None
-        if not self.entries:
+        pages = self._page_map()
+        total = sum(count for _entry, count in pages)
+        set_enabled(self.preview_previous, total > 0 and self.preview_index > 0)
+        set_enabled(self.preview_next, total > 0 and self.preview_index < total - 1)
+        if not total:
+            self.preview_label.configure(text="")
+            self.preview_source.configure(text="")
             self.preview.set_message(tr("Agregue PDFs para ver la vista previa"))
             return
-        first = self.preview_page.get() == PREVIEW_PAGES[0]
-        source = self.entries[0].path if first else self.entries[-1].path
+        self.preview_index = min(self.preview_index, total - 1)
+        index, local = self.preview_index, self.preview_index
+        entry = pages[-1][0]
+        for candidate, count in pages:  # archivo y pagina dentro de el
+            if local < count:
+                entry = candidate
+                break
+            local -= count
+        self.preview_label.configure(text=tr("Página {n} de {total}", n=index + 1, total=total))
+        self.preview_source.configure(text=f"{entry.path.name}  ·  " + tr("página {n}", n=local + 1))
         watermark, signature = self._finish_options(for_preview=True)
-        # La firma va en una sola pagina (salvo "todas"): se muestra solo si es la que se ve.
-        if signature is not None and signature.pages != "todas" and (signature.pages == "primera") != first:
-            signature = None
+        if signature is not None:
+            here = {"todas": True, "primera": index == 0, "ultima": index == total - 1}[signature.pages]
+            if not here:
+                signature = None
         try:
             image = finish.preview(
-                source,
-                0 if first else -1,
+                entry.path,
+                local,
                 watermark=watermark,
                 signature=signature,
                 height=self.preview.pixel_height,
-                password=self.passwords.get(source),
+                password=self.passwords.get(entry.path),
             )
         except core.PasswordRequiredError:
             self.preview.set_message(tr("PDF protegido: la vista previa aparece al ingresar la contraseña."))
@@ -474,6 +532,15 @@ class MergePage(BasePage):
         self.entries.sort(key=lambda entry: entry.path.name.lower())
         self._place_rows(0, len(self.entries))
 
+    def load_files(self, paths: list[Path], passwords: dict[Path, str] | None = None, source: str = "Visor") -> None:
+        """Reemplaza la lista por ``paths`` (p. ej. los documentos abiertos en el Visor)."""
+        if self.entries:
+            self._clear()
+        self.passwords.update(passwords or {})
+        self.preview_index = 0
+        self.log("Archivos recibidos de %s", source, archivos=len(paths))
+        self._add_files(paths)
+
     def receive_file(self, path: Path) -> None:
         self.log("Archivo recibido de otra seccion: %s", path.name)
         self._add_files([path])
@@ -537,7 +604,18 @@ class MergePage(BasePage):
     def _reset_output(self) -> None:
         self.output_field.set(core.unique_path(self.app.settings.output_path / (tr("PDF_unido") + ".pdf")), auto=True)
 
-    def _merge(self) -> None:
+    def _merged(self, result: Path, then_sign: bool) -> None:
+        if self.output_field.auto:
+            self._reset_output()
+        if then_sign:
+            self.log("PDF unido enviado a Firmar", archivo=result.name)
+            self.app.open_in("Firmar", result)
+
+    def _merge_and_sign(self) -> None:
+        """Une y abre el resultado en Firmar (para ubicar la firma a mano o firmar con certificado)."""
+        self._merge(then_sign=True)
+
+    def _merge(self, then_sign: bool = False) -> None:
         def start() -> None:
             if len(self.entries) < 2:
                 raise core.InvalidInputError(tr("Agregue al menos dos PDFs para unir."))
@@ -564,7 +642,7 @@ class MergePage(BasePage):
                 tr("PDF unido"),
                 operation,
                 button=self.run_button,
-                on_success=lambda _result: self._reset_output() if self.output_field.auto else None,
+                on_success=lambda result: self._merged(result, then_sign),
             )
 
         self.guard(start)

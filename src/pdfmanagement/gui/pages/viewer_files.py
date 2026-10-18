@@ -38,6 +38,8 @@ SEND_PLACEHOLDER = tr("Enviar a...")
 class FilesMixin:
     """Abrir, guardar (siempre Guardar como), propiedades, Enviar a y recientes."""
 
+    _exported_folder: Path | None  # copias temporales enviadas a Unir (se asigna en build)
+
     def browse(self: ViewerPage) -> None:
         chosen = filedialog.askopenfilename(title=tr("Abrir PDF"), filetypes=((tr("Archivos PDF"), "*.pdf"),))
         if chosen:
@@ -57,6 +59,41 @@ class FilesMixin:
         labels = self._recent_labels()
         if label in labels and self._recent:
             self.open_file(self._recent[labels.index(label)], source="recientes")
+
+    def merge_open_documents(self: ViewerPage) -> None:
+        """
+        Boton "Unir N PDFs": lleva los documentos abiertos, en el orden de las
+        pestanas, a la seccion Unir. Los que tienen cambios sin guardar (o son
+        nuevos) van como una copia temporal con esos cambios, sin guardarlos.
+        """
+        if len(self.tabs) < 2:
+            return
+        self.forget_exported_copies()  # las copias de una union anterior ya no hacen falta
+        folder = Path(tempfile.mkdtemp(prefix="pdfmanagement_unir_"))
+        self._exported_folder = folder
+        paths: list[Path] = []
+        passwords: dict[Path, str] = {}
+        try:
+            for tab in self.tabs:
+                session = tab.session
+                if session.modified or tab.temp_folder is not None:
+                    paths.append(session.write_copy(core.unique_path(folder / tab.path.name)))
+                    continue
+                paths.append(tab.path)
+                if session.password:
+                    passwords[tab.path] = session.password
+        except core.PdfManagementError as error:
+            self.app.show_error(error)
+            return
+        self.log("Unir documentos abiertos", archivos=len(paths), copias=len(list(folder.iterdir())))
+        self.app.show_page("Unir", source="boton Unir del Visor")
+        self.app.pages["Unir"].load_files(paths, passwords, source="Visor")
+
+    def forget_exported_copies(self: ViewerPage) -> None:
+        folder = getattr(self, "_exported_folder", None)
+        if folder is not None:
+            shutil.rmtree(folder, ignore_errors=True)
+            self._exported_folder = None
 
     def new_document(self: ViewerPage) -> None:
         """Nuevo PDF en blanco o desde una plantilla, en una pestana nueva (Ctrl+N)."""

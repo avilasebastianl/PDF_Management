@@ -55,9 +55,9 @@ class ModesMixin:
             if self.side_visible:
                 self.side.grid()
         if self.tabs and mode != FULLSCREEN:
-            self.tab_bar.grid()
+            self.tab_row.grid()
         else:
-            self.tab_bar.grid_remove()
+            self.tab_row.grid_remove()
         self.app.root.attributes("-fullscreen", mode == FULLSCREEN)
         # Tk deja la ventana "siempre encima" al entrar o salir de pantalla completa
         # (Alt+Tab no traia las otras aplicaciones y los desplegables se abrian

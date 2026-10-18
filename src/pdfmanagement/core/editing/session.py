@@ -424,6 +424,21 @@ class DocumentSession:
 
     # * Guardado ------------------------------------------------------------
 
+    def write_copy(self, output_file: str | Path) -> Path:
+        """
+        Escribe el documento tal como esta (con los cambios sin guardar) en otro
+        archivo, sin cifrar y sin marcarlo como guardado. Para entregarlo a otra
+        seccion (p. ej. Unir) sin obligar a "Guardar como" antes.
+        """
+        output = Path(output_file)
+        copy = pymupdf.open("pdf", self.document.tobytes())
+        try:
+            with atomic_output(output) as temp_path:
+                copy.save(temp_path, garbage=3, deflate=True)
+        finally:
+            copy.close()
+        return output
+
     def save_as(self, output_file: str | Path, *, keep_encryption: bool = True) -> Path:
         """
         Guarda una copia optimizada en un archivo nuevo, sin tocar el original.

@@ -19,6 +19,7 @@ Lea cualquier PDF sin salir de la aplicación. Es la primera sección y la que s
 - **Abrir**: botón **Abrir**, **Ctrl+O**, clic en el área vacía o arrastre un PDF. Si está protegido se pide la contraseña. **Recientes** muestra los últimos 10 archivos.
 - **Nuevo PDF**: botón **Nuevo PDF** (junto a **Abrir**), **Ctrl+N** o el botón grande del visor vacío. Elija una plantilla con su vista previa (**En blanco**, **Hoja con renglones**, **Cuadrícula**, **Carta**, **Acta de reunión** o **Factura**), el tamaño (A4, Carta u Oficio), la orientación y, en las tres primeras, cuántas páginas. Se abre en una pestaña nueva lista para anotar o escribir con **Texto fijo**; guárdelo con **Guardar como** (se sugiere la carpeta de salida).
 - **Pestañas**: cada documento se abre en su propia pestaña, como en un navegador, y conserva su página, zoom y cambios. Las pestañas tienen el mismo ancho y se encogen cuando hay muchas; un punto (•) indica cambios sin guardar. Cambie con un clic o **Ctrl+Tab**; cierre con la **x** (aparece al pasar el cursor), con un clic con el botón central del ratón o con **Ctrl+W**, y abra otro documento con **+**. Si abre un archivo que ya está abierto, se muestra su pestaña.
+- **Unir los abiertos**: con dos o más documentos abiertos aparece el botón **Unir N PDFs** junto a las pestañas. Lleva todos a la sección **Unir**, en el orden de las pestañas; los que tienen cambios sin guardar van con esos cambios (sin guardarlos). Para usar un solo documento en otra sección, use **Enviar a...**.
 - **Buscar**: pulse el botón **Buscar** (o **Ctrl+F**), escriba y pulse **Enter**; cada **Enter** va al siguiente resultado (**Mayús+Enter** al anterior). La barra muestra cuántos hay; **Aa** distingue mayúsculas, **ab** busca palabras completas y el botón de lista los muestra todos con su contexto en el panel lateral. **Esc** la cierra.
 - **Ver** (botón del ojo): reúne las opciones de lectura:
   - **Modo nocturno**: muestra las páginas con los colores invertidos (texto claro sobre fondo oscuro), más cómodo de noche.
@@ -122,11 +123,11 @@ Combine varios PDFs en uno solo. Toda la sección se recorre con una sola barra 
 3. Opcional, en **Marca de agua y firma**:
    - **Agregar marca de agua**: las mismas opciones que en **Herramientas** (texto, opacidad, orientación y si va detrás del contenido).
    - **Firmar el resultado**: **Firma visual** (una firma guardada en la sección **Firmar**) o **Firma digital** (certificado .pfx/.p12 y su contraseña), con su **Posición**, la **Página** (última, primera o todas; la digital va en una sola) y el **Tamaño**.
-   - A la derecha, la **vista previa** muestra la primera o la última página del resultado con la marca y la firma; al activar la firma se muestra la página donde irá.
+   - La **Vista previa del resultado**, a la derecha de la lista, recorre todas las páginas del PDF unido con **‹** y **›** (debajo dice de qué archivo es cada una) y muestra la marca de agua y la firma donde irán; al activar la firma salta a la página donde va.
 
    La marca de agua se aplica antes de firmar, así la firma digital queda válida.
 4. Opcional: active **Crear un marcador por cada archivo**. El PDF unido tendrá en su índice lateral un marcador con el nombre de cada archivo de origen, para saltar directo a su inicio; los marcadores originales se conservan anidados dentro. Pase el cursor sobre la opción para ver esta explicación.
-5. Revise **Guardar como** y presione **Unir PDFs**.
+5. Revise **Guardar como** y presione **Unir PDFs**. Con **Unir y firmar...** el PDF unido se abre además en la sección **Firmar**, para ubicar la firma con el ratón o firmar con un certificado.
 
 Si algún PDF está protegido, la aplicación pedirá su contraseña.
 
