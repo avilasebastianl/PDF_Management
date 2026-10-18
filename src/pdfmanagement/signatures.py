@@ -47,6 +47,26 @@ def import_signature(source: str | Path, name: str | None = None) -> Path:
     return target
 
 
+def rename_signature(signature: Path, name: str) -> Path:
+    """
+    Cambia el nombre de una firma de la biblioteca (conserva la extension y
+    la fecha, asi no cambia de lugar en la lista). Devuelve la nueva ruta.
+    """
+    signature = signature.resolve()
+    if signature.parent != paths.SIGNATURES_DIR.resolve():
+        raise ValueError(tr("Solo se pueden renombrar firmas de la biblioteca."))
+    if not name.strip():
+        raise ValueError(tr("El nombre no puede quedar vacío."))
+    cleaned = clean_name(name)
+    if cleaned == signature.stem:
+        return signature
+    if cleaned.lower() == signature.stem.lower():
+        target = signature.with_name(f"{cleaned}{signature.suffix}")  # solo cambian mayusculas
+    else:
+        target = signature_path_for(cleaned, signature.suffix)
+    return signature.rename(target)
+
+
 def delete_signature(signature: Path) -> None:
     """Elimina una firma de la biblioteca (solo archivos dentro de ``signs/``)."""
     signature = signature.resolve()

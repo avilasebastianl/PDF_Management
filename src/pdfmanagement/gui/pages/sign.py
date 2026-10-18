@@ -19,7 +19,7 @@ from ... import core, signatures
 from ...core.signing import MIN_SIGNATURE_WIDTH
 from ...i18n import tr
 from .. import style
-from ..dialogs import SignaturePad, ask_certificate_password, ask_password
+from ..dialogs import SignaturePad, ask_certificate_password, ask_name, ask_password
 from ..dropdown import dropdown_menu, set_dropdown_values
 from ..icons import icon
 from ..viewer import PageView, Tool, ViewerToolbar
@@ -167,7 +167,10 @@ class SignPage(BasePage):
         self.signature_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         icon_button(selector, "edit", self._draw_signature, tr("Dibujar firma nueva")).grid(row=0, column=1)
         icon_button(selector, "image", self._import_signature, tr("Importar imagen (PNG/JPG)")).grid(row=0, column=2)
-        icon_button(selector, "delete", self._delete_signature, tr("Borrar firma seleccionada")).grid(row=0, column=3)
+        icon_button(selector, "rename", self._rename_signature, tr("Cambiar el nombre de la firma")).grid(
+            row=0, column=3
+        )
+        icon_button(selector, "delete", self._delete_signature, tr("Borrar firma seleccionada")).grid(row=0, column=4)
         self.signature_preview = ctk.CTkLabel(
             signature,
             text=tr("Sin firma seleccionada"),
@@ -568,6 +571,28 @@ class SignPage(BasePage):
             self.guard(import_and_select)
         else:
             self.log_debug("Importar firma: dialogo cancelado")
+
+    def _rename_signature(self) -> None:
+        name = self.signature_menu.get()
+        path = self.signature_paths.get(name)
+        if path is None:
+            return
+        new_name = ask_name(
+            self,
+            tr("Cambiar el nombre de la firma"),
+            tr("Nuevo nombre para la firma «{nombre}»:", nombre=name),
+            path.stem,
+        )
+        if new_name is None or not new_name.strip():
+            self.log_debug("Cambiar nombre de firma: cancelado")
+            return
+
+        def rename_and_select() -> None:
+            stored = signatures.rename_signature(path, new_name)
+            self.log("Firma renombrada: %s", name, nuevo_nombre=stored.name)
+            self._refresh_signatures(select=stored)
+
+        self.guard(rename_and_select)
 
     def _delete_signature(self) -> None:
         name = self.signature_menu.get()

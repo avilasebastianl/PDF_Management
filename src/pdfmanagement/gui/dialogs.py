@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 from .. import i18n, paths
 from ..i18n import tr
 from ..signatures import signature_path_for
-from . import style
+from . import app_icon, style
 from .events import debug_event
 from .widgets import muted_label, primary_button, secondary_button
 
@@ -23,8 +23,8 @@ from .widgets import muted_label, primary_button, secondary_button
 def _prepare_toplevel(window: ctk.CTkToplevel, parent, title: str, width: int, height: int, modal: bool) -> None:
     window.title(title)
     window.transient(parent.winfo_toplevel())
-    if paths.APP_ICON.exists():
-        window.after(250, lambda: window.iconbitmap(str(paths.APP_ICON)))
+    if app_icon.ico_path().exists():
+        window.after(250, lambda: window.iconbitmap(str(app_icon.ico_path())))
     parent.update_idletasks()
     root = parent.winfo_toplevel()
     x = root.winfo_rootx() + (root.winfo_width() - width) // 2
@@ -45,7 +45,7 @@ def ask_password(parent, file_name: str, retry: bool = False) -> str | None:
         if retry
         else tr("«{file}» está protegido. Ingrese su contraseña:", file=file_name)
     )
-    return _password_dialog(parent, tr("Contraseña requerida"), message) or None
+    return _entry_dialog(parent, tr("Contraseña requerida"), message, secret=True) or None
 
 
 def ask_certificate_password(parent, file_name: str, retry: bool = False) -> str | None:
@@ -59,10 +59,15 @@ def ask_certificate_password(parent, file_name: str, retry: bool = False) -> str
         if retry
         else tr("Ingrese la contraseña del certificado «{file}».\nNo se guarda en ningún lugar.", file=file_name)
     )
-    return _password_dialog(parent, tr("Contraseña del certificado"), message)
+    return _entry_dialog(parent, tr("Contraseña del certificado"), message, secret=True)
 
 
-def _password_dialog(parent, title: str, message: str) -> str | None:
+def ask_name(parent, title: str, message: str, initial: str = "") -> str | None:
+    """Pide un texto de una linea (por ejemplo, un nombre). ``None`` si se cancela."""
+    return _entry_dialog(parent, title, message, initial)
+
+
+def _entry_dialog(parent, title: str, message: str, initial: str = "", secret: bool = False) -> str | None:
     window = ctk.CTkToplevel(parent)
     _prepare_toplevel(window, parent, title, 420, 220, modal=True)
     window.resizable(False, False)
@@ -71,8 +76,11 @@ def _password_dialog(parent, title: str, message: str) -> str | None:
     ctk.CTkLabel(window, text=message, font=style.fonts().body, wraplength=380, justify="left").pack(
         fill="x", padx=20, pady=(20, 10)
     )
-    entry = ctk.CTkEntry(window, show="•", height=36)
+    entry = ctk.CTkEntry(window, show="•" if secret else "", height=36)
     entry.pack(fill="x", padx=20)
+    if initial:
+        entry.insert(0, initial)
+        entry.select_range(0, "end")
 
     def accept(_event=None) -> None:
         result["value"] = entry.get()

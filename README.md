@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.7.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.8.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -23,7 +23,6 @@
 12. [Como agregar una funcionalidad](#como-agregar-una-funcionalidad)
 13. [Firma digital con certificado](#firma-digital-con-certificado)
 14. [Hoja de ruta](#hoja-de-ruta)
-15. [Creditos](#creditos)
 
 ---
 
@@ -149,10 +148,11 @@ PDFManagement/
 ├── pyproject.toml              # Metadatos y configuracion de pytest, ruff, mypy y coverage
 ├── .github/workflows/ci.yml    # CI en Windows: ruff, mypy y pytest con cobertura
 ├── assets/
-│   ├── icons/app.ico           # Icono de la aplicacion
+│   ├── icons/                  # Logo (app.png/.ico y sus variantes de color app_<color>), GitHub, LinkedIn, codigo
 │   ├── locales/en.json, ru.json  # Catalogos de traduccion (la clave es el texto en espanol)
 │   └── themes/*.json           # Temas de color de CustomTkinter
 ├── docs/user_guide.md          # Guia de uso (se muestra con F1)
+├── tools/make_icon_variants.py # Genera las variantes de color del logo desde app.png
 ├── src/pdfmanagement/
 │   ├── __init__.py             # Nombre y version
 │   ├── __main__.py             # python -m pdfmanagement
@@ -193,6 +193,7 @@ PDFManagement/
 │   │       └── search.py       # iter_search: busqueda incremental por paginas
 │   └── gui/
 │       ├── app.py              # MainWindow: barra lateral, paginas, estado
+│       ├── app_icon.py         # Variante de color del logo aplicada a la ventana y los dialogos
 │       ├── tasks.py            # TaskRunner (hilos + sondeo seguro)
 │       ├── status_bar.py       # Barra de estado (progreso, resultado, errores)
 │       ├── appearance.py       # Cambio de tema priorizado (visible primero)
@@ -650,7 +651,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 295 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 300 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -758,6 +759,7 @@ flowchart LR
 - [x] v5.5: seccion **Organizar** con cuadricula de paginas (arrastrar para reordenar, girar, eliminar, insertar); tambien desde Enviar a... del Visor.
 - [x] v5.6: Organizar con **Descartar cambios** y **Cerrar**; boton **Cerrar** junto a Examinar en las secciones con archivo de origen (`FileField(on_clear=...)` y `BasePage.close_source`).
 - [x] v5.7: Logo propio (`assets/icons/app.png`) como icono de la ventana, la barra de tareas y la tarjeta "Acerca de"; iconos de GitHub, LinkedIn y Codigo fuente en "Desarrollado por"; en Unir, la ruta de "Guardar como" queda vacia hasta agregar archivos y luego propone `<primer archivo>_unido.pdf`.
+- [x] v5.8: Cambiar el nombre de una firma guardada (boton junto a Borrar en Firmar; `signatures.rename_signature`); en Ajustes → Apariencia, **Icono de la app** con 6 variantes de color del logo (Clasico, Azul, Verde, Rosa, Morado, Plata) que se aplican al instante.
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.
@@ -766,11 +768,3 @@ flowchart LR
 - [ ] Conversion sin Microsoft Office (alternativa: LibreOffice en modo headless).
 
 ---
-
-<div align="center">
-    <h2>Creditos</h2>
-    <h3>Desarrollo</h3>
-    <h5>Sebastian Ávila</h5>
-    <h3>QA</h3>
-    <!-- <h5>  </h5> -->
-</div>

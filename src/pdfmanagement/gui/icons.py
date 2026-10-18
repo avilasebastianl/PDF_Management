@@ -81,6 +81,7 @@ GLYPHS = {
     "insert_pdf": "\ued0e",
     "blank_page": "\ue7c3",
     "replace_text": "\ue8ac",
+    "rename": "\ue8ac",
     "fixed_text": "\ue8e9",
     "redact": "\ued1a",
     "print": "\ue749",

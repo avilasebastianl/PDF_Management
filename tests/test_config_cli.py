@@ -107,3 +107,36 @@ def test_cli_sign_cert(isolated_paths, pdf_factory, tmp_path, certificate, signa
         assert signature.sig_object["/Reason"] == "Aprobado"
         assert signature.sig_object.get_object()["/Contents"]
     assert "Archivo generado" in capsys.readouterr().out
+
+
+def test_settings_app_icon_is_validated(isolated_paths):
+    settings_file = isolated_paths / "settings.ini"
+    config.Settings(app_icon="verde").save(settings_file)
+    assert config.Settings.load(settings_file).app_icon == "verde"
+    config.Settings(app_icon="inexistente").save(settings_file)
+    assert config.Settings.load(settings_file).app_icon == "clasico"
+
+
+def test_every_app_icon_variant_has_its_files():
+    seen = set()
+    for variant in paths.APP_ICON_VARIANTS:
+        ico, png = paths.app_icon_files(variant)
+        assert ico.exists() and png.exists(), variant
+        seen.add(png)
+    assert len(seen) == len(paths.APP_ICON_VARIANTS), "cada variante tiene su propia imagen"
+    assert paths.app_icon_files("otra") == (paths.APP_ICON, paths.APP_LOGO)
+
+
+def test_rename_signature(isolated_paths, signature_png):
+    from pdfmanagement import signatures
+
+    stored = signatures.import_signature(signature_png, "firma")
+    renamed = signatures.rename_signature(stored, "Mi firma")
+    assert renamed.name == "Mi_firma.png" and renamed.exists() and not stored.exists()
+    assert signatures.rename_signature(renamed, "mi firma").name == "mi_firma.png", "solo mayusculas"
+    other = signatures.import_signature(signature_png, "otra")
+    assert signatures.rename_signature(other, "mi firma").name == "mi_firma_2.png", "no pisa otra firma"
+    with pytest.raises(ValueError):
+        signatures.rename_signature(other, "   ")
+    with pytest.raises(ValueError):
+        signatures.rename_signature(signature_png, "fuera")

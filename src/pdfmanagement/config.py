@@ -32,6 +32,7 @@ _LAYOUT: dict[str, tuple[str, tuple[str, str] | None]] = {
     "appearance_mode": ("Appearance", ("Theme", "theme")),
     "color_theme": ("Appearance", ("Theme", "color_theme")),
     "ui_scaling": ("Appearance", ("Display", "ui_scaling")),
+    "app_icon": ("Appearance", None),
     "initial_page": ("General", ("App", "initial_window")),
     "open_after_save": ("General", ("Display", "open_after_save")),
     "output_dir": ("General", None),
@@ -72,6 +73,7 @@ class Settings:
     language: str = "es"  # es, en, ru (ver i18n.LANGUAGES); se aplica al reiniciar
     viewer_night_mode: bool = False  # paginas con colores invertidos
     viewer_two_pages: bool = False  # paginas de a dos, lado a lado
+    app_icon: str = "clasico"  # variante de color del logo (paths.APP_ICON_VARIANTS)
 
     @property
     def output_path(self) -> Path:
@@ -133,6 +135,8 @@ class Settings:
         self.initial_page = _LEGACY_PAGES.get(self.initial_page, self.initial_page)
         if self.language not in ("es", "en", "ru"):
             self.language = defaults.language
+        if self.app_icon not in paths.APP_ICON_VARIANTS:
+            self.app_icon = defaults.app_icon
 
 
 def _read_option(parser: configparser.ConfigParser, key: str) -> str | None:

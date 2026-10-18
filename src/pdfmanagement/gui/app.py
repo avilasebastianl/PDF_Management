@@ -16,13 +16,13 @@ from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
-from PIL import Image, ImageGrab, ImageTk
+from PIL import ImageGrab, ImageTk
 from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
 from ..config import Settings
 from ..i18n import tr
-from . import ctk_fixes, icons, style
+from . import app_icon, ctk_fixes, icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
 from .dialogs import HelpWindow
 from .events import debug_event, log_event
@@ -101,13 +101,7 @@ class MainWindow:
 
         self.root = DnDCTk(fg_color=style.CONTENT_BG)
         self.root.title(__app_name__)
-        if paths.APP_ICON.exists():
-            self.root.iconbitmap(default=str(paths.APP_ICON))  # default: tambien los dialogos
-        self._app_photo: ImageTk.PhotoImage | None = None
-        if paths.APP_LOGO.exists():
-            # iconphoto con el PNG: mas nitido en la barra de tareas y en Alt+Tab.
-            self._app_photo = ImageTk.PhotoImage(Image.open(paths.APP_LOGO).resize((64, 64)), master=self.root)
-            self.root.iconphoto(True, self._app_photo)
+        app_icon.apply(self.root, settings.app_icon)
         self.root.geometry(self._initial_geometry())
         self.root.minsize(980, 640)
         if settings.window_maximized:

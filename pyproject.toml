@@ -1,6 +1,6 @@
 [project]
 name = "pdfmanagement"
-version = "5.7.0"
+version = "5.8.0"
 description = "Herramienta de escritorio, local y gratuita, para trabajar con PDFs."
 readme = "README.md"
 license = "Apache-2.0"

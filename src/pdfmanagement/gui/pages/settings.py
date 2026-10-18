@@ -15,11 +15,21 @@ import customtkinter as ctk
 from ... import GITHUB_URL, LINKEDIN_URL, REPOSITORY_URL, __app_name__, __author__, __version__, logging_setup, paths
 from ...config import APPEARANCE_MODES, UI_SCALING_OPTIONS, available_color_themes
 from ...i18n import LANGUAGES, tr
-from .. import style
+from .. import app_icon, style
 from ..dropdown import dropdown_menu
 from ..icons import brand_image, icon
 from ..system import open_path
-from ..widgets import Card, ToolTip, field_label, hide, muted_label, primary_button, secondary_button, show
+from ..widgets import (
+    Card,
+    ToolTip,
+    field_label,
+    hide,
+    muted_label,
+    primary_button,
+    secondary_button,
+    set_label_image,
+    show,
+)
 from .base import BasePage
 
 MODE_LABELS = {"System": tr("Sistema"), "Light": tr("Claro"), "Dark": tr("Oscuro")}
@@ -30,6 +40,14 @@ COLOR_LABELS = {
     "Naranja": tr("Naranja"),
     "Rojo": tr("Rojo"),
     "Verde": tr("Verde"),
+}
+APP_ICON_LABELS = {
+    "clasico": tr("Clásico"),
+    "azul": tr("Azul"),
+    "verde": tr("Verde"),
+    "rosa": tr("Rosa"),
+    "morado": tr("Morado"),
+    "plata": tr("Plata"),
 }
 DEBUG_LOGGING_HELP = tr(
     "Registro detallado\n"
@@ -102,6 +120,28 @@ class SettingsPage(BasePage):
         self.language = dropdown_menu(appearance, list(LANGUAGES.values()), self._on_language_changed)
         self._row(appearance, 3, tr("Idioma"), self.language)
 
+        # Variantes de color del logo: se aplican al instante (ventana, barra de tareas y "Acerca de").
+        icon_choices = ctk.CTkFrame(appearance, fg_color="transparent")
+        self.icon_buttons: dict[str, ctk.CTkButton] = {}
+        for variant in paths.APP_ICON_VARIANTS:
+            button = ctk.CTkButton(
+                icon_choices,
+                text="",
+                image=brand_image(paths.app_icon_files(variant)[1], 30),
+                width=44,
+                height=44,
+                corner_radius=8,
+                border_width=2,
+                border_color=style.CARD_BG,
+                fg_color="transparent",
+                hover_color=style.HOVER,
+                command=lambda name=variant: self._on_app_icon(name),
+            )
+            button.pack(side="left", padx=(0, 4))
+            ToolTip(button, APP_ICON_LABELS.get(variant, variant))
+            self.icon_buttons[variant] = button
+        self._row(appearance, 4, tr("Icono de la app"), icon_choices)
+
         self.restart_notice = ctk.CTkFrame(appearance, fg_color="transparent")
         muted_label(self.restart_notice, tr("Los cambios de color e idioma se aplicarán al reiniciar.")).pack(
             side="left"
@@ -110,7 +150,7 @@ class SettingsPage(BasePage):
             side="left", padx=10
         )
         self.restart_notice.grid(
-            row=appearance.row(4), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(6, 0)
+            row=appearance.row(5), column=0, columnspan=3, sticky="w", padx=style.CARD_PAD, pady=(6, 0)
         )
         hide(self.restart_notice)
 
@@ -220,8 +260,9 @@ class SettingsPage(BasePage):
         # Cabecera con el color de acento: logo, nombre y eslogan.
         banner = ctk.CTkFrame(about, corner_radius=style.CORNER - 2, fg_color=accent)
         banner.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
-        logo = brand_image(paths.APP_LOGO, 64) or icon("pdf", 48, style.ON_ACCENT)
-        ctk.CTkLabel(banner, text="", image=logo).grid(row=0, column=0, rowspan=3, padx=(18, 12), pady=14)
+        self.about_logo = ctk.CTkLabel(banner, text="")
+        self.about_logo.grid(row=0, column=0, rowspan=3, padx=(18, 12), pady=14)
+        self._show_about_logo()
         ctk.CTkLabel(banner, text=__app_name__, font=style.fonts().title, text_color=style.ON_ACCENT, anchor="w").grid(
             row=0, column=1, sticky="w", pady=(14, 0)
         )
@@ -303,6 +344,16 @@ class SettingsPage(BasePage):
             button.pack(side="left", padx=(0, 8))
             ToolTip(button, url.removeprefix("https://"))
 
+    def _show_about_logo(self) -> None:
+        logo = brand_image(app_icon.logo_path(), 64) or icon("pdf", 48, style.ON_ACCENT)
+        set_label_image(self.about_logo, logo, "")
+
+    def _mark_app_icon(self) -> None:
+        """Resalta con el color de acento la variante del logo elegida."""
+        chosen = app_icon.current()
+        for variant, button in self.icon_buttons.items():
+            button.configure(border_color=style.accent_color() if variant == chosen else style.CARD_BG)
+
     @staticmethod
     def _about_title(parent, text: str, row: int) -> None:
         ctk.CTkLabel(parent, text=text, font=style.fonts().section, text_color=style.TEXT, anchor="w").grid(
@@ -331,11 +382,13 @@ class SettingsPage(BasePage):
             settings.open_after_save,
             str(settings.output_path),
             settings.debug_logging,
+            settings.app_icon,
         )
         if snapshot == getattr(self, "_shown", None):
             return  # nada cambio desde la ultima vez: evita redibujar los controles
         self._shown = snapshot
         self.mode.set(MODE_LABELS[settings.appearance_mode])
+        self._mark_app_icon()
         self.color.set(self._color_labels.get(settings.color_theme, settings.color_theme))
         self.scaling.set(f"{round(settings.ui_scaling * 100)}%")
         self.language.set(LANGUAGES.get(settings.language, LANGUAGES["es"]))
@@ -362,6 +415,16 @@ class SettingsPage(BasePage):
         )
         self.app.save_settings()
         show(self.restart_notice)
+
+    def _on_app_icon(self, variant: str) -> None:
+        if variant == self.app.settings.app_icon and variant == app_icon.current():
+            return
+        self.app.settings.app_icon = variant
+        self.app.save_settings()
+        app_icon.apply(self.app.root, variant)
+        self._mark_app_icon()
+        self._show_about_logo()
+        self.log("Icono de la app: %s", variant)
 
     def _on_scaling_changed(self, label: str) -> None:
         self.app.set_ui_scaling(int(label.rstrip("%")) / 100)

@@ -169,3 +169,17 @@ def test_creating_importing_and_deleting_signatures_in_a_row(sign_page, signatur
 
 
 NO_SIGNATURE_LABEL = "Sin firma"
+
+
+def test_rename_signature_keeps_it_selected(sign_page, monkeypatch):
+    from pdfmanagement.gui.pages import sign as sign_module
+
+    monkeypatch.setattr(sign_module, "ask_name", lambda *args, **kwargs: "Firma renombrada")
+    sign_page._rename_signature()
+    _pump(sign_page.app, 0.1)
+    assert sign_page.signature_menu.get() == "Firma_renombrada.png"
+    assert "Firma_renombrada.png" in sign_page.signature_menu.cget("values")
+    assert sign_page.signature_image is not None, "la vista previa sigue mostrando la firma"
+    monkeypatch.setattr(sign_module, "ask_name", lambda *args, **kwargs: None)  # Cancelar: no cambia
+    sign_page._rename_signature()
+    assert sign_page.signature_menu.get() == "Firma_renombrada.png"

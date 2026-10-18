@@ -31,6 +31,18 @@ APP_LOGO = ICONS_DIR / "app.png"
 GITHUB_ICON = ICONS_DIR / "github.ico"
 LINKEDIN_ICON = ICONS_DIR / "linkedin.ico"
 CODE_ICON = ICONS_DIR / "code.ico"
+# Variantes de color del logo (tools/make_icon_variants.py); "clasico" es app.png/app.ico.
+APP_ICON_VARIANTS = ("clasico", "azul", "verde", "rosa", "morado", "plata")
+
+
+def app_icon_files(variant: str) -> tuple[Path, Path]:
+    """Rutas ``(.ico, .png)`` de una variante del logo (la clasica si no existe)."""
+    if variant != "clasico":
+        ico, png = ICONS_DIR / f"app_{variant}.ico", ICONS_DIR / f"app_{variant}.png"
+        if ico.exists() and png.exists():
+            return ico, png
+    return APP_ICON, APP_LOGO
+
 
 # * Datos del usuario
 CONFIG_DIR = DATA_DIR / "config"
