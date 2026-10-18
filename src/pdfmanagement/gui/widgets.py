@@ -94,7 +94,7 @@ def secondary_button(parent, text: str, command: Callable, icon_name: str | None
         command=command,
         image=icon(icon_name, 16) if icon_name else None,
         height=kwargs.pop("height", 34),
-        fg_color="transparent",
+        fg_color=kwargs.pop("fg_color", "transparent"),
         hover_color=style.HOVER,
         border_width=1,
         border_color=style.CARD_BORDER,
@@ -510,19 +510,21 @@ def _app_is_active(widget) -> bool:
         return True
 
 
-def monitor_work_area(widget) -> tuple[int, int, int, int]:
-    """Area util (sin barra de tareas) del monitor donde esta ``widget``."""
+def monitor_work_area(widget, whole: bool = False) -> tuple[int, int, int, int]:
+    """Area util (sin barra de tareas) del monitor donde esta ``widget``; con ``whole``, el monitor entero."""
     if sys.platform.startswith("win"):
         try:
             return _windows_work_area(
-                widget.winfo_rootx() + widget.winfo_width() // 2, widget.winfo_rooty() + widget.winfo_height() // 2
+                widget.winfo_rootx() + widget.winfo_width() // 2,
+                widget.winfo_rooty() + widget.winfo_height() // 2,
+                whole,
             )
         except (OSError, AttributeError):
             pass
     return 0, 0, widget.winfo_screenwidth(), widget.winfo_screenheight()
 
 
-def _windows_work_area(x: int, y: int) -> tuple[int, int, int, int]:
+def _windows_work_area(x: int, y: int, whole: bool = False) -> tuple[int, int, int, int]:
     class _Rect(ctypes.Structure):
         _fields_ = [
             ("left", ctypes.c_long),
@@ -541,5 +543,5 @@ def _windows_work_area(x: int, y: int) -> tuple[int, int, int, int]:
     info.cbSize = ctypes.sizeof(_MonitorInfo)
     if not user32.GetMonitorInfoW(ctypes.c_void_p(monitor), ctypes.byref(info)):
         raise OSError("GetMonitorInfoW")
-    work = info.rcWork
+    work = info.rcMonitor if whole else info.rcWork
     return work.left, work.top, work.right, work.bottom

@@ -9,7 +9,6 @@ Parte de ``ViewerPage`` (ver ``viewer.py``): los metodos anotan ``self`` con
 
 from __future__ import annotations
 
-import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -19,6 +18,7 @@ from ... import core
 from ...core.editing import CONTENT, SAVED, STRUCTURE, DocumentChange, DocumentSession
 from ...i18n import tr, trn
 from .. import style
+from ..popup_menu import PopupMenu
 
 if TYPE_CHECKING:
     from .viewer import ViewerPage
@@ -231,7 +231,7 @@ class OrganizeMixin:
             self.annotations.select(annotation)
         self._show_page_menu(hit.page, event, from_view=True, annotation=annotation)
 
-    def _page_menu(self: ViewerPage, from_view: bool = False, annotation=None) -> tk.Menu:
+    def _page_menu(self: ViewerPage, from_view: bool = False, annotation=None) -> PopupMenu:
         """Menu de las paginas seleccionadas (miniaturas o clic derecho en el visor)."""
         pages = self.thumbnails.selection()
         count, first = len(pages), pages[0] + 1
@@ -244,7 +244,7 @@ class OrganizeMixin:
             rotate_right = trn("Rotar {count} página a la derecha", "Rotar {count} páginas a la derecha", count)
             rotate_left = trn("Rotar {count} página a la izquierda", "Rotar {count} páginas a la izquierda", count)
             delete = trn("Eliminar {count} página", "Eliminar {count} páginas", count)
-        menu = tk.Menu(self, tearoff=0)
+        menu = PopupMenu(self)
         if annotation is not None:
             self.annotations.add_menu_items(menu, annotation)
         if from_view and self.text_tool.selected_text():

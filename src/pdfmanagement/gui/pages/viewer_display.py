@@ -19,6 +19,7 @@ from ...core import printing
 from ...core.editing.changes import STRUCTURE, DocumentChange
 from ...core.verify import verify_signatures
 from ...i18n import tr, trn
+from ..popup_menu import PopupMenu
 from ..viewer.compare import ComparePanel
 from ..widgets import set_enabled
 
@@ -62,7 +63,7 @@ class DisplayMixin:
 
     def show_view_menu(self: ViewerPage) -> None:
         """Menu del boton "Ver": opciones de lectura, comparar e imprimir."""
-        menu = tk.Menu(self, tearoff=0)
+        menu = PopupMenu(self)
         menu.add_checkbutton(
             label=tr("Modo nocturno"),
             variable=self.night_mode,
@@ -74,7 +75,7 @@ class DisplayMixin:
             command=lambda: self.set_two_pages(self.two_pages.get()),
         )
         menu.add_separator()
-        others = tk.Menu(menu, tearoff=0)
+        others = PopupMenu(self)
         for index, tab in enumerate(self.tabs):
             if index != self.active:
                 others.add_command(label=tab.path.name, command=partial(self.compare_with, index))
@@ -92,10 +93,7 @@ class DisplayMixin:
             state="normal" if self.session is not None else "disabled",
         )
         button = self.view_button
-        try:
-            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
-        finally:
-            menu.grab_release()
+        menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height() + 4)
 
     # * Comparar (vista dividida) -------------------------------------------------
 

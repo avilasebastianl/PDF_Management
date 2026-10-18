@@ -9,16 +9,20 @@ Parte de ``ViewerPage`` (ver ``viewer.py``): los metodos anotan ``self`` con
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import TYPE_CHECKING
 
 from ... import core, recent
+from ...core.create import create_document
 from ...core.editing import DocumentSession
 from ...i18n import tr, trn
 from ..dialogs import DocumentPropertiesWindow, ask_password
 from ..dropdown import set_dropdown_values
+from ..new_document import ask_new_document
 from .viewer_tabs import MAX_TABS, DocumentTab
 
 if TYPE_CHECKING:
@@ -54,10 +58,33 @@ class FilesMixin:
         if label in labels and self._recent:
             self.open_file(self._recent[labels.index(label)], source="recientes")
 
-    def open_file(self: ViewerPage, path: Path, source: str = "dialogo") -> bool:
+    def new_document(self: ViewerPage) -> None:
+        """Nuevo PDF en blanco o desde una plantilla, en una pestana nueva (Ctrl+N)."""
+        spec = ask_new_document(self)
+        if spec is None:
+            self.log_debug("Nuevo PDF: cancelado")
+            return
+        folder = Path(tempfile.mkdtemp(prefix="pdfmanagement_nuevo_"))
+        self._new_documents += 1
+        number = f" {self._new_documents}" if self._new_documents > 1 else ""
+        try:
+            path = create_document(folder / f"{tr('Documento nuevo')}{number}.pdf", spec)
+        except core.PdfManagementError as error:
+            shutil.rmtree(folder, ignore_errors=True)
+            self.app.show_error(error)
+            return
+        if not self.open_file(path, source="nuevo", remember=False):
+            shutil.rmtree(folder, ignore_errors=True)
+            return
+        if self.tab is not None:
+            self.tab.temp_folder = folder
+        self.log("Nuevo PDF: %s", spec.template, tamano=spec.size, horizontal=spec.landscape, paginas=spec.pages)
+
+    def open_file(self: ViewerPage, path: Path, source: str = "dialogo", remember: bool = True) -> bool:
         """
         Abre ``path`` en una pestana nueva (pide la contrasena si hace falta).
-        Si ya esta abierto, muestra su pestana.
+        Si ya esta abierto, muestra su pestana. ``remember=False`` no lo agrega
+        a Recientes (documentos nuevos, que viven en una carpeta temporal).
         """
         path = Path(path)
         existing = self._find_tab(path)
@@ -89,9 +116,10 @@ class FilesMixin:
         tab.unsubscribe = session.changes.subscribe(partial(self._on_document_changed, tab))
         self.tabs.append(tab)
         self.switch_to(len(self.tabs) - 1)
-        self._recent = recent.add_recent(session.path)
-        set_dropdown_values(self.recent_menu, self._recent_labels())
-        self.recent_menu.set(RECENT_PLACEHOLDER)
+        if remember:
+            self._recent = recent.add_recent(session.path)
+            set_dropdown_values(self.recent_menu, self._recent_labels())
+            self.recent_menu.set(RECENT_PLACEHOLDER)
         self._refresh_file_state()
         self.log(
             "Documento abierto: %s",
@@ -132,6 +160,8 @@ class FilesMixin:
         if self.session is None:
             return False
         suggested = self.saved_path or self.default_output(self.session.path, "editado")
+        if self.tab is not None and self.tab.temp_folder is not None and self.saved_path is None:
+            suggested = self.app.settings.output_path / self.session.path.name  # nuevo: sin "_editado"
         chosen = filedialog.asksaveasfilename(
             title=tr("Guardar como"),
             defaultextension=".pdf",

@@ -156,6 +156,7 @@ def gui_app(tmp_path_factory):
             if attempt == 2:
                 raise
     main.settings.save = lambda *args, **kwargs: None  # no escribe settings.ini (el registro de cambios si corre)
+    main.animations = False  # fundidos instantaneos: las pruebas no esperan
     main.show_page("Unir")
     pump(main, timeout=0.5)  # la ventana debe estar visible, como cuando el usuario interactua
     yield main

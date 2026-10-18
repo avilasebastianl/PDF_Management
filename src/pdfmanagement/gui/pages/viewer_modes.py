@@ -36,8 +36,13 @@ class ModesMixin:
         self.set_view_mode(NORMAL if self.view_mode == WINDOW else WINDOW)
 
     def set_view_mode(self: ViewerPage, mode: str) -> None:
+        """Cambia de modo con un fundido de la ventana (sin ver como se reacomoda todo)."""
         if mode == self.view_mode:
             return
+        self.app.transition(lambda: self._apply_view_mode(mode))
+        self.log("Modo de vista: %s", mode)
+
+    def _apply_view_mode(self: ViewerPage, mode: str) -> None:
         self.view_mode = mode
         reading = mode != NORMAL
         self.app.set_chrome_visible(not reading)
@@ -60,7 +65,6 @@ class ModesMixin:
             icon_name = f"exit_{name}" if active else name
             button.icon_key = icon_name
             button.configure(image=icon(icon_name, 16, style.TEXT))
-        self.log("Modo de vista: %s", mode)
 
     def on_hide(self: ViewerPage) -> None:
         self.set_view_mode(NORMAL)

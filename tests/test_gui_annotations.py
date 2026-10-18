@@ -148,11 +148,8 @@ def test_annotations_panel_and_context_menu(viewer, gui_app, monkeypatch):
     assert session.annotations(1)[0].content == "editada"
     assert panel.list.listbox.get(1) == "p. 2  ·  Nota: editada"
     menu = viewer._page_menu(from_view=True, annotation=viewer.annotations.selected)
-    labels = [
-        menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) in ("command", "cascade")
-    ]
+    labels = menu.labels(("command", "cascade"))
     assert labels[:3] == ["Editar nota...", "Color", "Eliminar nota"]
-    menu.destroy()
     viewer.side_tabs.set("Páginas")
     viewer._show_side("Páginas", log=False)
 

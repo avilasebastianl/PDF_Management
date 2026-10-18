@@ -12,11 +12,14 @@ The app never overwrites a file without asking: if the suggested output name alr
 
 The interface is available in **Spanish**, **English** and **Russian** (see **Settings**).
 
+Below the light/dark mode button, **Size** changes the interface size for now only: on restart it returns to the one in **Settings**, which is where the default is changed.
+
 ## Viewer
 
 Read any PDF without leaving the app. It is the first section and the one that opens at startup (you can change this in Settings).
 
 - **Open**: the **Open** button, **Ctrl+O**, a click on the empty area, or drag in a PDF. If it is protected, you are asked for the password. **Recent** shows the last 10 files.
+- **New PDF**: the **New PDF** button (next to **Open**), **Ctrl+N** or the large button in the empty viewer. Choose a template with its preview (**Blank**, **Lined paper**, **Grid**, **Letter**, **Meeting minutes** or **Invoice**), the size (A4, Letter or Legal), the orientation and, for the first three, how many pages. It opens in a new tab ready to annotate or to write on with **Fixed text**; save it with **Save as** (the output folder is suggested).
 - **Tabs**: each document opens in its own tab, as in a browser, and keeps its page, zoom and changes. Tabs have the same width and shrink when there are many; a dot (•) indicates unsaved changes. Switch with a click or **Ctrl+Tab**; close with the **x** (shown when you hover), with a middle mouse button click, or with **Ctrl+W**, and open another document with **+**. If you open a file that is already open, its tab is shown.
 - **Search**: press the **Search** button (or **Ctrl+F**), type and press **Enter**; each **Enter** goes to the next result (**Shift+Enter** to the previous one). The bar shows how many there are; **Aa** matches case, **ab** searches whole words only, and the list button shows all of them with their context in the side panel. **Esc** closes it.
 - **View** (eye button): groups the reading options:

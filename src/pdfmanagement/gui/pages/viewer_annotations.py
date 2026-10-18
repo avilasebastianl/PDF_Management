@@ -13,7 +13,6 @@ cambio en el historial) y se mantiene la vista al dia.
 
 from __future__ import annotations
 
-import tkinter as tk
 from tkinter import filedialog
 from typing import TYPE_CHECKING
 
@@ -27,6 +26,7 @@ from ...i18n import tr
 from .. import style
 from ..dialogs import ask_text
 from ..dropdown import dropdown_menu
+from ..popup_menu import PopupMenu
 from ..viewer.annotation_tools import DragTool, InkTool, MarkupTool, NoteTool, line_rects, tk_color
 from ..viewer.page_view import PageHit, Tool
 from ..viewer.panels import AnnotationsPanel
@@ -460,12 +460,12 @@ class ViewerAnnotations:
 
     # * Menu contextual -------------------------------------------------------
 
-    def add_menu_items(self, menu: tk.Menu, info: AnnotationInfo) -> None:
+    def add_menu_items(self, menu: PopupMenu, info: AnnotationInfo) -> None:
         if info.has_text:
             menu.add_command(
                 label=tr("Editar {anotacion}...", anotacion=info.label.lower()), command=lambda: self.edit_text(info)
             )
-        colors = tk.Menu(menu, tearoff=0)
+        colors = PopupMenu(menu.master)
         for name in COLORS:
             colors.add_command(
                 label=COLOR_NAMES[name],

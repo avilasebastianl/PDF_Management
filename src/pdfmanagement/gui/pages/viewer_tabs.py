@@ -9,6 +9,7 @@ Parte de ``ViewerPage`` (ver ``viewer.py``): los metodos anotan ``self`` con
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,15 @@ class DocumentTab:
     scroll: float | None = None  # posicion vertical (0-1) al dejar la pestana
     selection: list[int] = field(default_factory=list)
     unsubscribe: Callable[[], None] | None = None  # baja de los avisos de cambios de la sesion
+    temp_folder: Path | None = None  # documento nuevo: vive en una carpeta temporal hasta "Guardar como"
+
+    def release(self) -> None:
+        """Cierra la sesion y borra la carpeta temporal (documentos nuevos)."""
+        if self.unsubscribe is not None:
+            self.unsubscribe()
+        self.session.close()
+        if self.temp_folder is not None:
+            shutil.rmtree(self.temp_folder, ignore_errors=True)
 
     @property
     def path(self) -> Path:
@@ -115,9 +125,7 @@ class TabsMixin:
             self.view.set_document(None)
         tab = self.tabs.pop(index)
         self.forget_compared(tab)
-        if tab.unsubscribe is not None:
-            tab.unsubscribe()
-        tab.session.close()
+        tab.release()
         if was_active:
             self.active = min(index, len(self.tabs) - 1)
             self._load_tab()
@@ -209,6 +217,6 @@ class TabsMixin:
         self.search.set_document(None)
         self.view.set_document(None)
         for tab in self.tabs:
-            tab.session.close()
+            tab.release()
         self.tabs.clear()
         self.active = -1

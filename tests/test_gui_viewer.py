@@ -276,9 +276,8 @@ def test_page_menu_and_editing_shortcuts(viewer, gui_app):
     viewer.thumbnails._select_click(1, 0)
     viewer.thumbnails._select_click(2, 0x0001)
     menu = viewer._page_menu()
-    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
+    labels = menu.labels(("command",))
     assert labels[:3] == ["Rotar 2 páginas a la derecha", "Rotar 2 páginas a la izquierda", "Eliminar 2 páginas"]
-    menu.destroy()
     undo = type("E", (), {"keysym": "z"})()
     viewer.rotate_pages(-90)
     viewer.open_search()

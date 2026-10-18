@@ -2,7 +2,7 @@
 
 Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+8**. Pulse **F1** para abrir esta guía.
 
-El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección.
+El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección. Debajo del botón de modo claro u oscuro, **Tamaño** cambia el tamaño de la interfaz solo por ahora: al reiniciar vuelve el de **Ajustes**, que es donde se cambia el predeterminado.
 
 En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
 
@@ -17,6 +17,7 @@ La interfaz está disponible en **español**, **inglés** y **ruso** (vea **Ajus
 Lea cualquier PDF sin salir de la aplicación. Es la primera sección y la que se abre al iniciar (puede cambiarlo en Ajustes).
 
 - **Abrir**: botón **Abrir**, **Ctrl+O**, clic en el área vacía o arrastre un PDF. Si está protegido se pide la contraseña. **Recientes** muestra los últimos 10 archivos.
+- **Nuevo PDF**: botón **Nuevo PDF** (junto a **Abrir**), **Ctrl+N** o el botón grande del visor vacío. Elija una plantilla con su vista previa (**En blanco**, **Hoja con renglones**, **Cuadrícula**, **Carta**, **Acta de reunión** o **Factura**), el tamaño (A4, Carta u Oficio), la orientación y, en las tres primeras, cuántas páginas. Se abre en una pestaña nueva lista para anotar o escribir con **Texto fijo**; guárdelo con **Guardar como** (se sugiere la carpeta de salida).
 - **Pestañas**: cada documento se abre en su propia pestaña, como en un navegador, y conserva su página, zoom y cambios. Las pestañas tienen el mismo ancho y se encogen cuando hay muchas; un punto (•) indica cambios sin guardar. Cambie con un clic o **Ctrl+Tab**; cierre con la **x** (aparece al pasar el cursor), con un clic con el botón central del ratón o con **Ctrl+W**, y abra otro documento con **+**. Si abre un archivo que ya está abierto, se muestra su pestaña.
 - **Buscar**: pulse el botón **Buscar** (o **Ctrl+F**), escriba y pulse **Enter**; cada **Enter** va al siguiente resultado (**Mayús+Enter** al anterior). La barra muestra cuántos hay; **Aa** distingue mayúsculas, **ab** busca palabras completas y el botón de lista los muestra todos con su contexto en el panel lateral. **Esc** la cierra.
 - **Ver** (botón del ojo): reúne las opciones de lectura:
@@ -28,6 +29,7 @@ Lea cualquier PDF sin salir de la aplicación. Es la primera sección y la que s
   El modo nocturno y la vista de dos páginas se recuerdan para la próxima vez.
 - **Leer en toda la ventana**: el botón de la ventana (o **Ctrl+Mayús+F**) oculta el menú, las barras y el panel lateral y deja el documento ocupando toda la ventana, con las pestañas a mano. **Esc** vuelve.
 - **Pantalla completa**: el botón de las flechas (o **F11**) deja solo el visor en toda la pantalla; **Esc** o **F11** vuelven.
+  Al entrar o salir de estos modos la ventana cambia con un fundido, sin verse cómo se reacomoda.
 - **Panel lateral** (botón de lista para mostrarlo u ocultarlo). Sus pestañas son iconos: pase el cursor por cada uno para ver su nombre; el de la pestaña activa se muestra debajo.
   - **Páginas**: miniaturas; haga clic en una para ir a esa página.
   - **Marcadores**: el índice del documento, si lo tiene.

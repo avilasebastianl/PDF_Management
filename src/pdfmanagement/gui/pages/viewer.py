@@ -66,8 +66,8 @@ SIDE_ICONS = ("pages_tab", "outline", "search", "note", "signature")
 SIDE_WIDTH = 272
 TOOLS = (tr("Texto"), tr("Mano"))
 PLACEHOLDER = (
-    tr("Haga clic aquí o arrastre un PDF para abrirlo"),
-    tr('También puede usar el botón "Abrir" o Ctrl+O. Lea, busque (Ctrl+F), copie texto y organice las páginas.'),
+    tr("Abra un PDF, arrástrelo aquí o cree uno nuevo"),
+    tr("Lea, busque (Ctrl+F), anote y organice las páginas. Ctrl+O abre un PDF y Ctrl+N crea uno nuevo."),
 )
 # Teclas que dentro de un campo de texto conservan su funcion normal.
 TEXT_FIELD_KEYS = {"c", "a", "z", "y", "delete"}
@@ -101,6 +101,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         self.compare_tab = None
         self._compare_unsubscribe: Callable[[], None] | None = None
         self._verified_path: Path | None = None  # archivo cuyas firmas muestra el panel
+        self._new_documents = 0  # numera los documentos nuevos de la sesion
         # Todo el espacio sobrante es para el visor (BasePage da peso a la columna 0).
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
@@ -119,7 +120,12 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         bar = self.file_bar = ctk.CTkFrame(self.body, fg_color="transparent")
         bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, style.GAP))
         bar.grid_columnconfigure(2, weight=1)
-        primary_button(bar, tr("Abrir"), self.browse, "folder", width=110).grid(row=0, column=0)
+        start = ctk.CTkFrame(bar, fg_color="transparent")
+        start.grid(row=0, column=0)
+        primary_button(start, tr("Abrir"), self.browse, "folder", width=110).pack(side="left")
+        self.new_button = secondary_button(start, tr("Nuevo PDF"), self.new_document, "add", width=130, height=38)
+        self.new_button.pack(side="left", padx=(8, 0))
+        ToolTip(self.new_button, tr("Crear un PDF en blanco o desde una plantilla (Ctrl+N)"))
         self.recent_menu = dropdown_menu(bar, self._recent_labels(), self._open_recent, width=160, height=34)
         self.recent_menu.set(RECENT_PLACEHOLDER)
         self.recent_menu.grid(row=0, column=1, padx=(8, 12))
@@ -230,6 +236,12 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         )
         self.view.grid(row=0, column=0, sticky="nsew")
         self.view.on_page_changed(self.sync_compare)
+        # Sin documento: botones grandes en el centro del visor (abrir o crear).
+        self.empty_actions = ctk.CTkFrame(self.view, fg_color=style.CANVAS_BG, corner_radius=0)
+        primary_button(self.empty_actions, tr("Abrir PDF"), self.browse, "folder", width=150).pack(side="left", padx=6)
+        secondary_button(
+            self.empty_actions, tr("Nuevo PDF"), self.new_document, "add", width=150, height=38, fg_color=style.CARD_BG
+        ).pack(side="left", padx=6)
         top = self.top_bar = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 6))
         self._top_compact = False  # botones Buscar y Editar solo con icono (poco ancho)
@@ -318,6 +330,7 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         root = self.app.root
         bindings = {
             "<Control-o>": self.browse,
+            "<Control-n>": self.new_document,
             "<Control-p>": self.print_document,
             "<Control-w>": self.close_current_tab,
             "<Control-Tab>": lambda: self.cycle_tab(1),
@@ -543,6 +556,10 @@ class ViewerPage(TabsMixin, FilesMixin, OrganizeMixin, ModesMixin, DisplayMixin,
         if self.edit_button.cget("state") != state:
             self.edit_button.configure(state=state)
         set_enabled(self.properties_button, session is not None)
+        if session is None:
+            self.empty_actions.place(relx=0.5, rely=0.5, y=78, anchor="n")
+        else:
+            self.empty_actions.place_forget()
         set_enabled(self.print_button, session is not None)
         set_enabled(self.undo_button, session is not None and session.history.can_undo)
         set_enabled(self.redo_button, session is not None and session.history.can_redo)

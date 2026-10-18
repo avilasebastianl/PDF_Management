@@ -14,10 +14,11 @@ from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
+from PIL import ImageGrab, ImageTk
 from tkinterdnd2 import TkinterDnD
 
 from .. import __app_name__, __version__, core, logging_setup, paths
-from ..config import Settings
+from ..config import UI_SCALING_OPTIONS, Settings
 from ..i18n import tr
 from . import icons, style
 from .appearance import AppearanceScheduler, frozen_redraw
@@ -27,10 +28,11 @@ from .icons import icon
 from .pages import PAGES
 from .pages.base import BasePage
 from .pages.registry import page_label
+from .popup_menu import PopupMenu
 from .status_bar import StatusBar
 from .system import open_path
 from .tasks import TaskRunner
-from .widgets import ToolTip, hide, show
+from .widgets import ToolTip, hide, monitor_work_area, show
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,10 @@ RESTACK_DELAY_MS = 400  # espera tras redimensionar antes de reapilar paginas
 SIDEBAR_ANIMATION_MS = 260  # duracion de contraer/expandir el menu lateral
 SIDEBAR_FRAME_MS = 6  # pausa entre cuadros (cada cuadro se pinta enseguida)
 RESIZE_LOG_DELAY_MS = 600  # se registra el tamano final, no cada paso del arrastre
+# Fundidos de la ventana (modos de lectura, tamano de la interfaz y cierre).
+FADE_IN_MS = 240  # la cortina con la imagen anterior se desvanece en este tiempo
+CLOSE_FADE_MS = 140
+FADE_FRAME_MS = 8
 
 # Nombres legibles de las preferencias para el registro de cambios.
 SETTING_LABELS = {
@@ -75,6 +81,9 @@ class MainWindow:
         self.settings = settings
         self._started = time.monotonic()
         self._closing = False
+        self.animations = True  # las pruebas las desactivan (fundidos instantaneos)
+        self._in_transition = False
+        self.ui_scaling = settings.ui_scaling  # tamano actual; puede diferir del guardado (cambio temporal)
         self._settings_snapshot = asdict(settings)
         if settings.debug_logging:
             logging_setup.set_debug(True)
@@ -225,10 +234,21 @@ class MainWindow:
         )
         self.theme_button.grid(row=0, column=0, sticky="ew")
         ToolTip(self.theme_button, lambda: self._theme_label() if self.settings.sidebar_collapsed else "")
+        self.scaling_button = ctk.CTkButton(
+            footer, text="", image=icon("zoom_in", 18), command=self.show_scaling_menu, **footer_style
+        )
+        self.scaling_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ToolTip(
+            self.scaling_button,
+            lambda: tr(
+                "Tamaño de la interfaz solo por ahora: al reiniciar vuelve el de Ajustes ({predeterminado} %)",
+                predeterminado=round(self.settings.ui_scaling * 100),
+            ),
+        )
         self.help_button = ctk.CTkButton(
             footer, text=f"  {tr('Ayuda')}", image=icon("help", 18), command=self.open_help, **footer_style
         )
-        self.help_button.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        self.help_button.grid(row=2, column=0, sticky="ew", pady=(2, 0))
         ToolTip(self.help_button, tr("Guía de uso (F1)"))
         self._apply_sidebar_mode()
         self._refresh_nav()
@@ -350,6 +370,7 @@ class MainWindow:
             self.nav_buttons[page_class.name].configure(text="" if collapsed else f"  {page_label(page_class.name)}")
         self.help_button.configure(text="" if collapsed else f"  {tr('Ayuda')}")
         self._refresh_theme_button()
+        self._refresh_scaling_button()
 
     def _build_content(self) -> None:
         # Contenido y barra de estado van juntos: al contraer el menu se desplazan como un bloque.
@@ -502,9 +523,121 @@ class MainWindow:
         self.set_appearance_mode("Light" if ctk.get_appearance_mode() == "Dark" else "Dark")
 
     def set_ui_scaling(self, scaling: float) -> None:
+        """Tamano de la interfaz elegido en Ajustes: se aplica y queda como predeterminado."""
         self.settings.ui_scaling = scaling
-        ctk.set_widget_scaling(scaling)
         self.save_settings()
+        self.transition(lambda: self._apply_scaling(scaling))
+
+    def preview_ui_scaling(self, scaling: float) -> None:
+        """Tamano de la interfaz solo para esta sesion (boton del menu lateral); no se guarda."""
+        if scaling == self.ui_scaling:
+            return
+        log_event("Apariencia", "Tamano temporal de la interfaz: %d%%", round(scaling * 100), guardado=False)
+        self.transition(lambda: self._apply_scaling(scaling))
+
+    def _apply_scaling(self, scaling: float) -> None:
+        self.ui_scaling = scaling
+        _prune_scaling_callbacks()
+        ctk.set_widget_scaling(scaling)
+        self._place_main()
+        self._refresh_scaling_button()
+
+    def show_scaling_menu(self) -> None:
+        menu = PopupMenu(self.root)
+        for option in UI_SCALING_OPTIONS:
+            menu.add_checkbutton(
+                label=f"{round(option * 100)} %",
+                variable=tk.BooleanVar(value=option == self.ui_scaling),
+                command=lambda value=option: self.preview_ui_scaling(value),  # type: ignore[misc]
+            )
+        if self.ui_scaling != self.settings.ui_scaling:
+            menu.add_separator()
+            menu.add_command(
+                label=tr("Volver al predeterminado ({valor} %)", valor=round(self.settings.ui_scaling * 100)),
+                command=lambda: self.preview_ui_scaling(self.settings.ui_scaling),
+            )
+        button = self.scaling_button
+        menu.tk_popup(button.winfo_rootx() + button.winfo_width() + 6, button.winfo_rooty())
+
+    def _refresh_scaling_button(self) -> None:
+        percent = round(self.ui_scaling * 100)
+        text = "" if self.settings.sidebar_collapsed else "  " + tr("Tamaño: {valor} %", valor=percent)
+        if self.scaling_button.cget("text") != text:
+            self.scaling_button.configure(text=text)
+
+    # * Fundidos ----------------------------------------------------------------
+
+    def fade(self, start: float, end: float, duration_ms: int) -> None:
+        """Opacidad de la ventana principal de ``start`` a ``end`` (cierre)."""
+        if not self.animations or not self.root.winfo_viewable():
+            self.root.attributes("-alpha", end)
+            return
+        self._fade_window(self.root, start, end, duration_ms)
+
+    @staticmethod
+    def _fade_window(window, start: float, end: float, duration_ms: int) -> None:
+        """
+        La opacidad la aplica Windows sobre la imagen ya pintada: cada cuadro
+        cuesta casi nada y el fundido sale parejo aunque haya mucho contenido.
+        """
+        started = time.perf_counter()
+        while True:
+            progress = min(1.0, (time.perf_counter() - started) * 1000 / duration_ms)
+            eased = progress * progress * (3 - 2 * progress)  # suave al empezar y al terminar
+            window.attributes("-alpha", start + (end - start) * eased)
+            window.update_idletasks()
+            if progress >= 1.0:
+                return
+            time.sleep(FADE_FRAME_MS / 1000)
+
+    def transition(self, change) -> None:
+        """
+        Cambio grande de la ventana (modos de lectura, tamano de la interfaz) con
+        un fundido cruzado, sin ver los pasos intermedios ni la ventana vacia.
+
+        Reacomodar toda la ventana le cuesta a Tk 0,3-0,6 s y se pinta por
+        partes. Por eso se cubre el monitor con una captura de como se ve ahora
+        (una "cortina"), se aplica ``change`` debajo, se espera a que todo quede
+        maquetado y dibujado (paginas del visor incluidas) y la cortina se
+        desvanece mostrando el resultado.
+        """
+        if self._in_transition or not self.animations or not self.root.winfo_viewable():
+            change()  # p. ej. F11 pulsada otra vez durante el fundido
+            return
+        self._in_transition = True
+        curtain = self._show_curtain()
+        try:
+            change()
+            self.root.update()  # el cambio de tamano de la ventana llega como eventos
+            page = self.pages.get(self.current_page or "")
+            if page is not None:
+                page.flush_layout()
+            self.root.update_idletasks()
+        finally:
+            if curtain is not None:
+                self._fade_window(curtain, 1.0, 0.0, FADE_IN_MS)
+                curtain.destroy()
+            self._in_transition = False
+
+    def _show_curtain(self) -> tk.Toplevel | None:
+        """Ventana sin bordes, encima de todo, con la captura del monitor tal como se ve."""
+        left, top, right, bottom = monitor_work_area(self.root, whole=True)
+        try:
+            image = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
+        except OSError:  # captura no disponible (sesion remota bloqueada, etc.)
+            return None
+        curtain = tk.Toplevel(self.root)
+        curtain.withdraw()
+        curtain.overrideredirect(True)
+        curtain.attributes("-topmost", True)
+        curtain.geometry(f"{right - left}x{bottom - top}+{left}+{top}")
+        photo = ImageTk.PhotoImage(image, master=curtain)
+        label = tk.Label(curtain, image=photo, borderwidth=0, highlightthickness=0)
+        label.image = photo  # type: ignore[attr-defined]  # Tk borra la imagen si nadie la referencia
+        label.pack()
+        curtain.deiconify()
+        curtain.update()
+        return curtain
 
     def _theme_label(self) -> str:
         return tr("Modo claro") if ctk.get_appearance_mode() == "Dark" else tr("Modo oscuro")
@@ -627,17 +760,26 @@ class MainWindow:
         self.close()
 
     def close(self, exit_process: bool = True) -> None:
+        """
+        Cierra rapido y sin ver como se desarma la ventana: un fundido breve, se
+        oculta y recien entonces se liberan documentos y widgets. Al salir del
+        proceso no se destruyen los widgets uno por uno (era la demora visible):
+        el sistema libera todo al terminar.
+        """
         self._closing = True
         self._remember_geometry()
         duration = timedelta(seconds=round(time.monotonic() - self._started))
         log_event("Sesion", "Fin de la sesion", duracion=duration, tareas_pendientes=self.runner.pending)
+        self.fade(1.0, 0.0, CLOSE_FADE_MS)
+        self.root.withdraw()
         for page in self.pages.values():
             page.on_close()
         self.runner.shutdown()
         self.appearance.uninstall()
-        self.root.destroy()
         if exit_process:
-            sys.exit(0)
+            logging.shutdown()  # vuelca los registros antes de salir
+            os._exit(0)
+        self.root.destroy()
 
     def _remember_geometry(self) -> None:
         maximized = self.root.state() == "zoomed"
@@ -647,6 +789,36 @@ class MainWindow:
             self.settings.window_width = int(getattr(self.root, "_current_width", self.root.winfo_width()))
             self.settings.window_height = int(getattr(self.root, "_current_height", self.root.winfo_height()))
         self.save_settings()
+
+
+def _prune_scaling_callbacks() -> None:
+    """
+    CustomTkinter guarda un aviso de escala por widget y no siempre lo quita al
+    destruirlo (p. ej. el menu interno de un CTkOptionMenu de una ventana ya
+    cerrada): al cambiar la escala, ese aviso fallaba con "invalid command
+    name". Se descartan los de ventanas y widgets que ya no existen.
+    """
+    tracker = ctk.ScalingTracker
+    for window in list(tracker.window_widgets_dict):
+        try:
+            alive = bool(window.winfo_exists())
+        except tk.TclError:
+            alive = False
+        if not alive:
+            tracker.window_widgets_dict.pop(window, None)
+            tracker.window_dpi_scaling_dict.pop(window, None)
+            continue
+        callbacks = tracker.window_widgets_dict[window]
+        callbacks[:] = [callback for callback in callbacks if _widget_alive(getattr(callback, "__self__", None))]
+
+
+def _widget_alive(widget) -> bool:
+    if widget is None or not hasattr(widget, "winfo_exists"):
+        return True  # no es un widget: se deja como esta
+    try:
+        return bool(widget.winfo_exists())
+    except tk.TclError:
+        return False
 
 
 def _show(value: object) -> str:
