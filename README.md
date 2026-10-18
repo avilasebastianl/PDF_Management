@@ -3,7 +3,7 @@
     <p>Herramienta de escritorio <b>gratuita y 100% local</b> para leer, editar, unir, extraer, convertir, firmar, proteger, comprimir y dividir PDFs.</p>
     <img src="https://img.shields.io/badge/Python-3.14-informational" height="20">
     <img src="https://img.shields.io/badge/Plataforma-Windows-blue" height="20">
-    <img src="https://img.shields.io/badge/Version-5.5.0-success" height="20">
+    <img src="https://img.shields.io/badge/Version-5.6.0-success" height="20">
     <img src="https://img.shields.io/badge/Licencia-Apache_2.0-lightgrey" height="20">
 </div>
 
@@ -37,7 +37,7 @@ Las herramientas para manejar PDFs suelen ser de pago o exigen subir los documen
 |---|---|---|
 | **Visor** | Abre, lee, **anota**, **edita** y **organiza** PDFs | **Nuevo PDF** en blanco o desde plantilla (renglones, cuadricula, carta, acta, factura; A4, Carta u Oficio). Boton **Unir N PDFs** con 2 o mas documentos abiertos (lleva todos a Unir, con sus cambios sin guardar). **Varios documentos en pestanas** como un navegador (mismo ancho, punto de cambios sin guardar, cerrar al pasar el cursor o con clic central, boton **+**; cada una con su pagina, zoom e historial), dos modos de lectura: **visor en toda la ventana** (Ctrl+Mayus+F, con las pestanas) y **pantalla completa** (F11), desplazamiento continuo virtualizado, miniaturas, marcadores, **barra de busqueda flotante** (boton Buscar o Ctrl+F: contador, anterior/siguiente, mayusculas y palabras completas) con lista de resultados, seleccionar y copiar texto, mano, zoom 25-500 % (ajustar ancho / pagina), propiedades, archivos recientes y **Enviar a...** otra seccion. Boton **Ver**: **modo nocturno** (colores invertidos), **dos paginas** lado a lado (ambos se recuerdan), **comparar** con otra pestana u otro PDF en vista dividida (sincronizar paginas) e **imprimir** (Ctrl+P, dialogo de Windows, incluye los cambios sin guardar). Panel lateral con pestanas de iconos: Paginas, Marcadores, Buscar, Notas y **Firmas** (verifica las firmas digitales con pyHanko, sin internet, y permite firmar). Herramientas de edicion con el boton **Editar**. Organizar paginas: rotar, eliminar, reordenar arrastrando miniaturas (seleccion multiple), insertar otro PDF o una pagina en blanco. Anotar: resaltar, subrayar y tachar texto, notas, texto libre (con **tamano de letra** y cuadro que se ajusta al texto), rectangulos, elipses, lineas, flechas y dibujo a mano, con 5 colores y 3 grosores; seleccionar, mover, recolorear, editar y eliminar anotaciones, y panel **Notas** con todas. **Editar el contenido**: reemplazar texto, texto fijo, imagen y **tapar** (redaccion real: borra lo que hay debajo). Barras que se adaptan al ancho (iconos solos, anotacion en dos filas). Deshacer/rehacer ilimitado y **Guardar como** (el original nunca se toca) |
 | **Unir** | Combina varios PDFs en uno | Arrastrar archivos o carpetas, reordenar, ordenar A-Z, marcador por archivo, PDFs protegidos; fluida con decenas de archivos; marca de agua del resultado; vista previa navegable de todas las paginas del resultado; Unir y firmar (abre el resultado en Firmar) |
-| **Organizar** | Reordena las paginas de un PDF | Cuadricula de miniaturas grandes: seleccionar (clic, Ctrl, Mayus, casillas), arrastrar para reordenar, girar y eliminar desde cada pagina o en grupo, insertar paginas en blanco o de otro PDF con los botones +, deshacer y Guardar como |
+| **Organizar** | Reordena las paginas de un PDF | Cuadricula de miniaturas grandes: seleccionar (clic, Ctrl, Mayus, casillas), arrastrar para reordenar, girar y eliminar desde cada pagina o en grupo, insertar paginas en blanco o de otro PDF con los botones +, deshacer, Descartar cambios, Cerrar y Guardar como |
 | **Extraer** | Crea un PDF con paginas seleccionadas | Rangos (`1-3, 8, 10-`), `todo`/`impar`/`par`, vista previa de la seleccion, proteger el resultado |
 | **Convertir** | Word y Excel a PDF | `.docx .doc .rtf .xlsx .xls` con Microsoft Office |
 | **Firmar** | Firma visual o **firma digital con certificado** | Visor con zoom, clic y arrastre, tamano ajustable (asas en las esquinas y control deslizante), paginas rotadas, todas las paginas, dibujar o importar firmas. Modo digital: certificado `.pfx`/`.p12`, PAdES B-B sin internet, apariencia visible o invisible, varias firmas por documento |
@@ -650,7 +650,7 @@ venv\Scripts\python.exe -m pytest --cov
 - **pytest-cov**: cobertura de `src/pdfmanagement`; falla si baja del 85 % (`fail_under` en `pyproject.toml`).
 - **CI** (`.github/workflows/ci.yml`): en cada push a `main` y en cada pull request ejecuta en Windows (Python 3.14) ruff, mypy y las pruebas con cobertura, y publica `coverage.xml`. Las pruebas de interfaz necesitan escritorio (los ejecutores de Windows lo tienen); las de Office se omiten solas si no esta instalado.
 
-Hay 287 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
+Hay 294 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 
 | Archivo | Cubre |
 |---|---|
@@ -681,6 +681,7 @@ Hay 287 pruebas (`venv\Scripts\python.exe -m pytest --collect-only -q`).
 | `tests/test_finish.py` | Marca de agua y firma visual (ultima pagina o todas), firma digital valida tras la marca, vista previa sin modificar el archivo, faltantes |
 | `tests/test_gui_merge.py` | Unir con una sola barra de desplazamiento, vista previa navegable, marca de agua en el resultado (sin firma: se firma con Unir y firmar), Unir y firmar abre Firmar, boton Unir del Visor (requiere pantalla) |
 | `tests/test_gui_organize.py` | Organizar: seleccion con clic, Ctrl y Mayus, arrastrar para reordenar (y deshacer), girar, eliminar, insertar en blanco, boton +, Guardar como sin tocar el original (requiere pantalla) |
+| `tests/test_gui_close_source.py` | Boton Cerrar del archivo de origen (Firmar, Proteger, Herramientas, Extraer, Convertir): aparece con un archivo y deja la seccion como al principio (requiere pantalla) |
 | `tests/test_gui_viewer_display.py` | Dos paginas, modo nocturno, comparar con otra pestana, imprimir el documento en memoria, panel Firmas, reemplazar texto seleccionado, tapar, texto fijo e imagen desde la barra (requiere pantalla) |
 
 Los PDFs e imagenes de prueba se generan al vuelo; las pruebas no dependen de archivos externos.
@@ -755,6 +756,7 @@ flowchart LR
 - [x] v5.4: boton **Unir N PDFs** en el Visor (documentos abiertos, con sus cambios sin guardar via `DocumentSession.write_copy` en una carpeta temporal); Unir con la vista previa en su propia columna, navegable por todas las paginas; **Unir y firmar...** abre el PDF unido en Firmar.
 - [x] v5.4.1: Unir ya no firma por su cuenta: queda la marca de agua opcional y, para firmar, **Unir y firmar...** lleva el PDF unido a Firmar (`core/finish.py` conserva la firma para usos futuros).
 - [x] v5.5: seccion **Organizar** con cuadricula de paginas (arrastrar para reordenar, girar, eliminar, insertar); tambien desde Enviar a... del Visor.
+- [x] v5.6: Organizar con **Descartar cambios** y **Cerrar**; boton **Cerrar** junto a Examinar en las secciones con archivo de origen (`FileField(on_clear=...)` y `BasePage.close_source`).
 - [ ] Propuesta 7: formularios (rellenar campos y aplanar); seccion **Crear** (falta: desde imagenes); OCR opcional con Tesseract para hacer buscables los PDFs escaneados (instalacion aparte, sin internet).
 - [ ] Propuesta 8: instalador (PyInstaller + instalador) y datos en `%APPDATA%`.
 - [ ] Anotaciones: redimensionar formas y cuadros de texto con asas.

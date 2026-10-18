@@ -211,7 +211,9 @@ def muted_label(parent, text: str = "", **kwargs) -> ctk.CTkLabel:
 
 class FileField:
     """
-    Campo de ruta con boton "Examinar" y soporte para arrastrar archivos.
+    Campo de ruta con boton "Examinar" y soporte para arrastrar archivos. Con
+    ``on_clear`` muestra ademas "Cerrar" mientras hay un archivo elegido: lo
+    quita y la seccion vuelve a como estaba antes de elegirlo.
 
     En modo ``save`` registra si el usuario confirmo la ruta en el dialogo del
     sistema (que ya pregunta por sobrescritura) o si fue generada
@@ -230,11 +232,13 @@ class FileField:
         placeholder: str = "",
         initial_dir: Callable[[], Path] | None = None,
         stacked: bool = False,
+        on_clear: Callable[[], None] | None = None,
     ) -> None:
         self.mode = mode
         self.label = label
         self.filetypes = filetypes
         self.on_change = on_change
+        self.on_clear = on_clear
         self.initial_dir = initial_dir
         self.variable = tk.StringVar()
         self.auto = False
@@ -245,18 +249,25 @@ class FileField:
         pad = style.CARD_PAD
         label_widget = field_label(parent, label)
         self.entry = ctk.CTkEntry(parent, textvariable=self.variable, placeholder_text=placeholder, height=34)
-        self.button = secondary_button(parent, tr("Examinar"), self.browse, "folder", width=110)
+        # Examinar (y Cerrar, si la seccion lo permite) en la misma celda: no cambia la grilla.
+        self.buttons = ctk.CTkFrame(parent, fg_color="transparent")
+        self.button = secondary_button(self.buttons, tr("Examinar"), self.browse, "folder", width=110)
+        self.button.pack(side="right")
+        self.close_button: ctk.CTkButton | None = None
+        if on_clear is not None:
+            self.close_button = secondary_button(self.buttons, tr("Cerrar"), self.clear, "clear", width=100)
+            ToolTip(self.close_button, tr("Cerrar este archivo (la sección vuelve a como estaba)"))
 
         if stacked:
             label_widget.grid(row=row, column=0, columnspan=3, sticky="w", padx=pad, pady=(style.GAP, 2))
             self.entry.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=(pad, 6))
-            self.button.grid(row=row + 1, column=2, sticky="e", padx=(0, pad))
+            self.buttons.grid(row=row + 1, column=2, sticky="e", padx=(0, pad))
         else:
             label_widget.grid(row=row, column=0, sticky="w", padx=(pad, style.GAP), pady=style.GAP // 2 + 2)
             self.entry.grid(row=row, column=1, sticky="ew", pady=style.GAP // 2 + 2)
-            self.button.grid(row=row, column=2, sticky="e", padx=(8, pad), pady=style.GAP // 2 + 2)
+            self.buttons.grid(row=row, column=2, sticky="e", padx=(8, pad), pady=style.GAP // 2 + 2)
 
-        self._widgets = (label_widget, self.entry, self.button)
+        self._widgets = (label_widget, self.entry, self.buttons)
         if mode == "open":
             enable_file_drop(self.entry, self._on_drop)
 
@@ -325,7 +336,30 @@ class FileField:
         """Registra el archivo que el usuario eligio para este campo."""
         log_event(area_of(self.entry), "%s: %s", self.label, path, origen=origin)
 
+    def clear(self) -> None:
+        """Boton "Cerrar": quita el archivo y avisa a la seccion para que se reinicie."""
+        if not self.get():
+            return
+        log_event(area_of(self.entry), "%s: archivo cerrado", self.label, archivo=self.get())
+        self._setting = True
+        self.variable.set("")
+        self._setting = False
+        self.auto = False
+        self.confirmed_path = None
+        if self.on_clear is not None:
+            self.on_clear()
+
+    def _refresh_close_button(self) -> None:
+        if self.close_button is None:
+            return
+        visible = bool(self.get())
+        if visible and not self.close_button.winfo_manager():
+            self.close_button.pack(side="right", padx=(0, 6))
+        elif not visible and self.close_button.winfo_manager():
+            self.close_button.pack_forget()
+
     def _on_typed(self, *_args) -> None:
+        self._refresh_close_button()
         if not self._setting:
             self.auto = False
             self.confirmed_path = None

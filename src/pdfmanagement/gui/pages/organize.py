@@ -20,7 +20,7 @@ from .. import style
 from ..dialogs import ask_password
 from ..popup_menu import PopupMenu
 from ..viewer.page_grid import PageGrid
-from ..widgets import icon_button, muted_label, primary_button, secondary_button, set_enabled
+from ..widgets import ToolTip, icon_button, muted_label, primary_button, secondary_button, set_enabled
 from .base import BasePage
 
 HINT = tr("Arrastre las páginas para cambiar el orden  ·  Clic para seleccionar (Ctrl o Mayús: varias)  ·  + inserta")
@@ -70,16 +70,19 @@ class OrganizePage(BasePage):
     def _build_toolbar(self) -> None:
         bar = ctk.CTkFrame(self.body, fg_color="transparent")
         bar.grid(row=0, column=0, sticky="ew", pady=(0, style.GAP))
-        bar.grid_columnconfigure(1, weight=1)
+        bar.grid_columnconfigure(2, weight=1)
         primary_button(bar, tr("Abrir PDF"), self.browse, "folder", width=130).grid(row=0, column=0)
+        self.close_button = secondary_button(bar, tr("Cerrar"), self.close_document, "clear", width=100, height=38)
+        self.close_button.grid(row=0, column=1, padx=(8, 0))
+        ToolTip(self.close_button, tr("Cerrar el archivo (si tiene cambios sin guardar, pregunta antes)"))
         info = ctk.CTkFrame(bar, fg_color="transparent")
-        info.grid(row=0, column=1, sticky="ew", padx=12)
+        info.grid(row=0, column=2, sticky="ew", padx=12)
         self.file_label = ctk.CTkLabel(info, text="", font=style.fonts().body_bold, anchor="w")
         self.file_label.pack(anchor="w")
         self.file_info = muted_label(info)
         self.file_info.pack(anchor="w")
         actions = ctk.CTkFrame(bar, fg_color="transparent")
-        actions.grid(row=0, column=2, padx=(0, 8))
+        actions.grid(row=0, column=3, padx=(0, 8))
         self.undo_button = icon_button(actions, "undo", self.undo, tr("Deshacer (Ctrl+Z)"), size=34)
         self.redo_button = icon_button(actions, "redo", self.redo, tr("Rehacer (Ctrl+Y)"), size=34)
         separator = ctk.CTkFrame(actions, width=1, height=24, fg_color=style.CARD_BORDER)
@@ -112,8 +115,11 @@ class OrganizePage(BasePage):
         separator.pack(side="left", padx=8)
         for widget in (self.select_all_button, self.rotate_left_button, self.rotate_right_button, self.delete_button):
             widget.pack(side="left", padx=1)
+        self.discard_button = secondary_button(bar, tr("Descartar cambios"), self.discard_changes, "refresh", width=170)
+        self.discard_button.grid(row=0, column=4, padx=(0, 8))
+        ToolTip(self.discard_button, tr("Vuelve al archivo como estaba al abrirlo (Ctrl+Y recupera los cambios)"))
         self.save_button = secondary_button(bar, tr("Guardar como"), self.save_as, "save_as", width=140)
-        self.save_button.grid(row=0, column=3)
+        self.save_button.grid(row=0, column=5)
 
     def _bind_shortcuts(self) -> None:
         bindings = {
@@ -253,6 +259,30 @@ class OrganizePage(BasePage):
         if self.session is not None and self.session.redo():
             self.grid_view.refresh(select=[])
 
+    def discard_changes(self) -> None:
+        """Deshace todo lo hecho desde que se abrio (o se guardo) el archivo."""
+        session = self.session
+        if session is None or not session.modified:
+            return
+        steps = 0
+        while session.modified and session.history.can_undo:
+            session.undo()
+            steps += 1
+        self.grid_view.refresh(select=[])
+        self.hint.configure(text=tr("Cambios descartados. Ctrl+Y los recupera."))
+        self.log("Cambios descartados", pasos=steps, archivo=session.name)
+
+    def close_document(self) -> None:
+        """Cierra el archivo; si tiene cambios sin guardar, pregunta (guardar, descartar o seguir)."""
+        if self.session is None or not self._confirm_discard():
+            return
+        name = self.session.name
+        self._close_session()
+        self.saved_path = None
+        self._refresh_state()
+        self.hint.configure(text=HINT)
+        self.log("Documento cerrado", archivo=name)
+
     def toggle_select_all(self) -> None:
         if self.session is None:
             return
@@ -358,4 +388,7 @@ class OrganizePage(BasePage):
         set_enabled(self.redo_button, has and session is not None and session.history.can_redo)
         set_enabled(self.select_all_button, has)
         self.save_button.configure(state="normal" if has else "disabled")
+        self.close_button.configure(state="normal" if has else "disabled")
+        modified = session is not None and session.modified
+        self.discard_button.configure(state="normal" if modified else "disabled")
         self._on_selection(self.grid_view.selection())

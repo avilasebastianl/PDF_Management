@@ -203,6 +203,21 @@ class BasePage(ctk.CTkFrame):
         passwords = dict(self.passwords)
         self.app.runner.submit(description, lambda: operation(passwords), succeeded, failed)
 
+    def close_source(self) -> None:
+        """
+        Boton "Cerrar" del archivo de origen: la seccion vuelve a como estaba
+        antes de elegirlo (sin informacion, sin contrasenas y con el nombre de
+        salida automatico vacio). Las secciones con mas estado lo amplian.
+        """
+        self.passwords.clear()
+        source_info = getattr(self, "source_info", None)
+        if source_info is not None:
+            source_info.configure(text="")
+        output = getattr(self, "output_field", None)
+        if output is not None and output.auto:
+            output.set("", auto=True, notify=False)
+        self.log("Archivo de origen cerrado")
+
     def receive_file(self, path: Path) -> None:
         """
         Recibe un archivo enviado desde otra seccion (p. ej. el Visor). Por

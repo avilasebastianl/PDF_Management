@@ -4,7 +4,7 @@ Navegue entre secciones con la barra lateral o con **Ctrl+1** a **Ctrl+9**. Puls
 
 El botón **☰** arriba a la izquierda contrae la barra lateral para dejar solo los iconos y ganar espacio; al pasar el cursor por un icono se ve el nombre de la sección. Vuelva a pulsarlo para expandirla. La aplicación recuerda su elección.
 
-En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador.
+En casi todos los campos de archivo puede **arrastrar** el archivo desde el explorador. Cuando ya eligió un archivo, el botón **Cerrar** junto a **Examinar** lo quita y deja la sección como al principio (en **Extraer**, **Convertir**, **Firmar**, **Proteger** y **Herramientas**).
 
 La **barra de estado** (parte inferior) indica qué está haciendo la aplicación: un punto gris significa *listo*, la barra animada una operación *en curso* (con las que esperan en cola), el punto verde el *último archivo generado* con los botones **Mostrar en carpeta**, **Abrir** y **Ver en el visor**, y el rojo que la última operación *no se completó*. Pase el cursor sobre ella para ver el detalle. Puede seguir trabajando mientras una operación está en curso.
 
@@ -138,6 +138,7 @@ Reordene, gire, elimine o inserte páginas de un PDF en una cuadrícula de minia
 4. Al pasar el cursor por una página (o con ella seleccionada) aparecen **girar a la izquierda**, **girar a la derecha** y **eliminar**. Los mismos botones arriba actúan sobre todas las seleccionadas; **Supr** las elimina.
 5. **Insertar**: los botones **+** entre las páginas agregan ahí una **página en blanco** o las **páginas de otro PDF**.
 6. **Ctrl+Z** deshace y **Ctrl+Y** rehace. Guarde el resultado con **Guardar como** (**Ctrl+S**): el original no se modifica.
+7. Si se arrepiente: **Descartar cambios** vuelve al archivo como estaba al abrirlo (**Ctrl+Y** recupera lo descartado) y **Cerrar** cierra el archivo; si tiene cambios sin guardar, pregunta antes.
 
 ## Extraer
 

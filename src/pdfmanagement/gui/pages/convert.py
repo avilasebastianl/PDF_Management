@@ -40,6 +40,7 @@ class ConvertPage(BasePage):
             filetypes=OFFICE_FILETYPES,
             on_change=self._on_source_selected,
             placeholder=tr("Seleccione o arrastre un documento"),
+            on_clear=self.close_source,
         )
         self.source_info = muted_label(source)
         self.source_info.grid(row=source.row(1), column=1, columnspan=2, sticky="ew", padx=(0, style.CARD_PAD))

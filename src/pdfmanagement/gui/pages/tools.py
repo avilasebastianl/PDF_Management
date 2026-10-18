@@ -59,6 +59,7 @@ class ToolsPage(BasePage):
             on_change=self._on_source_selected,
             placeholder=tr("Seleccione o arrastre un PDF"),
             initial_dir=lambda: self.app.settings.output_path,
+            on_clear=self.close_source,
         )
         self.source_info = muted_label(source)
         self.source_info.grid(row=source.row(1), column=1, columnspan=2, sticky="ew", padx=(0, style.CARD_PAD))
@@ -273,6 +274,11 @@ class ToolsPage(BasePage):
         self.log("Origen listo: %s", info.path.name, paginas=info.page_count or "?", protegido=info.encrypted)
         self._suggest_output()
         self._schedule_preview()
+
+    def close_source(self) -> None:
+        self.page_count = None
+        super().close_source()
+        self._schedule_preview()  # la vista previa de la marca de agua vuelve al mensaje inicial
 
     def _suggest_output(self) -> None:
         source = self.resolved(self.source_field.path)

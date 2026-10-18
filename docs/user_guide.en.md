@@ -4,7 +4,7 @@ Move between sections with the sidebar or with **Ctrl+1** to **Ctrl+9**. Press *
 
 The **☰** button at the top left collapses the sidebar to icons only to save space; hover over an icon to see the section name. Press it again to expand the sidebar. The app remembers your choice.
 
-In almost every file field you can **drag** the file in from File Explorer.
+In almost every file field you can **drag** the file in from File Explorer. Once you have chosen a file, the **Close** button next to **Browse** removes it and leaves the section as it was at the start (in **Extract**, **Convert**, **Sign**, **Protect** and **Tools**).
 
 The **status bar** (at the bottom) shows what the app is doing: a gray dot means *ready*, the animated bar means an operation is *in progress* (plus any waiting in the queue), the green dot is the *last file generated* with the **Show in folder**, **Open** and **View in the viewer** buttons, and red means the last operation *did not complete*. Hover over it for details. You can keep working while an operation is in progress.
 
@@ -139,6 +139,7 @@ Reorder, rotate, delete or insert the pages of a PDF in a grid of large thumbnai
 4. When you hover over a page (or when it is selected), **Rotate left**, **Rotate right** and **Delete** appear. The same buttons at the top act on all selected pages; **Del** deletes them.
 5. **Insert**: the **+** buttons between pages add a **Blank page** or **Pages from another PDF...** there.
 6. **Ctrl+Z** undoes and **Ctrl+Y** redoes. Save the result with **Save as** (**Ctrl+S**): the original is not modified.
+7. If you change your mind: **Discard changes** returns the file to how it was when you opened it (**Ctrl+Y** brings back what was discarded) and **Close** closes the file; if there are unsaved changes, you are asked first.
 
 ## Extract
 

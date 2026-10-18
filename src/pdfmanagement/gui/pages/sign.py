@@ -147,6 +147,7 @@ class SignPage(BasePage):
             on_change=self._open_document,
             placeholder=tr("Seleccione o arrastre un PDF"),
             stacked=True,
+            on_clear=self.close_source,
         )
 
         signature = Card(panel, tr("Firma"))
@@ -479,6 +480,12 @@ class SignPage(BasePage):
             self.document.close()
         self.document = None
         self.document_path = None
+
+    def close_source(self) -> None:
+        """Cerrar el PDF a firmar: el visor queda vacio, listo para otro."""
+        self._close_document()
+        self.view.set_placeholder(*PLACEHOLDER_EMPTY)
+        super().close_source()
 
     def on_close(self) -> None:
         self._close_document()

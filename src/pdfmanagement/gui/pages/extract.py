@@ -41,6 +41,7 @@ class ExtractPage(BasePage):
             on_change=self._on_source_selected,
             placeholder=tr("Seleccione o arrastre un PDF"),
             initial_dir=lambda: self.app.settings.output_path,
+            on_clear=self.close_source,
         )
         self.source_info = muted_label(source)
         self.source_info.grid(row=source.row(1), column=1, columnspan=2, sticky="ew", padx=(0, style.CARD_PAD))
@@ -109,6 +110,11 @@ class ExtractPage(BasePage):
     def _use_preset(self, value: str) -> None:
         self.log_debug("Seleccion rapida: %s", value)
         self.selection.set(value)
+
+    def close_source(self) -> None:
+        self.page_count = None
+        super().close_source()
+        self._update_preview()
 
     def _update_preview(self) -> None:
         text = self.selection.get().strip()

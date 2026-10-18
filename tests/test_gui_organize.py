@@ -103,3 +103,27 @@ def test_viewer_can_send_to_organize():
     from pdfmanagement.gui.pages import viewer_files
 
     assert "Organizar" in viewer_files.SEND_TARGETS.values()
+
+
+def test_discard_changes_returns_to_the_opened_file(organize):
+    assert organize.discard_button.cget("state") == "disabled", "sin cambios no hay nada que descartar"
+    organize.move([4], 0)
+    organize.rotate([1], 90)
+    assert organize.discard_button.cget("state") == "normal"
+    organize.discard_changes()
+    assert texts(organize)[0] == "Pagina 1" and not organize.session.modified
+    assert organize.session.document[1].rotation == 0
+    organize.redo()  # Ctrl+Y recupera lo descartado
+    assert texts(organize)[0] == "Pagina 5"
+
+
+def test_close_asks_when_there_are_changes(organize, monkeypatch):
+    organize.delete([0])
+    answers = []
+    monkeypatch.setattr(organize_page.messagebox, "askyesnocancel", lambda *a, **k: answers.append(1) or None)
+    organize.close_document()  # Cancelar: sigue abierto
+    assert answers and organize.session is not None
+    monkeypatch.setattr(organize_page.messagebox, "askyesnocancel", lambda *a, **k: False)  # No: descartar
+    organize.close_document()
+    assert organize.session is None and organize.grid_view.document is None
+    assert organize.close_button.cget("state") == "disabled"
